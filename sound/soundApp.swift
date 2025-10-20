@@ -1,17 +1,13 @@
-//
-//  soundApp.swift
-//  sound
-//
-//  Created by Eli on 10/20/25.
-//
-
 import SwiftUI
 
 @main
-struct soundApp: App {
+struct VolumeMonitorApp: App {
+    @StateObject private var volumeMonitor = VolumeMonitor()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(volumeMonitor)
         }
     }
 }

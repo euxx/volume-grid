@@ -55,9 +55,9 @@ class VolumeMonitor: ObservableObject {
     private var hideHUDWorkItem: DispatchWorkItem?
 
     // HUD 常量
-    private let hudWidth: CGFloat = 300
-    private let hudHeight: CGFloat = 100
-    private let hudAlpha: CGFloat = 0.7
+    private let hudWidth: CGFloat = 320
+    private let hudHeight: CGFloat = 120
+    private let hudAlpha: CGFloat = 0.85
     private let hudDisplayDuration: TimeInterval = 2.0
     private let hudFontSize: CGFloat = 24
 
@@ -82,6 +82,40 @@ class VolumeMonitor: ObservableObject {
         #endif
     }
 
+    // 创建音量方格视图
+    private func createVolumeBlocksView(filledBlocks: Int) -> NSView {
+        let blockCount = 16
+        let blockWidth: CGFloat = 14  // 稍微增宽
+        let blockHeight: CGFloat = 6  // 稍微减高，更细长
+        let blockSpacing: CGFloat = 2  // 减小间距
+
+        let totalWidth = CGFloat(blockCount) * blockWidth + CGFloat(blockCount - 1) * blockSpacing
+        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: totalWidth, height: blockHeight))
+
+        for i in 0..<blockCount {
+            let block = NSView(frame: NSRect(
+                x: CGFloat(i) * (blockWidth + blockSpacing),
+                y: 0,
+                width: blockWidth,
+                height: blockHeight
+            ))
+
+            block.wantsLayer = true
+
+            // 根据是否填充来设置颜色，参考Mac风格
+            if i < filledBlocks {
+                block.layer?.backgroundColor = NSColor.white.cgColor  // 填充方格：纯白色
+            } else {
+                block.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.25).cgColor  // 未填充：更透明的白色
+            }
+
+            block.layer?.cornerRadius = 0.5  // 更小的圆角，更精致
+            containerView.addSubview(block)
+        }
+
+        return containerView
+    }
+
     // 设置 HUD 窗口
     private func setupHUDWindow() {
         hudWindow = NSWindow(
@@ -91,27 +125,23 @@ class VolumeMonitor: ObservableObject {
             defer: false
         )
         hudWindow?.level = .floating
-        hudWindow?.backgroundColor = .black.withAlphaComponent(hudAlpha)
+        hudWindow?.backgroundColor = .clear  // 透明背景，让容器视图处理背景
         hudWindow?.isOpaque = false
         hudWindow?.center()
 
-        // 创建容器视图，添加边距
+        // 创建容器视图，添加Mac风格的背景
         let containerView = NSView(frame: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight))
+        containerView.wantsLayer = true
+        containerView.layer?.backgroundColor = NSColor(white: 0.22, alpha: 0.99).cgColor  // 更浅的背景，更高的透明度
+        containerView.layer?.cornerRadius = 12  // Mac风格的圆角
+        containerView.layer?.masksToBounds = true
 
-        let text = NSTextField(labelWithString: "音量: --")
-        text.textColor = .white
-        text.font = .systemFont(ofSize: hudFontSize)
-        text.alignment = .center
-        text.maximumNumberOfLines = 2  // 支持多行
-        text.cell?.truncatesLastVisibleLine = false  // 不截断最后一行
-        text.isBordered = false
-        text.backgroundColor = .clear
+        // 添加轻微的阴影效果
+        containerView.layer?.shadowColor = NSColor.black.cgColor
+        containerView.layer?.shadowOpacity = 0.3
+        containerView.layer?.shadowOffset = CGSize(width: 0, height: 2)
+        containerView.layer?.shadowRadius = 8
 
-        // 设置文本字段的边距
-        let margin: CGFloat = 20
-        text.frame = NSRect(x: margin, y: margin, width: hudWidth - 2 * margin, height: hudHeight - 2 * margin)
-
-        containerView.addSubview(text)
         hudWindow?.contentView = containerView
     }
 
@@ -296,10 +326,48 @@ class VolumeMonitor: ObservableObject {
 
     // 显示音量 HUD
     private func showVolumeHUD(percentage: Int) {
-        guard let hudWindow = hudWindow, let containerView = hudWindow.contentView, let textField = containerView.subviews.first as? NSTextField else { return }
+        guard let hudWindow = hudWindow, let containerView = hudWindow.contentView else { return }
 
+        // 清空之前的内容
+        containerView.subviews.forEach { $0.removeFromSuperview() }
+
+        // 计算填充的方格数量（16个方格对应0-100%）
+        let filledBlocks = Int(round(Float(percentage) / 100.0 * 16.0))
+
+        // 创建音量方格视图
+        let blocksView = createVolumeBlocksView(filledBlocks: filledBlocks)
+
+        // 创建设备名称标签
         let deviceName = currentDevice?.name ?? "未知设备"
-        textField.stringValue = "音量: \(percentage)%\n\(deviceName)"
+        let deviceLabel = NSTextField(labelWithString: deviceName)
+        deviceLabel.textColor = NSColor.white.withAlphaComponent(0.8)  // 更柔和的白色
+        deviceLabel.font = .systemFont(ofSize: 12, weight: .regular)  // 更小的字体
+        deviceLabel.alignment = .center
+        deviceLabel.isBordered = false
+        deviceLabel.backgroundColor = .clear
+        deviceLabel.isEditable = false
+        deviceLabel.isSelectable = false
+
+        // 布局：方格在中上部分，设备名在下方
+        let margin: CGFloat = 24  // 增加边距
+        let blocksViewWidth = blocksView.frame.width
+
+        // 方格居中显示，位置稍微靠上
+        blocksView.frame.origin = CGPoint(
+            x: (hudWidth - blocksViewWidth) / 2,
+            y: hudHeight * 0.6  // 稍微调低位置
+        )
+
+        // 设备名在底部，更近一些
+        deviceLabel.frame = NSRect(
+            x: margin,
+            y: margin + 4,  // 稍微往上一点
+            width: hudWidth - 2 * margin,
+            height: 16  // 稍微减小高度
+        )
+
+        containerView.addSubview(blocksView)
+        containerView.addSubview(deviceLabel)
 
         // 取消之前的隐藏任务
         hideHUDWorkItem?.cancel()

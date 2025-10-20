@@ -50,7 +50,7 @@ class VolumeMonitor: ObservableObject {
     private var defaultOutputDeviceID: AudioDeviceID = 0
     private var volumeListener: AudioObjectPropertyListenerBlock?
     private var deviceListener: AudioObjectPropertyListenerBlock?
-    private var hudWindow: NSWindow?
+    private var hudWindows: [NSWindow] = []
     private var audioQueue: DispatchQueue?
     private var hideHUDWorkItem: DispatchWorkItem?
 
@@ -118,31 +118,42 @@ class VolumeMonitor: ObservableObject {
 
     // 设置 HUD 窗口
     private func setupHUDWindow() {
-        hudWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        hudWindow?.level = .floating
-        hudWindow?.backgroundColor = .clear  // 透明背景，让容器视图处理背景
-        hudWindow?.isOpaque = false
-        hudWindow?.center()
+        hudWindows = NSScreen.screens.map { screen in
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight),
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            window.level = .floating
+            window.backgroundColor = .clear
+            window.isOpaque = false
 
-        // 创建容器视图，添加Mac风格的背景
-        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight))
-        containerView.wantsLayer = true
-        containerView.layer?.backgroundColor = NSColor(white: 0.22, alpha: 0.99).cgColor  // 更浅的背景，更高的透明度
-        containerView.layer?.cornerRadius = 12  // Mac风格的圆角
-        containerView.layer?.masksToBounds = true
+            // 创建容器视图，添加Mac风格的背景
+            let containerView = NSView(frame: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight))
+            containerView.wantsLayer = true
+            containerView.layer?.backgroundColor = NSColor(white: 0.22, alpha: 0.99).cgColor
+            containerView.layer?.cornerRadius = 12
+            containerView.layer?.masksToBounds = true
 
-        // 添加轻微的阴影效果
-        containerView.layer?.shadowColor = NSColor.black.cgColor
-        containerView.layer?.shadowOpacity = 0.3
-        containerView.layer?.shadowOffset = CGSize(width: 0, height: 2)
-        containerView.layer?.shadowRadius = 8
+            // 添加轻微的阴影效果
+            containerView.layer?.shadowColor = NSColor.black.cgColor
+            containerView.layer?.shadowOpacity = 0.3
+            containerView.layer?.shadowOffset = CGSize(width: 0, height: 2)
+            containerView.layer?.shadowRadius = 8
 
-        hudWindow?.contentView = containerView
+            window.contentView = containerView
+
+            // 设置窗口在对应屏幕的中心
+            let screenFrame = screen.frame
+            let windowOrigin = CGPoint(
+                x: screenFrame.origin.x + (screenFrame.width - hudWidth) / 2,
+                y: screenFrame.origin.y + (screenFrame.height - hudHeight) / 2
+            )
+            window.setFrameOrigin(windowOrigin)
+
+            return window
+        }
     }
 
     // 获取默认输出设备 ID
@@ -326,79 +337,83 @@ class VolumeMonitor: ObservableObject {
 
     // 显示音量 HUD
     private func showVolumeHUD(percentage: Int) {
-        guard let hudWindow = hudWindow, let containerView = hudWindow.contentView else { return }
-
-        // 清空之前的内容
-        containerView.subviews.forEach { $0.removeFromSuperview() }
-
         // 计算填充的方格数量（16个方格对应0-100%）
         let filledBlocks = Int(round(Float(percentage) / 100.0 * 16.0))
 
-        // 创建音量图标
-        let speakerImage = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "Volume")
-        let speakerImageView = NSImageView(image: speakerImage!)
-        speakerImageView.frame = NSRect(x: 0, y: 0, width: 44, height: 44)  // 图标更大，接近系统HUD
-        speakerImageView.imageScaling = .scaleProportionallyUpOrDown
-        speakerImageView.contentTintColor = NSColor.white.withAlphaComponent(0.9)  // 白色图标
+        for hudWindow in hudWindows {
+            guard let containerView = hudWindow.contentView else { continue }
 
-        // 创建音量方格视图
-        let blocksView = createVolumeBlocksView(filledBlocks: filledBlocks)
+            // 清空之前的内容
+            containerView.subviews.forEach { $0.removeFromSuperview() }
 
-        // 创建设备名称标签
-        let deviceName = currentDevice?.name ?? "未知设备"
-        let deviceLabel = NSTextField(labelWithString: deviceName)
-        deviceLabel.textColor = NSColor.white.withAlphaComponent(0.8)  // 更柔和的白色
-        deviceLabel.font = .systemFont(ofSize: 12, weight: .regular)  // 更小的字体
-        deviceLabel.alignment = .center
-        deviceLabel.isBordered = false
-        deviceLabel.backgroundColor = .clear
-        deviceLabel.isEditable = false
-        deviceLabel.isSelectable = false
+            // 创建音量图标
+            let speakerImage = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "Volume")
+            let speakerImageView = NSImageView(image: speakerImage!)
+            speakerImageView.frame = NSRect(x: 0, y: 0, width: 44, height: 44)
+            speakerImageView.imageScaling = .scaleProportionallyUpOrDown
+            speakerImageView.contentTintColor = NSColor.white.withAlphaComponent(0.9)
 
+            // 创建音量方格视图
+            let blocksView = createVolumeBlocksView(filledBlocks: filledBlocks)
 
-        // 新布局：垂直居中所有内容，设备名始终在方格下方，保证不重叠
-        let marginX: CGFloat = 16  // 左右边距更小，贴近系统
-        let marginTop: CGFloat = 18
-        let marginBottom: CGFloat = 14
-        let spacingIconToBlocks: CGFloat = 12
-        let spacingBlocksToDevice: CGFloat = 10
-        let blocksViewWidth = blocksView.frame.width
-        let iconHeight = speakerImageView.frame.height
-        let blocksHeight = blocksView.frame.height
-        let deviceLabelHeight: CGFloat = 18
+            // 创建设备名称标签
+            let deviceName = currentDevice?.name ?? "未知设备"
+            let deviceLabel = NSTextField(labelWithString: deviceName)
+            deviceLabel.textColor = NSColor.white.withAlphaComponent(0.8)
+            deviceLabel.font = .systemFont(ofSize: 12, weight: .regular)
+            deviceLabel.alignment = .center
+            deviceLabel.isBordered = false
+            deviceLabel.backgroundColor = .clear
+            deviceLabel.isEditable = false
+            deviceLabel.isSelectable = false
 
-        // 图标顶部对齐
-        speakerImageView.frame.origin = CGPoint(
-            x: (hudWidth - speakerImageView.frame.width) / 2,
-            y: hudHeight - marginTop - iconHeight
-        )
+            // 新布局：三者整体垂直居中，间距更均匀
+            let marginX: CGFloat = 16
+            let spacingIconToBlocks: CGFloat = 14
+            let spacingBlocksToDevice: CGFloat = 14
+            let iconHeight = speakerImageView.frame.height
+            let blocksHeight = blocksView.frame.height
+            let deviceLabelHeight: CGFloat = 18
 
-        // 方格居中，紧跟图标下方
-        blocksView.frame.origin = CGPoint(
-            x: (hudWidth - blocksViewWidth) / 2,
-            y: speakerImageView.frame.origin.y - spacingIconToBlocks - blocksHeight
-        )
+            // 计算三者总高度（含间距）
+            let totalContentHeight = iconHeight + spacingIconToBlocks + blocksHeight + spacingBlocksToDevice + deviceLabelHeight
+            let startY = (hudHeight - totalContentHeight) / 2
 
-        // 设备名靠近底部
-        deviceLabel.frame = NSRect(
-            x: marginX,
-            y: marginBottom,
-            width: hudWidth - 2 * marginX,
-            height: deviceLabelHeight
-        )
+            // 图标
+            speakerImageView.frame.origin = CGPoint(
+                x: (hudWidth - speakerImageView.frame.width) / 2,
+                y: hudHeight - startY - iconHeight
+            )
 
-        containerView.addSubview(speakerImageView)
-        containerView.addSubview(blocksView)
-        containerView.addSubview(deviceLabel)
+            // 方格
+            blocksView.frame.origin = CGPoint(
+                x: (hudWidth - blocksView.frame.width) / 2,
+                y: speakerImageView.frame.origin.y - spacingIconToBlocks - blocksHeight
+            )
+
+            // 设备名
+            deviceLabel.frame = NSRect(
+                x: marginX,
+                y: blocksView.frame.origin.y - spacingBlocksToDevice - deviceLabelHeight,
+                width: hudWidth - 2 * marginX,
+                height: deviceLabelHeight
+            )
+
+            containerView.addSubview(speakerImageView)
+            containerView.addSubview(blocksView)
+            containerView.addSubview(deviceLabel)
+
+            hudWindow.makeKeyAndOrderFront(nil)
+        }
 
         // 取消之前的隐藏任务
         hideHUDWorkItem?.cancel()
 
-        hudWindow.makeKeyAndOrderFront(nil)
-
         // 创建新的隐藏任务
         let workItem = DispatchWorkItem {
-            hudWindow.orderOut(nil)
+            for hudWindow in self.hudWindows {
+                hudWindow.orderOut(nil)
+            }
         }
         hideHUDWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + hudDisplayDuration, execute: workItem)

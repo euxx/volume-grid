@@ -187,7 +187,7 @@ class VolumeMonitor: ObservableObject {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyVolumeScalar,
             mScope: kAudioDevicePropertyScopeOutput,
-            mElement: 1
+            mElement: 0
         )
         return AudioObjectHasProperty(deviceID, &address)
     }
@@ -207,7 +207,7 @@ class VolumeMonitor: ObservableObject {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyVolumeScalar,
             mScope: kAudioDevicePropertyScopeOutput,
-            mElement: 1
+            mElement: 0
         )
 
         var volume: Float32 = 0.0
@@ -440,7 +440,7 @@ class VolumeMonitor: ObservableObject {
         var volumeAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyVolumeScalar,
             mScope: kAudioDevicePropertyScopeOutput,
-            mElement: 1
+            mElement: 0
         )
 
         volumeListener = { [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in
@@ -508,7 +508,7 @@ class VolumeMonitor: ObservableObject {
         var volumeAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyVolumeScalar,
             mScope: kAudioDevicePropertyScopeOutput,
-            mElement: 1
+            mElement: 0
         )
 
         var deviceAddress = AudioObjectPropertyAddress(

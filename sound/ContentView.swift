@@ -334,6 +334,13 @@ class VolumeMonitor: ObservableObject {
         // 计算填充的方格数量（16个方格对应0-100%）
         let filledBlocks = Int(round(Float(percentage) / 100.0 * 16.0))
 
+        // 创建音量图标
+        let speakerImage = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "Volume")
+        let speakerImageView = NSImageView(image: speakerImage!)
+        speakerImageView.frame = NSRect(x: 0, y: 0, width: 44, height: 44)  // 图标更大，接近系统HUD
+        speakerImageView.imageScaling = .scaleProportionallyUpOrDown
+        speakerImageView.contentTintColor = NSColor.white.withAlphaComponent(0.9)  // 白色图标
+
         // 创建音量方格视图
         let blocksView = createVolumeBlocksView(filledBlocks: filledBlocks)
 
@@ -348,24 +355,39 @@ class VolumeMonitor: ObservableObject {
         deviceLabel.isEditable = false
         deviceLabel.isSelectable = false
 
-        // 布局：方格在中上部分，设备名在下方
-        let margin: CGFloat = 24  // 增加边距
-        let blocksViewWidth = blocksView.frame.width
 
-        // 方格居中显示，位置稍微靠上
+        // 新布局：垂直居中所有内容，设备名始终在方格下方，保证不重叠
+        let marginX: CGFloat = 16  // 左右边距更小，贴近系统
+        let marginTop: CGFloat = 18
+        let marginBottom: CGFloat = 14
+        let spacingIconToBlocks: CGFloat = 12
+        let spacingBlocksToDevice: CGFloat = 10
+        let blocksViewWidth = blocksView.frame.width
+        let iconHeight = speakerImageView.frame.height
+        let blocksHeight = blocksView.frame.height
+        let deviceLabelHeight: CGFloat = 18
+
+        // 图标顶部对齐
+        speakerImageView.frame.origin = CGPoint(
+            x: (hudWidth - speakerImageView.frame.width) / 2,
+            y: hudHeight - marginTop - iconHeight
+        )
+
+        // 方格居中，紧跟图标下方
         blocksView.frame.origin = CGPoint(
             x: (hudWidth - blocksViewWidth) / 2,
-            y: hudHeight * 0.6  // 稍微调低位置
+            y: speakerImageView.frame.origin.y - spacingIconToBlocks - blocksHeight
         )
 
-        // 设备名在底部，更近一些
+        // 设备名靠近底部
         deviceLabel.frame = NSRect(
-            x: margin,
-            y: margin + 4,  // 稍微往上一点
-            width: hudWidth - 2 * margin,
-            height: 16  // 稍微减小高度
+            x: marginX,
+            y: marginBottom,
+            width: hudWidth - 2 * marginX,
+            height: deviceLabelHeight
         )
 
+        containerView.addSubview(speakerImageView)
         containerView.addSubview(blocksView)
         containerView.addSubview(deviceLabel)
 

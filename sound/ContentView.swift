@@ -56,7 +56,7 @@ class VolumeMonitor: ObservableObject {
 
     // HUD 常量
     private let hudWidth: CGFloat = 320
-    private let hudHeight: CGFloat = 120
+    private let hudHeight: CGFloat = 200
     private let hudAlpha: CGFloat = 0.85
     private let hudDisplayDuration: TimeInterval = 2.0
     private let hudFontSize: CGFloat = 24
@@ -369,14 +369,14 @@ class VolumeMonitor: ObservableObject {
 
             // 新布局：三者整体垂直居中，间距更均匀
             let marginX: CGFloat = 16
-            let spacingIconToBlocks: CGFloat = 14
-            let spacingBlocksToDevice: CGFloat = 14
+            let spacingIconToDevice: CGFloat = 12
+            let spacingDeviceToBlocks: CGFloat = 12
             let iconHeight = speakerImageView.frame.height
             let blocksHeight = blocksView.frame.height
             let deviceLabelHeight: CGFloat = 18
 
             // 计算三者总高度（含间距）
-            let totalContentHeight = iconHeight + spacingIconToBlocks + blocksHeight + spacingBlocksToDevice + deviceLabelHeight
+            let totalContentHeight = iconHeight + spacingIconToDevice + deviceLabelHeight + spacingDeviceToBlocks + blocksHeight
             let startY = (hudHeight - totalContentHeight) / 2
 
             // 图标
@@ -385,18 +385,18 @@ class VolumeMonitor: ObservableObject {
                 y: hudHeight - startY - iconHeight
             )
 
-            // 方格
-            blocksView.frame.origin = CGPoint(
-                x: (hudWidth - blocksView.frame.width) / 2,
-                y: speakerImageView.frame.origin.y - spacingIconToBlocks - blocksHeight
-            )
-
             // 设备名
             deviceLabel.frame = NSRect(
                 x: marginX,
-                y: blocksView.frame.origin.y - spacingBlocksToDevice - deviceLabelHeight,
+                y: speakerImageView.frame.origin.y - spacingIconToDevice - deviceLabelHeight,
                 width: hudWidth - 2 * marginX,
                 height: deviceLabelHeight
+            )
+
+            // 方格
+            blocksView.frame.origin = CGPoint(
+                x: (hudWidth - blocksView.frame.width) / 2,
+                y: deviceLabel.frame.origin.y - spacingDeviceToBlocks - blocksHeight
             )
 
             containerView.addSubview(speakerImageView)

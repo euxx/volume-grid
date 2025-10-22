@@ -1,0 +1,20 @@
+# Xcode
+*.xcuserstate
+xcuserdata/
+
+# Swift Package Manager
+.build/
+Packages/
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

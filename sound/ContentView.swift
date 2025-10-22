@@ -340,11 +340,38 @@ class VolumeMonitor: ObservableObject {
         // 计算填充的方格数量（16个方格对应0-100%）
         let filledBlocks = Int(round(Float(percentage) / 100.0 * 16.0))
 
+        // 预计算文本宽度以调整窗口大小
+        let deviceName = currentDevice?.name ?? "未知设备"
+        let volumeString = "\(filledBlocks)/16"
+        let deviceNSString = NSString(string: deviceName)
+        let deviceFont = NSFont.systemFont(ofSize: 12)
+        let deviceTextSize = deviceNSString.size(withAttributes: [.font: deviceFont])
+        let volumeNSString = NSString(string: volumeString)
+        let volumeFont = NSFont.systemFont(ofSize: 12)
+        let volumeTextSize = volumeNSString.size(withAttributes: [.font: volumeFont])
+        let gapBetweenDeviceAndCount: CGFloat = 8
+        let combinedWidth = deviceTextSize.width + gapBetweenDeviceAndCount + volumeTextSize.width
+        let marginX: CGFloat = 16
+        let dynamicHudWidth = max(320, combinedWidth + 2 * marginX)  // 最小320，确保文本不被裁剪
+
         for hudWindow in hudWindows {
+            // 调整窗口宽度以适应内容
+            let screenFrame = NSScreen.screens[hudWindows.firstIndex(of: hudWindow)!].frame
+            let newWindowFrame = NSRect(
+                x: screenFrame.origin.x + (screenFrame.width - dynamicHudWidth) / 2,
+                y: screenFrame.origin.y + (screenFrame.height - hudHeight) / 2,
+                width: dynamicHudWidth,
+                height: hudHeight
+            )
+            hudWindow.setFrame(newWindowFrame, display: true)
+
             guard let containerView = hudWindow.contentView else { continue }
 
             // 清空之前的内容
             containerView.subviews.forEach { $0.removeFromSuperview() }
+
+            // 调整容器视图大小
+            containerView.frame = NSRect(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
 
             // 创建音量图标
             let speakerImage = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "Volume")
@@ -357,23 +384,32 @@ class VolumeMonitor: ObservableObject {
             let blocksView = createVolumeBlocksView(filledBlocks: filledBlocks)
 
             // 创建设备名称标签
-            let deviceName = currentDevice?.name ?? "未知设备"
             let deviceLabel = NSTextField(labelWithString: deviceName)
             deviceLabel.textColor = NSColor.white.withAlphaComponent(0.8)
             deviceLabel.font = .systemFont(ofSize: 12, weight: .regular)
-            deviceLabel.alignment = .center
+            deviceLabel.alignment = .left
             deviceLabel.isBordered = false
             deviceLabel.backgroundColor = .clear
             deviceLabel.isEditable = false
             deviceLabel.isSelectable = false
 
-            // 新布局：三者整体垂直居中，间距更均匀
-            let marginX: CGFloat = 16
+            // 创建音量格数标签
+            let volumeText = NSTextField(labelWithString: volumeString)
+            volumeText.textColor = NSColor.white.withAlphaComponent(0.8)
+            volumeText.font = .systemFont(ofSize: 12, weight: .regular)
+            volumeText.alignment = .left
+            volumeText.isBordered = false
+            volumeText.backgroundColor = .clear
+            volumeText.isEditable = false
+            volumeText.isSelectable = false
+
+            // 新布局：图标、设备名+格数文本同行、音量块
             let spacingIconToDevice: CGFloat = 12
             let spacingDeviceToBlocks: CGFloat = 12
             let iconHeight = speakerImageView.frame.height
             let blocksHeight = blocksView.frame.height
             let deviceLabelHeight: CGFloat = 18
+            let volumeTextHeight: CGFloat = 18
 
             // 计算三者总高度（含间距）
             let totalContentHeight = iconHeight + spacingIconToDevice + deviceLabelHeight + spacingDeviceToBlocks + blocksHeight
@@ -381,27 +417,40 @@ class VolumeMonitor: ObservableObject {
 
             // 图标
             speakerImageView.frame.origin = CGPoint(
-                x: (hudWidth - speakerImageView.frame.width) / 2,
+                x: (dynamicHudWidth - speakerImageView.frame.width) / 2,
                 y: hudHeight - startY - iconHeight
             )
 
-            // 设备名
+            // 设备名和音量格数：作为一个整体居中显示
+            let combinedStartX = (dynamicHudWidth - combinedWidth) / 2
+            let textY = speakerImageView.frame.origin.y - spacingIconToDevice - deviceLabelHeight
+
+            // 增加缓冲宽度以避免裁剪
+            let buffer: CGFloat = 10
             deviceLabel.frame = NSRect(
-                x: marginX,
-                y: speakerImageView.frame.origin.y - spacingIconToDevice - deviceLabelHeight,
-                width: hudWidth - 2 * marginX,
+                x: combinedStartX,
+                y: textY,
+                width: deviceTextSize.width + buffer,
                 height: deviceLabelHeight
+            )
+
+            volumeText.frame = NSRect(
+                x: combinedStartX + deviceTextSize.width + gapBetweenDeviceAndCount,
+                y: textY,
+                width: volumeTextSize.width + buffer,
+                height: volumeTextHeight
             )
 
             // 方格
             blocksView.frame.origin = CGPoint(
-                x: (hudWidth - blocksView.frame.width) / 2,
+                x: (dynamicHudWidth - blocksView.frame.width) / 2,
                 y: deviceLabel.frame.origin.y - spacingDeviceToBlocks - blocksHeight
             )
 
             containerView.addSubview(speakerImageView)
             containerView.addSubview(blocksView)
             containerView.addSubview(deviceLabel)
+            containerView.addSubview(volumeText)
 
             hudWindow.makeKeyAndOrderFront(nil)
         }

@@ -6,6 +6,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var volumeMonitor: VolumeMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 设置应用为辅助应用，不显示在Dock中
+        NSApplication.shared.setActivationPolicy(.accessory)
+
         // 创建音量监听器
         volumeMonitor = VolumeMonitor()
         volumeMonitor?.startListening()

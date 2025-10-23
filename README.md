@@ -22,3 +22,25 @@ macOS Tohoe 26 改变了系统音量调节弹窗的样式，只在激活显示�
 3. 调节音量时会显示经典样式的弹窗
 4. 点击菜单栏图标可查看当前音量和当前输出设备
 5. 可设置开机自动启动
+
+## 构建 .app
+
+1. 安装 Xcode (14+)，并打开 `sound.xcodeproj`
+2. 在 Xcode 中选择 `sound` scheme，`Any Mac (Intel/Apple Silicon)` 目标
+3. 选择菜单 `Product > Archive` 或执行 `⌘⇧B` 进行 Release 构建
+4. 构建完成后 `.app` 会出现在 `~/Library/Developer/Xcode/DerivedData/.../Build/Products/Release/sound.app`
+5. 你也可以使用命令行快速生成（将派生数据固定到下载目录）：
+   ```bash
+   xcodebuild \
+     -project sound.xcodeproj \
+     -scheme sound \
+     -configuration Release \
+     -derivedDataPath ~/Downloads/sound-build
+   ```
+   完成后 `.app` 位于 `~/Downloads/sound-build/Build/Products/Release/sound.app`
+6. 若使用 Xcode GUI，可在 `Xcode > Settings... > Locations > Derived Data` 中选择 `Custom`, 将路径设置到 `~/Downloads/sound-build`，然后执行 `Product > Archive`，输出同样会落在下载目录
+
+## 运行方式
+
+- 双击 `.app`，或使用 `open build/Build/Products/Release/sound.app`
+- 在 Xcode 中选择 `Product > Run`（快捷键 `⌘R`），可以直接调试运行

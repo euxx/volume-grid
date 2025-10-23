@@ -53,6 +53,7 @@ class VolumeMonitor: ObservableObject {
     private var hudWindows: [NSWindow] = []
     private var audioQueue: DispatchQueue?
     private var hideHUDWorkItem: DispatchWorkItem?
+    private var volumeElements: [AudioObjectPropertyElement] = []
 
     // HUD 常量
     private let hudWidth: CGFloat = 320
@@ -182,14 +183,45 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
+    // 更新可用的音量通道（优先主通道，其次左右声道）
+    @discardableResult
+    private func updateVolumeElements(for deviceID: AudioDeviceID) -> Bool {
+        let candidates: [AudioObjectPropertyElement] = [
+            kAudioObjectPropertyElementMaster,
+            1,
+            2
+        ]
+
+        var detected: [AudioObjectPropertyElement] = []
+
+        for element in candidates {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyVolumeScalar,
+                mScope: kAudioDevicePropertyScopeOutput,
+                mElement: element
+            )
+
+            if AudioObjectHasProperty(deviceID, &address) {
+                if element == kAudioObjectPropertyElementMaster {
+                    volumeElements = [element]
+                    return true
+                }
+                detected.append(element)
+            }
+        }
+
+        if !detected.isEmpty {
+            volumeElements = detected
+            return true
+        }
+
+        volumeElements = []
+        return false
+    }
+
     // 检查设备是否支持音量控制
     private func deviceSupportsVolumeControl(_ deviceID: AudioDeviceID) -> Bool {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyVolumeScalar,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: 0
-        )
-        return AudioObjectHasProperty(deviceID, &address)
+        return updateVolumeElements(for: deviceID)
     }
 
     // 获取当前音量
@@ -204,27 +236,35 @@ class VolumeMonitor: ObservableObject {
             return nil
         }
 
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyVolumeScalar,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: 0
-        )
+        let elements = volumeElements
+        guard !elements.isEmpty else { return nil }
 
-        var volume: Float32 = 0.0
-        var size = UInt32(MemoryLayout<Float32>.size)
-        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &volume)
+        var channelVolumes: [Float32] = []
 
-        if status == noErr {
-            DispatchQueue.main.async {
-                self.volumePercentage = Int(volume * 100)
+        for element in elements {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyVolumeScalar,
+                mScope: kAudioDevicePropertyScopeOutput,
+                mElement: element
+            )
+
+            var volume: Float32 = 0.0
+            var size = UInt32(MemoryLayout<Float32>.size)
+            let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &volume)
+
+            if status == noErr {
+                channelVolumes.append(volume)
+            } else {
+                #if DEBUG
+                print("Error getting volume for element \(element): \(status)")
+                #endif
             }
-            return volume
-        } else {
-            #if DEBUG
-            print("Error getting volume: \(status)")
-            #endif
-            return nil
         }
+
+        guard !channelVolumes.isEmpty else { return nil }
+
+        let total = channelVolumes.reduce(0, +)
+        return total / Float32(channelVolumes.count)
     }
 
     // 获取音频设备列表
@@ -293,25 +333,20 @@ class VolumeMonitor: ObservableObject {
     }
 
     // 音量变化回调
-    private func volumeChanged(address: AudioObjectPropertyAddress) {
-        let deviceID = self.defaultOutputDeviceID
-        var address = address
-        var volume: Float32 = 0.0
-        var size = UInt32(MemoryLayout<Float32>.size)
-        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &volume)
-
-        if status == noErr {
-            let percentage = Int(volume * 100)
-            DispatchQueue.main.async {
-                self.volumePercentage = percentage
-                self.showVolumeHUD(percentage: percentage)
-                #if DEBUG
-                print("Volume changed: \(percentage)%")
-                #endif
-            }
-        } else {
+    private func volumeChanged(address _: AudioObjectPropertyAddress) {
+        guard let volume = getCurrentVolume() else {
             #if DEBUG
-            print("Error in volume changed: \(status)")
+            print("Failed to read volume after change")
+            #endif
+            return
+        }
+
+        let percentage = Int(volume * 100)
+        DispatchQueue.main.async {
+            self.volumePercentage = percentage
+            self.showVolumeHUD(percentage: percentage)
+            #if DEBUG
+            print("Volume changed: \(percentage)%")
             #endif
         }
     }
@@ -322,8 +357,10 @@ class VolumeMonitor: ObservableObject {
         updateDefaultOutputDevice()
         startListening()
         if let volume = getCurrentVolume() {
+            let percentage = Int(volume * 100)
+            self.volumePercentage = percentage
             #if DEBUG
-            print("Device switched, new volume: \(Int(volume * 100))%")
+            print("Device switched, new volume: \(percentage)%")
             #endif
         }
         // 更新当前设备
@@ -486,12 +523,6 @@ class VolumeMonitor: ObservableObject {
         }
 
         // 音量变化监听
-        var volumeAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyVolumeScalar,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: 0
-        )
-
         volumeListener = { [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in
             guard let self = self else {
                 #if DEBUG
@@ -509,11 +540,29 @@ class VolumeMonitor: ObservableObject {
             return
         }
 
-        let volumeStatus = AudioObjectAddPropertyListenerBlock(deviceID, &volumeAddress, audioQueue, volumeListener)
-        if volumeStatus != noErr {
+        var listenerRegistered = false
+        for element in volumeElements {
+            var volumeAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyVolumeScalar,
+                mScope: kAudioDevicePropertyScopeOutput,
+                mElement: element
+            )
+
+            let volumeStatus = AudioObjectAddPropertyListenerBlock(deviceID, &volumeAddress, audioQueue, volumeListener)
+            if volumeStatus == noErr {
+                listenerRegistered = true
+            } else {
+                #if DEBUG
+                print("Error adding volume listener for element \(element): \(volumeStatus)")
+                #endif
+            }
+        }
+
+        guard listenerRegistered else {
             #if DEBUG
-            print("Error adding volume listener: \(volumeStatus)")
+            print("Failed to register any volume listeners")
             #endif
+            return
         }
 
         // 默认设备变化监听
@@ -554,19 +603,21 @@ class VolumeMonitor: ObservableObject {
     func stopListening() {
         guard let volumeListener = volumeListener, let deviceListener = deviceListener, let audioQueue = audioQueue else { return }
 
-        var volumeAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyVolumeScalar,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: 0
-        )
-
         var deviceAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: 0
         )
 
-        AudioObjectRemovePropertyListenerBlock(defaultOutputDeviceID, &volumeAddress, audioQueue, volumeListener)
+        for element in volumeElements {
+            var volumeAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyVolumeScalar,
+                mScope: kAudioDevicePropertyScopeOutput,
+                mElement: element
+            )
+            AudioObjectRemovePropertyListenerBlock(defaultOutputDeviceID, &volumeAddress, audioQueue, volumeListener)
+        }
+
         AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
 
         self.volumeListener = nil

@@ -1,9 +1,15 @@
 import SwiftUI
 import AppKit
+import Combine
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
+    private var statusMenu: NSMenu?
     private var volumeMonitor: VolumeMonitor?
+    private var volumeSubscriber: AnyCancellable?
+    private var deviceSubscriber: AnyCancellable?
+    private var volumeMenuItem: NSMenuItem?
+    private var deviceMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 设置应用为辅助应用，不显示在Dock中
@@ -20,6 +26,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         volumeMonitor?.stopListening()
+        volumeSubscriber?.cancel()
+        deviceSubscriber?.cancel()
     }
 
     private func setupStatusBarItem() {
@@ -38,12 +46,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         volumeItem.title = "当前音量: \(volumeMonitor?.volumePercentage ?? 0)%"
         volumeItem.isEnabled = false
         menu.addItem(volumeItem)
+        volumeMenuItem = volumeItem
 
         // 添加当前设备显示
         let deviceItem = NSMenuItem()
         deviceItem.title = "当前设备: \(volumeMonitor?.currentDevice?.name ?? "未知设备")"
         deviceItem.isEnabled = false
         menu.addItem(deviceItem)
+        deviceMenuItem = deviceItem
 
         menu.addItem(NSMenuItem.separator())
 
@@ -61,18 +71,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
 
         statusItem?.menu = menu
+        statusMenu = menu
 
-        // 设置定时器更新菜单中的音量显示
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            if let volume = self?.volumeMonitor?.volumePercentage {
+        // 实时更新菜单中的音量和设备显示
+        volumeSubscriber = volumeMonitor?.$volumePercentage
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] volume in
+                guard let self, let volumeItem = self.volumeMenuItem else { return }
                 volumeItem.title = "当前音量: \(volume)%"
+                self.statusMenu?.itemChanged(volumeItem)
             }
-            if let deviceName = self?.volumeMonitor?.currentDevice?.name {
-                deviceItem.title = "当前设备: \(deviceName)"
-            } else {
-                deviceItem.title = "当前设备: 未知设备"
+
+        deviceSubscriber = volumeMonitor?.$currentDevice
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] device in
+                guard let self, let deviceItem = self.deviceMenuItem else { return }
+                let name = device?.name ?? "未知设备"
+                deviceItem.title = "当前设备: \(name)"
+                self.statusMenu?.itemChanged(deviceItem)
             }
-        }
     }
 
     @objc private func quitApp() {

@@ -414,8 +414,11 @@ class VolumeMonitor: ObservableObject {
         let volumeNSString = NSString(string: volumeString)
         let volumeFont = NSFont.systemFont(ofSize: 12)
         let volumeTextSize = volumeNSString.size(withAttributes: [.font: volumeFont])
+        let maxVolumeSampleString = "(15+3/4)/16"
+        let maxVolumeSampleWidth = NSString(string: maxVolumeSampleString).size(withAttributes: [.font: volumeFont]).width
+        let effectiveVolumeTextWidth = max(volumeTextSize.width, maxVolumeSampleWidth)
         let gapBetweenDeviceAndCount: CGFloat = 8
-        let combinedWidth = deviceTextSize.width + gapBetweenDeviceAndCount + volumeTextSize.width
+        let combinedWidth = deviceTextSize.width + gapBetweenDeviceAndCount + effectiveVolumeTextWidth
         let marginX: CGFloat = 16
         let dynamicHudWidth = max(320, combinedWidth + 2 * marginX)  // 最小320，确保文本不被裁剪
 
@@ -502,7 +505,7 @@ class VolumeMonitor: ObservableObject {
             volumeText.frame = NSRect(
                 x: combinedStartX + deviceTextSize.width + gapBetweenDeviceAndCount,
                 y: textY,
-                width: volumeTextSize.width + buffer,
+                width: effectiveVolumeTextWidth + buffer,
                 height: volumeTextHeight
             )
 

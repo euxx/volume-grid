@@ -57,7 +57,7 @@ class VolumeMonitor: ObservableObject {
 
     // HUD 常量
     private let hudWidth: CGFloat = 320
-    private let hudHeight: CGFloat = 200
+    private let hudHeight: CGFloat = 160
     private let hudAlpha: CGFloat = 0.85
     private let hudDisplayDuration: TimeInterval = 2.0
     private let hudFontSize: CGFloat = 24
@@ -473,7 +473,7 @@ class VolumeMonitor: ObservableObject {
 
             // 新布局：图标、设备名+格数文本同行、音量块
             let spacingIconToDevice: CGFloat = 12
-            let spacingDeviceToBlocks: CGFloat = 12
+            let spacingDeviceToBlocks: CGFloat = 16
             let iconHeight = speakerImageView.frame.height
             let blocksHeight = blocksView.frame.height
             let deviceLabelHeight: CGFloat = 18

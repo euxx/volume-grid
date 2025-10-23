@@ -162,6 +162,9 @@ class VolumeMonitor: ObservableObject {
             )
             window.setFrameOrigin(windowOrigin)
 
+            // 设置初始透明度
+            window.alphaValue = self.hudAlpha
+
             return window
         }
     }
@@ -520,7 +523,13 @@ class VolumeMonitor: ObservableObject {
             containerView.addSubview(deviceLabel)
             containerView.addSubview(volumeText)
 
+            // 淡入动画
+            hudWindow.alphaValue = 0
             hudWindow.makeKeyAndOrderFront(nil)
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.2
+                hudWindow.animator().alphaValue = self.hudAlpha
+            }, completionHandler: nil)
         }
 
         // 取消之前的隐藏任务
@@ -529,7 +538,12 @@ class VolumeMonitor: ObservableObject {
         // 创建新的隐藏任务
         let workItem = DispatchWorkItem {
             for hudWindow in self.hudWindows {
-                hudWindow.orderOut(nil)
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.2
+                    hudWindow.animator().alphaValue = 0
+                }, completionHandler: {
+                    hudWindow.orderOut(nil)
+                })
             }
         }
         hideHUDWorkItem = workItem

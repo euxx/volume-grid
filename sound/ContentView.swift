@@ -389,10 +389,11 @@ class VolumeMonitor: ObservableObject {
         let clampedScalar = max(0, min(volumeScalar, 1))
         let totalBlocks = clampedScalar * 16.0
         let quarterBlocks = (totalBlocks * 4).rounded() / 4
+        let formattedQuarterBlocks = formatVolumeCount(quarterBlocks)
 
         // 预计算文本宽度以调整窗口大小
         let deviceName = currentDevice?.name ?? "未知设备"
-        let volumeString = String(format: "%.2f/16", quarterBlocks)
+        let volumeString = "\(formattedQuarterBlocks) / 16"
         let deviceNSString = NSString(string: deviceName)
         let deviceFont = NSFont.systemFont(ofSize: 12)
         let deviceTextSize = deviceNSString.size(withAttributes: [.font: deviceFont])
@@ -516,6 +517,39 @@ class VolumeMonitor: ObservableObject {
         }
         hideHUDWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + hudDisplayDuration, execute: workItem)
+    }
+
+    // 将 0.25、0.5、0.75 等小数格式化为 1/4、2/4、3/4
+    private func formatVolumeCount(_ value: CGFloat) -> String {
+        let integerPart = Int(value)
+        let fractionalPart = value - CGFloat(integerPart)
+        let epsilon: CGFloat = 0.001
+
+        if fractionalPart < epsilon {
+            return "\(integerPart)"
+        }
+
+        if abs(fractionalPart - 1.0) < epsilon {
+            return "\(integerPart + 1)"
+        }
+
+        let fractionString: String
+        switch fractionalPart {
+        case (0.25 - epsilon)...(0.25 + epsilon):
+            fractionString = "1/4"
+        case (0.5 - epsilon)...(0.5 + epsilon):
+            fractionString = "2/4"
+        case (0.75 - epsilon)...(0.75 + epsilon):
+            fractionString = "3/4"
+        default:
+            fractionString = String(format: "%.2f", fractionalPart)
+        }
+
+        if integerPart == 0 {
+            return fractionString
+        } else {
+            return "\(integerPart) \(fractionString)"
+        }
     }
 
     // 注册监听器

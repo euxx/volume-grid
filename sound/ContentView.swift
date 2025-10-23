@@ -84,7 +84,7 @@ class VolumeMonitor: ObservableObject {
     }
 
     // 创建音量方格视图
-    private func createVolumeBlocksView(filledBlocks: Int) -> NSView {
+    private func createVolumeBlocksView(fillFraction: CGFloat) -> NSView {
         let blockCount = 16
         let blockWidth: CGFloat = 14  // 稍微增宽
         let blockHeight: CGFloat = 6  // 稍微减高，更细长
@@ -92,6 +92,9 @@ class VolumeMonitor: ObservableObject {
 
         let totalWidth = CGFloat(blockCount) * blockWidth + CGFloat(blockCount - 1) * blockSpacing
         let containerView = NSView(frame: NSRect(x: 0, y: 0, width: totalWidth, height: blockHeight))
+
+        let clampedFraction = max(0, min(1, fillFraction))
+        let totalBlocks = clampedFraction * CGFloat(blockCount)
 
         for i in 0..<blockCount {
             let block = NSView(frame: NSRect(
@@ -102,15 +105,21 @@ class VolumeMonitor: ObservableObject {
             ))
 
             block.wantsLayer = true
+            block.layer?.cornerRadius = 0.5  // 更小的圆角，更精致
+            block.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.2).cgColor
 
-            // 根据是否填充来设置颜色，参考Mac风格
-            if i < filledBlocks {
-                block.layer?.backgroundColor = NSColor.white.cgColor  // 填充方格：纯白色
-            } else {
-                block.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.25).cgColor  // 未填充：更透明的白色
+            var blockFill = totalBlocks - CGFloat(i)
+            blockFill = max(0, min(1, blockFill))
+            blockFill = (blockFill * 4).rounded() / 4  // 最小支持 1/4 单位
+
+            if blockFill > 0 {
+                let fillLayer = CALayer()
+                fillLayer.backgroundColor = NSColor.white.cgColor
+                fillLayer.cornerRadius = 0.5
+                fillLayer.frame = CGRect(x: 0, y: 0, width: blockWidth * blockFill, height: blockHeight)
+                block.layer?.addSublayer(fillLayer)
             }
 
-            block.layer?.cornerRadius = 0.5  // 更小的圆角，更精致
             containerView.addSubview(block)
         }
 
@@ -341,10 +350,11 @@ class VolumeMonitor: ObservableObject {
             return
         }
 
-        let percentage = Int(volume * 100)
+        let clampedVolume = max(0, min(volume, 1))
+        let percentage = Int(round(clampedVolume * 100))
         DispatchQueue.main.async {
             self.volumePercentage = percentage
-            self.showVolumeHUD(percentage: percentage)
+            self.showVolumeHUD(volumeScalar: CGFloat(clampedVolume))
             #if DEBUG
             print("Volume changed: \(percentage)%")
             #endif
@@ -357,8 +367,10 @@ class VolumeMonitor: ObservableObject {
         updateDefaultOutputDevice()
         startListening()
         if let volume = getCurrentVolume() {
-            let percentage = Int(volume * 100)
+            let clampedVolume = max(0, min(volume, 1))
+            let percentage = Int(round(clampedVolume * 100))
             self.volumePercentage = percentage
+            self.showVolumeHUD(volumeScalar: CGFloat(clampedVolume))
             #if DEBUG
             print("Device switched, new volume: \(percentage)%")
             #endif
@@ -373,13 +385,14 @@ class VolumeMonitor: ObservableObject {
     }
 
     // 显示音量 HUD
-    private func showVolumeHUD(percentage: Int) {
-        // 计算填充的方格数量（16个方格对应0-100%）
-        let filledBlocks = Int(round(Float(percentage) / 100.0 * 16.0))
+    private func showVolumeHUD(volumeScalar: CGFloat) {
+        let clampedScalar = max(0, min(volumeScalar, 1))
+        let totalBlocks = clampedScalar * 16.0
+        let quarterBlocks = (totalBlocks * 4).rounded() / 4
 
         // 预计算文本宽度以调整窗口大小
         let deviceName = currentDevice?.name ?? "未知设备"
-        let volumeString = "\(filledBlocks)/16"
+        let volumeString = String(format: "%.2f/16", quarterBlocks)
         let deviceNSString = NSString(string: deviceName)
         let deviceFont = NSFont.systemFont(ofSize: 12)
         let deviceTextSize = deviceNSString.size(withAttributes: [.font: deviceFont])
@@ -418,7 +431,7 @@ class VolumeMonitor: ObservableObject {
             speakerImageView.contentTintColor = NSColor.white.withAlphaComponent(0.9)
 
             // 创建音量方格视图
-            let blocksView = createVolumeBlocksView(filledBlocks: filledBlocks)
+            let blocksView = createVolumeBlocksView(fillFraction: clampedScalar)
 
             // 创建设备名称标签
             let deviceLabel = NSTextField(labelWithString: deviceName)

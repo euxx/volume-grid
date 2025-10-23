@@ -365,7 +365,22 @@ class VolumeMonitor: ObservableObject {
     private func deviceChanged() {
         stopListening()
         updateDefaultOutputDevice()
+        getAudioDevices()
         startListening()
+
+        // Refresh the current device immediately so the HUD reflects the new selection.
+        if defaultOutputDeviceID != 0 {
+            if let current = audioDevices.first(where: { $0.id == defaultOutputDeviceID }) {
+                currentDevice = current
+            } else if let name = getDeviceName(defaultOutputDeviceID) {
+                currentDevice = AudioDevice(id: defaultOutputDeviceID, name: name)
+            } else {
+                currentDevice = nil
+            }
+        } else {
+            currentDevice = nil
+        }
+
         if let volume = getCurrentVolume() {
             let clampedVolume = max(0, min(volume, 1))
             let percentage = Int(round(clampedVolume * 100))
@@ -374,13 +389,6 @@ class VolumeMonitor: ObservableObject {
             #if DEBUG
             print("Device switched, new volume: \(percentage)%")
             #endif
-        }
-        // 更新当前设备
-        DispatchQueue.main.async {
-            if self.defaultOutputDeviceID != 0,
-               let currentDevice = self.audioDevices.first(where: { $0.id == self.defaultOutputDeviceID }) {
-                self.currentDevice = currentDevice
-            }
         }
     }
 

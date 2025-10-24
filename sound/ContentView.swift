@@ -58,7 +58,7 @@ class VolumeMonitor: ObservableObject {
     // HUD 常量
     private let hudWidth: CGFloat = 320
     private let hudHeight: CGFloat = 160
-    private let hudAlpha: CGFloat = 0.85
+    private let hudAlpha: CGFloat = 0.97
     private let hudDisplayDuration: TimeInterval = 2.0
     private let hudFontSize: CGFloat = 24
 

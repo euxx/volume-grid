@@ -54,6 +54,7 @@ class VolumeMonitor: ObservableObject {
     private var audioQueue: DispatchQueue?
     private var hideHUDWorkItem: DispatchWorkItem?
     private var volumeElements: [AudioObjectPropertyElement] = []
+    private var lastVolumeScalar: CGFloat?
 
     // HUD 常量
     private let hudWidth: CGFloat = 320
@@ -70,6 +71,7 @@ class VolumeMonitor: ObservableObject {
         // Get initial volume
         if let volume = getCurrentVolume() {
             volumePercentage = Int(volume * 100)
+            lastVolumeScalar = CGFloat(volume)
         }
         // Get audio devices
         getAudioDevices()
@@ -356,8 +358,19 @@ class VolumeMonitor: ObservableObject {
         let clampedVolume = max(0, min(volume, 1))
         let percentage = Int(round(clampedVolume * 100))
         DispatchQueue.main.async {
+            let previousScalar = self.lastVolumeScalar
+            self.lastVolumeScalar = CGFloat(clampedVolume)
             self.volumePercentage = percentage
-            self.showVolumeHUD(volumeScalar: CGFloat(clampedVolume))
+            let didChangeVolume: Bool
+            if let previousScalar {
+                // 忽略未造成实际音量变化的事件（例如系统通知带来的虚假回调）
+                didChangeVolume = abs(previousScalar - CGFloat(clampedVolume)) > 0.001
+            } else {
+                didChangeVolume = true
+            }
+            if didChangeVolume {
+                self.showVolumeHUD(volumeScalar: CGFloat(clampedVolume))
+            }
             #if DEBUG
             print("Volume changed: \(percentage)%")
             #endif
@@ -388,6 +401,7 @@ class VolumeMonitor: ObservableObject {
             let clampedVolume = max(0, min(volume, 1))
             let percentage = Int(round(clampedVolume * 100))
             self.volumePercentage = percentage
+            self.lastVolumeScalar = CGFloat(clampedVolume)
             self.showVolumeHUD(volumeScalar: CGFloat(clampedVolume))
             #if DEBUG
             print("Device switched, new volume: \(percentage)%")

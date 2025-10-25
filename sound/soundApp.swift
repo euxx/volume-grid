@@ -34,7 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: "Sound Monitor")
+            updateStatusBarIcon()
             button.image?.isTemplate = true // 使其适应菜单栏主题
         }
 
@@ -80,6 +80,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self, let volumeItem = self.volumeMenuItem else { return }
                 volumeItem.title = "当前音量: \(volume)%"
                 self.statusMenu?.itemChanged(volumeItem)
+                self.updateStatusBarIcon()
             }
 
         deviceSubscriber = volumeMonitor?.$currentDevice
@@ -94,6 +95,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
+    }
+
+    private func updateStatusBarIcon() {
+        guard let button = statusItem?.button, let volumeMonitor = volumeMonitor else { return }
+        let iconName = volumeMonitor.volumePercentage == 0 ? "speaker.slash" : "speaker.wave.2"
+        button.image = NSImage(systemSymbolName: iconName, accessibilityDescription: "Sound Monitor")
+        button.image?.isTemplate = true
     }
 
     @objc private func toggleLaunchAtLogin() {

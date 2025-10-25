@@ -459,7 +459,8 @@ class VolumeMonitor: ObservableObject {
             containerView.frame = NSRect(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
 
             // 创建音量图标
-            let speakerImage = NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "Volume")
+            let iconName = clampedScalar == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill"
+            let speakerImage = NSImage(systemSymbolName: iconName, accessibilityDescription: "Volume")
             let speakerImageView = NSImageView(image: speakerImage!)
             speakerImageView.frame = NSRect(x: 0, y: 0, width: 44, height: 44)
             speakerImageView.imageScaling = .scaleProportionallyUpOrDown

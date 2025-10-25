@@ -440,6 +440,9 @@ class VolumeMonitor: ObservableObject {
         let dynamicHudWidth = max(320, combinedWidth + 2 * marginX)  // 最小320，确保文本不被裁剪
 
         for hudWindow in hudWindows {
+            // 检查窗口是否已经显示
+            let isAlreadyVisible = hudWindow.isVisible && hudWindow.alphaValue > 0.1
+
             // 调整窗口宽度以适应内容
             let screenFrame = NSScreen.screens[hudWindows.firstIndex(of: hudWindow)!].frame
             let newWindowFrame = NSRect(
@@ -538,13 +541,18 @@ class VolumeMonitor: ObservableObject {
             containerView.addSubview(deviceLabel)
             containerView.addSubview(volumeText)
 
-            // 淡入动画
-            hudWindow.alphaValue = 0
-            hudWindow.makeKeyAndOrderFront(nil)
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.2
-                hudWindow.animator().alphaValue = self.hudAlpha
-            }, completionHandler: nil)
+            // 只在窗口未显示时执行淡入动画
+            if !isAlreadyVisible {
+                hudWindow.alphaValue = 0
+                hudWindow.makeKeyAndOrderFront(nil)
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = 0.2
+                    hudWindow.animator().alphaValue = self.hudAlpha
+                }, completionHandler: nil)
+            } else {
+                // 窗口已经显示，保持当前透明度
+                hudWindow.alphaValue = self.hudAlpha
+            }
         }
 
         // 取消之前的隐藏任务

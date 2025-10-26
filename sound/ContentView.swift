@@ -579,7 +579,7 @@ class VolumeMonitor: ObservableObject {
         let effectiveVolumeTextWidth = max(volumeTextSize.width, maxVolumeSampleWidth)
         let gapBetweenDeviceAndCount: CGFloat = 8
         let combinedWidth = deviceTextSize.width + gapBetweenDeviceAndCount + effectiveVolumeTextWidth
-        let marginX: CGFloat = 16
+        let marginX: CGFloat = 24
         let dynamicHudWidth = max(320, combinedWidth + 2 * marginX)  // 最小320，确保文本不被裁剪
 
         for hudWindow in hudWindows {
@@ -605,8 +605,9 @@ class VolumeMonitor: ObservableObject {
             containerView.frame = NSRect(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
 
             // 创建音量图标容器
-            let iconContainerSize: CGFloat = 48
-            let iconContainer = NSView(frame: NSRect(x: 0, y: 0, width: iconContainerSize, height: iconContainerSize))
+            let iconContainerSize: CGFloat = 40
+            let iconContainer = NSView()
+            iconContainer.translatesAutoresizingMaskIntoConstraints = false
 
             // 创建音量图标
             let iconName = isMutedForDisplay ? "speaker.slash.fill" : "speaker.wave.2.fill"
@@ -614,23 +615,27 @@ class VolumeMonitor: ObservableObject {
             let speakerImageView = NSImageView(image: speakerImage!)
             // 图标在容器内居中显示，使用原始大小
             let iconSize: CGFloat = isMutedForDisplay ? 40 : 47
-            speakerImageView.frame = NSRect(
-                x: (iconContainerSize - iconSize) / 2,
-                y: (iconContainerSize - iconSize) / 2,
-                width: iconSize,
-                height: iconSize
-            )
             speakerImageView.imageScaling = .scaleProportionallyUpOrDown
             speakerImageView.contentTintColor = NSColor.white.withAlphaComponent(0.9)
 
+            speakerImageView.translatesAutoresizingMaskIntoConstraints = false
             // 将图标添加到容器中
             iconContainer.addSubview(speakerImageView)
+            NSLayoutConstraint.activate([
+                speakerImageView.centerXAnchor.constraint(equalTo: iconContainer.centerXAnchor),
+                speakerImageView.centerYAnchor.constraint(equalTo: iconContainer.centerYAnchor),
+                speakerImageView.widthAnchor.constraint(equalToConstant: iconSize),
+                speakerImageView.heightAnchor.constraint(equalToConstant: iconSize)
+            ])
 
             // 创建音量方格视图
             let blocksView = createVolumeBlocksView(fillFraction: displayedScalar)
+            let blocksSize = blocksView.frame.size
+            blocksView.translatesAutoresizingMaskIntoConstraints = false
 
             // 创建设备名称标签
             let deviceLabel = NSTextField(labelWithString: deviceName + "  -")
+            deviceLabel.translatesAutoresizingMaskIntoConstraints = false
             deviceLabel.textColor = NSColor.white.withAlphaComponent(0.8)
             deviceLabel.font = .systemFont(ofSize: 12, weight: .regular)
             deviceLabel.alignment = .left
@@ -638,9 +643,13 @@ class VolumeMonitor: ObservableObject {
             deviceLabel.backgroundColor = .clear
             deviceLabel.isEditable = false
             deviceLabel.isSelectable = false
+            deviceLabel.lineBreakMode = .byTruncatingTail
+            deviceLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            deviceLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
 
             // 创建音量格数标签
             let volumeText = NSTextField(labelWithString: volumeString)
+            volumeText.translatesAutoresizingMaskIntoConstraints = false
             volumeText.textColor = NSColor.white.withAlphaComponent(0.8)
             volumeText.font = .systemFont(ofSize: 12, weight: .regular)
             volumeText.alignment = .left
@@ -648,55 +657,60 @@ class VolumeMonitor: ObservableObject {
             volumeText.backgroundColor = .clear
             volumeText.isEditable = false
             volumeText.isSelectable = false
+            volumeText.lineBreakMode = .byClipping
+            volumeText.setContentHuggingPriority(.required, for: .horizontal)
+            volumeText.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-            // 新布局：图标、设备名+格数文本同行、音量块
-            let spacingIconToDevice: CGFloat = 12
-            let spacingDeviceToBlocks: CGFloat = 16
-            let iconHeight = iconContainer.frame.height
-            let blocksHeight = blocksView.frame.height
-            let deviceLabelHeight: CGFloat = 18
-            let volumeTextHeight: CGFloat = 18
+            // 使用 StackView 保证垂直居中和等距
+            let contentStack = NSStackView()
+            contentStack.translatesAutoresizingMaskIntoConstraints = false
+            contentStack.orientation = .vertical
+            contentStack.alignment = .centerX
+            contentStack.spacing = 0
 
-            // 计算三者总高度（含间距）
-            let totalContentHeight = iconHeight + spacingIconToDevice + deviceLabelHeight + spacingDeviceToBlocks + blocksHeight
-            let startY = (hudHeight - totalContentHeight) / 2
+            containerView.addSubview(contentStack)
 
-            // 图标容器
-            iconContainer.frame.origin = CGPoint(
-                x: (dynamicHudWidth - iconContainer.frame.width) / 2,
-                y: hudHeight - startY - iconHeight
-            )
+            let minVerticalPadding: CGFloat = 14
+            NSLayoutConstraint.activate([
+                contentStack.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+                contentStack.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
+                contentStack.leadingAnchor.constraint(greaterThanOrEqualTo: containerView.leadingAnchor, constant: marginX),
+                contentStack.trailingAnchor.constraint(lessThanOrEqualTo: containerView.trailingAnchor, constant: -marginX)
+            ])
 
-            // 设备名和音量格数：作为一个整体居中显示
-            let combinedStartX = (dynamicHudWidth - combinedWidth) / 2
-            let textY = iconContainer.frame.origin.y - spacingIconToDevice - deviceLabelHeight
+            let topConstraint = contentStack.topAnchor.constraint(greaterThanOrEqualTo: containerView.topAnchor, constant: minVerticalPadding)
+            topConstraint.priority = .defaultHigh
+            topConstraint.isActive = true
 
-            // 增加缓冲宽度以避免裁剪
-            let buffer: CGFloat = 10
-            deviceLabel.frame = NSRect(
-                x: combinedStartX,
-                y: textY,
-                width: deviceTextSize.width + buffer,
-                height: deviceLabelHeight
-            )
+            let bottomConstraint = contentStack.bottomAnchor.constraint(lessThanOrEqualTo: containerView.bottomAnchor, constant: -minVerticalPadding)
+            bottomConstraint.priority = .defaultHigh
+            bottomConstraint.isActive = true
 
-            volumeText.frame = NSRect(
-                x: combinedStartX + deviceTextSize.width + gapBetweenDeviceAndCount,
-                y: textY,
-                width: effectiveVolumeTextWidth + buffer,
-                height: volumeTextHeight
-            )
+            contentStack.addArrangedSubview(iconContainer)
+            NSLayoutConstraint.activate([
+                iconContainer.widthAnchor.constraint(equalToConstant: iconContainerSize),
+                iconContainer.heightAnchor.constraint(equalToConstant: iconContainerSize)
+            ])
 
-            // 方格
-            blocksView.frame.origin = CGPoint(
-                x: (dynamicHudWidth - blocksView.frame.width) / 2,
-                y: deviceLabel.frame.origin.y - spacingDeviceToBlocks - blocksHeight
-            )
+            let textStack = NSStackView()
+            textStack.translatesAutoresizingMaskIntoConstraints = false
+            textStack.orientation = .horizontal
+            textStack.alignment = .firstBaseline
+            textStack.spacing = gapBetweenDeviceAndCount
+            textStack.addArrangedSubview(deviceLabel)
+            textStack.addArrangedSubview(volumeText)
+            contentStack.addArrangedSubview(textStack)
 
-            containerView.addSubview(iconContainer)
-            containerView.addSubview(blocksView)
-            containerView.addSubview(deviceLabel)
-            containerView.addSubview(volumeText)
+            let spacingIconToDevice: CGFloat = 10
+            let spacingDeviceToBlocks: CGFloat = 20
+            contentStack.setCustomSpacing(spacingIconToDevice, after: iconContainer)
+            contentStack.setCustomSpacing(spacingDeviceToBlocks, after: textStack)
+
+            contentStack.addArrangedSubview(blocksView)
+            NSLayoutConstraint.activate([
+                blocksView.widthAnchor.constraint(equalToConstant: blocksSize.width),
+                blocksView.heightAnchor.constraint(equalToConstant: blocksSize.height)
+            ])
 
             // 只在窗口未显示时执行淡入动画
             if !isAlreadyVisible {

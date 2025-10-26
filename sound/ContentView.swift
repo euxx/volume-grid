@@ -431,9 +431,9 @@ class VolumeMonitor: ObservableObject {
         let volumeString: String
         if formattedQuarterBlocks.contains("/") {
             let normalizedNumerator = formattedQuarterBlocks.replacingOccurrences(of: " ", with: "+")
-            volumeString = "(\(normalizedNumerator))/16"
+            volumeString = normalizedNumerator
         } else {
-            volumeString = "\(formattedQuarterBlocks) / 16"
+            volumeString = formattedQuarterBlocks
         }
 
         // 预计算文本宽度以调整窗口大小
@@ -444,7 +444,7 @@ class VolumeMonitor: ObservableObject {
         let volumeNSString = NSString(string: volumeString)
         let volumeFont = NSFont.systemFont(ofSize: 12)
         let volumeTextSize = volumeNSString.size(withAttributes: [.font: volumeFont])
-        let maxVolumeSampleString = "(15+3/4)/16"
+        let maxVolumeSampleString = "(15+3/4)"
         let maxVolumeSampleWidth = NSString(string: maxVolumeSampleString).size(withAttributes: [.font: volumeFont]).width
         let effectiveVolumeTextWidth = max(volumeTextSize.width, maxVolumeSampleWidth)
         let gapBetweenDeviceAndCount: CGFloat = 8

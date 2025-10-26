@@ -117,6 +117,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.terminate(nil)
     }
 
+    // 将格数转换为字符串格式（简化为只显示当前音量）
+    private func formatVolumeString(quarterBlocks: CGFloat) -> String {
+        let integerPart = Int(quarterBlocks)
+        let fractionalPart = quarterBlocks - CGFloat(integerPart)
+        let epsilon: CGFloat = 0.001
+
+        var fractionString = ""
+        if fractionalPart >= epsilon && abs(fractionalPart - 1.0) >= epsilon {
+            switch fractionalPart {
+            case (0.25 - epsilon)...(0.25 + epsilon):
+                fractionString = "1/4"
+            case (0.5 - epsilon)...(0.5 + epsilon):
+                fractionString = "2/4"
+            case (0.75 - epsilon)...(0.75 + epsilon):
+                fractionString = "3/4"
+            default:
+                fractionString = String(format: "%.2f", fractionalPart)
+            }
+        }
+
+        if fractionString.isEmpty {
+            return "\(integerPart)"
+        } else if integerPart == 0 {
+            return "\(fractionString)"
+        } else {
+            return "\(integerPart)+\(fractionString)"
+        }
+    }
+
     private func createStatusBarCustomView(percentage: Int) -> NSView {
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 20, height: 22))
 
@@ -151,8 +180,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func createVolumeMenuItemView(percentage: Int) -> NSView {
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 250, height: 50))
 
+        // 计算数字格式
+        let volumeScalar = CGFloat(percentage) / 100.0
+        let totalBlocks = volumeScalar * 16.0
+        let quarterBlocks = (totalBlocks * 4).rounded() / 4
+        let volumeString = formatVolumeString(quarterBlocks: quarterBlocks)
+
         // 文字标签
-        let label = NSTextField(labelWithString: "当前音量: \(percentage)%")
+        let label = NSTextField(labelWithString: "当前音量: \(volumeString)")
         label.font = NSFont.systemFont(ofSize: 13)
         label.textColor = NSColor.labelColor
         label.frame = NSRect(x: 10, y: 28, width: 230, height: 16)

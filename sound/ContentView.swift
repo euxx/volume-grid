@@ -69,6 +69,56 @@ class VolumeMonitor: ObservableObject {
     private let hudDisplayDuration: TimeInterval = 2.0
     private let hudFontSize: CGFloat = 24
 
+    private struct HUDStyle {
+        let backgroundColor: NSColor
+        let shadowColor: NSColor
+        let iconTintColor: NSColor
+        let primaryTextColor: NSColor
+        let secondaryTextColor: NSColor
+        let blockFillColor: NSColor
+        let blockEmptyColor: NSColor
+    }
+
+    private func resolveColor(_ color: NSColor, for appearance: NSAppearance) -> NSColor {
+        var resolved = color
+        appearance.performAsCurrentDrawingAppearance {
+            resolved = color.usingColorSpace(.extendedSRGB) ?? color
+        }
+        return resolved
+    }
+
+    private func hudStyle(for appearance: NSAppearance) -> HUDStyle {
+        let bestMatch = appearance.bestMatch(from: [
+            .darkAqua,
+            .vibrantDark,
+            .aqua,
+            .vibrantLight
+        ]) ?? .aqua
+        let isDarkInterface = (bestMatch == .darkAqua || bestMatch == .vibrantDark)
+
+        let backgroundBase = resolveColor(NSColor.windowBackgroundColor, for: appearance)
+        let backgroundColor = backgroundBase.withAlphaComponent(isDarkInterface ? 0.92 : 0.97)
+        let shadowColor = NSColor.black.withAlphaComponent(isDarkInterface ? 0.6 : 0.25)
+        let iconTintColor = resolveColor(NSColor.labelColor, for: appearance)
+        let primaryTextColor = resolveColor(NSColor.labelColor, for: appearance)
+        let secondaryTextColor = resolveColor(NSColor.secondaryLabelColor, for: appearance)
+        let accentColor = resolveColor(NSColor.controlAccentColor, for: appearance)
+        let blockFillColor = accentColor.withAlphaComponent(isDarkInterface ? 0.9 : 1.0)
+        let blockEmptyColor = isDarkInterface
+            ? NSColor.white.withAlphaComponent(0.25)
+            : NSColor.black.withAlphaComponent(0.12)
+
+        return HUDStyle(
+            backgroundColor: backgroundColor,
+            shadowColor: shadowColor,
+            iconTintColor: iconTintColor,
+            primaryTextColor: primaryTextColor,
+            secondaryTextColor: secondaryTextColor,
+            blockFillColor: blockFillColor,
+            blockEmptyColor: blockEmptyColor
+        )
+    }
+
     init() {
         // Initialize HUD window once
         setupHUDWindow()
@@ -93,7 +143,7 @@ class VolumeMonitor: ObservableObject {
     }
 
     // 创建音量方格视图
-    private func createVolumeBlocksView(fillFraction: CGFloat) -> NSView {
+    private func createVolumeBlocksView(fillFraction: CGFloat, style: HUDStyle) -> NSView {
         let blockCount = 16
         let blockWidth: CGFloat = 14  // 稍微增宽
         let blockHeight: CGFloat = 6  // 稍微减高，更细长
@@ -115,7 +165,7 @@ class VolumeMonitor: ObservableObject {
 
             block.wantsLayer = true
             block.layer?.cornerRadius = 0.5  // 更小的圆角，更精致
-            block.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.2).cgColor
+            block.layer?.backgroundColor = style.blockEmptyColor.cgColor
 
             var blockFill = totalBlocks - CGFloat(i)
             blockFill = max(0, min(1, blockFill))
@@ -123,7 +173,7 @@ class VolumeMonitor: ObservableObject {
 
             if blockFill > 0 {
                 let fillLayer = CALayer()
-                fillLayer.backgroundColor = NSColor.white.cgColor
+                fillLayer.backgroundColor = style.blockFillColor.cgColor
                 fillLayer.cornerRadius = 0.5
                 fillLayer.frame = CGRect(x: 0, y: 0, width: blockWidth * blockFill, height: blockHeight)
                 block.layer?.addSublayer(fillLayer)
@@ -157,13 +207,14 @@ class VolumeMonitor: ObservableObject {
             // 创建容器视图，添加Mac风格的背景
             let containerView = NSView(frame: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight))
             containerView.wantsLayer = true
-            containerView.layer?.backgroundColor = NSColor(white: 0.22, alpha: 0.99).cgColor
+            let style = hudStyle(for: window.effectiveAppearance)
+            containerView.layer?.backgroundColor = style.backgroundColor.cgColor
             containerView.layer?.cornerRadius = 12
             containerView.layer?.masksToBounds = true
 
             // 添加轻微的阴影效果
-            containerView.layer?.shadowColor = NSColor.black.cgColor
-            containerView.layer?.shadowOpacity = 0.3
+            containerView.layer?.shadowColor = style.shadowColor.cgColor
+            containerView.layer?.shadowOpacity = 1.0
             containerView.layer?.shadowOffset = CGSize(width: 0, height: 2)
             containerView.layer?.shadowRadius = 8
 
@@ -214,7 +265,7 @@ class VolumeMonitor: ObservableObject {
     @discardableResult
     private func updateVolumeElements(for deviceID: AudioDeviceID) -> Bool {
         let candidates: [AudioObjectPropertyElement] = [
-            kAudioObjectPropertyElementMaster,
+            kAudioObjectPropertyElementMain,
             1,
             2
         ]
@@ -229,7 +280,7 @@ class VolumeMonitor: ObservableObject {
             )
 
             if AudioObjectHasProperty(deviceID, &address) {
-                if element == kAudioObjectPropertyElementMaster {
+                if element == kAudioObjectPropertyElementMain {
                     volumeElements = [element]
                     return true
                 }
@@ -249,7 +300,7 @@ class VolumeMonitor: ObservableObject {
     @discardableResult
     private func updateMuteElements(for deviceID: AudioDeviceID) -> Bool {
         let candidates: [AudioObjectPropertyElement] = [
-            kAudioObjectPropertyElementMaster,
+            kAudioObjectPropertyElementMain,
             1,
             2
         ]
@@ -264,7 +315,7 @@ class VolumeMonitor: ObservableObject {
             )
 
             if AudioObjectHasProperty(deviceID, &address) {
-                if element == kAudioObjectPropertyElementMaster {
+                if element == kAudioObjectPropertyElementMain {
                     muteElements = [element]
                     return true
                 }
@@ -586,6 +637,8 @@ class VolumeMonitor: ObservableObject {
             // 检查窗口是否已经显示
             let isAlreadyVisible = hudWindow.isVisible && hudWindow.alphaValue > 0.1
 
+            let style = hudStyle(for: hudWindow.effectiveAppearance)
+
             // 调整窗口宽度以适应内容
             let screenFrame = NSScreen.screens[hudWindows.firstIndex(of: hudWindow)!].frame
             let newWindowFrame = NSRect(
@@ -603,6 +656,9 @@ class VolumeMonitor: ObservableObject {
 
             // 调整容器视图大小
             containerView.frame = NSRect(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
+            containerView.layer?.backgroundColor = style.backgroundColor.cgColor
+            containerView.layer?.shadowColor = style.shadowColor.cgColor
+            containerView.layer?.shadowOpacity = 1.0
 
             // 创建音量图标容器
             let iconContainerSize: CGFloat = 40
@@ -616,7 +672,7 @@ class VolumeMonitor: ObservableObject {
             // 图标在容器内居中显示，使用原始大小
             let iconSize: CGFloat = isMutedForDisplay ? 40 : 47
             speakerImageView.imageScaling = .scaleProportionallyUpOrDown
-            speakerImageView.contentTintColor = NSColor.white.withAlphaComponent(0.9)
+            speakerImageView.contentTintColor = style.iconTintColor
 
             speakerImageView.translatesAutoresizingMaskIntoConstraints = false
             // 将图标添加到容器中
@@ -629,14 +685,14 @@ class VolumeMonitor: ObservableObject {
             ])
 
             // 创建音量方格视图
-            let blocksView = createVolumeBlocksView(fillFraction: displayedScalar)
+            let blocksView = createVolumeBlocksView(fillFraction: displayedScalar, style: style)
             let blocksSize = blocksView.frame.size
             blocksView.translatesAutoresizingMaskIntoConstraints = false
 
             // 创建设备名称标签
             let deviceLabel = NSTextField(labelWithString: deviceName + "  -")
             deviceLabel.translatesAutoresizingMaskIntoConstraints = false
-            deviceLabel.textColor = NSColor.white.withAlphaComponent(0.8)
+            deviceLabel.textColor = style.secondaryTextColor
             deviceLabel.font = .systemFont(ofSize: 12, weight: .regular)
             deviceLabel.alignment = .left
             deviceLabel.isBordered = false
@@ -650,7 +706,7 @@ class VolumeMonitor: ObservableObject {
             // 创建音量格数标签
             let volumeText = NSTextField(labelWithString: volumeString)
             volumeText.translatesAutoresizingMaskIntoConstraints = false
-            volumeText.textColor = NSColor.white.withAlphaComponent(0.8)
+            volumeText.textColor = style.primaryTextColor
             volumeText.font = .systemFont(ofSize: 12, weight: .regular)
             volumeText.alignment = .left
             volumeText.isBordered = false

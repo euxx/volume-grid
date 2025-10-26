@@ -10,8 +10,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var deviceSubscriber: AnyCancellable?
     private var volumeMenuItem: NSMenuItem?
     private var deviceMenuItem: NSMenuItem?
-    private var statusBarButton: NSView?
-    private var progressBarView: NSView?
+    private var statusBarVolumeView: StatusBarVolumeView?
+    private var volumeMenuContentView: VolumeMenuItemView?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 设置应用为辅助应用，不显示在Dock中
@@ -37,10 +37,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let button = statusItem?.button {
             // 创建自定义视图，包含图标和进度条
-            let customView = createStatusBarCustomView(percentage: volumeMonitor?.volumePercentage ?? 0)
-            button.addSubview(customView)
-            statusBarButton = customView
-            progressBarView = customView.subviews.last  // 保存进度条视图的引用
+            let statusView = StatusBarVolumeView()
+            button.addSubview(statusView)
+            NSLayoutConstraint.activate([
+                statusView.centerXAnchor.constraint(equalTo: button.centerXAnchor),
+                statusView.centerYAnchor.constraint(equalTo: button.centerYAnchor)
+            ])
+            let initialVolume = volumeMonitor?.volumePercentage ?? 0
+            statusView.update(percentage: initialVolume)
+            statusBarVolumeView = statusView
         }
 
         // 创建菜单
@@ -50,11 +55,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let volumeItem = NSMenuItem()
 
         // 创建自定义视图容纳文字和进度条
-        let volumeView = createVolumeMenuItemView(percentage: volumeMonitor?.volumePercentage ?? 0)
+        let initialVolume = volumeMonitor?.volumePercentage ?? 0
+        let volumeView = VolumeMenuItemView()
+        volumeView.update(percentage: initialVolume, formattedVolume: formattedVolumeString(for: initialVolume))
         volumeItem.view = volumeView
         volumeItem.isEnabled = false
         menu.addItem(volumeItem)
         volumeMenuItem = volumeItem
+        volumeMenuContentView = volumeView
 
         // 添加当前设备显示
         let deviceItem = NSMenuItem()
@@ -88,17 +96,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
 
                 // 更新菜单栏图标下的进度条
-                if let button = self.statusItem?.button {
-                    button.subviews.forEach { $0.removeFromSuperview() }
-                    let customView = self.createStatusBarCustomView(percentage: volume)
-                    button.addSubview(customView)
-                    self.statusBarButton = customView
-                }
+                self.statusBarVolumeView?.update(percentage: volume)
 
                 // 更新菜单中的自定义视图
-                if let volumeItem = self.volumeMenuItem {
-                    let volumeView = self.createVolumeMenuItemView(percentage: volume)
-                    volumeItem.view = volumeView
+                if let volumeItem = self.volumeMenuItem,
+                   let menuView = self.volumeMenuContentView {
+                    let formatted = self.formattedVolumeString(for: volume)
+                    menuView.update(percentage: volume, formattedVolume: formatted)
                     self.statusMenu?.itemChanged(volumeItem)
                 }
             }
@@ -146,70 +150,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func createStatusBarCustomView(percentage: Int) -> NSView {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 20, height: 22))
-
-        // 图标
-        let iconName = percentage == 0 ? "speaker.slash" : "speaker.wave.2"
-        let speakerImage = NSImage(systemSymbolName: iconName, accessibilityDescription: "Volume")
-        let imageView = NSImageView(image: speakerImage!)
-        imageView.frame = NSRect(x: 2, y: 3, width: 16, height: 16)
-        imageView.imageScaling = .scaleProportionallyUpOrDown
-        imageView.contentTintColor = NSColor.controlTextColor
-
-        // 进度条背景（位于图标下方）
-        let progressBackgroundView = NSView(frame: NSRect(x: 3, y: 1, width: 14, height: 2))
-        progressBackgroundView.wantsLayer = true
-        progressBackgroundView.layer?.backgroundColor = NSColor.systemGray.withAlphaComponent(0.3).cgColor
-        progressBackgroundView.layer?.cornerRadius = 1
-
-        // 进度条填充
-        let progressWidth = CGFloat(percentage) / 100.0 * 14.0
-        let progressView = NSView(frame: NSRect(x: 3, y: 1, width: progressWidth, height: 2))
-        progressView.wantsLayer = true
-        progressView.layer?.backgroundColor = NSColor.systemGray.cgColor
-        progressView.layer?.cornerRadius = 1
-
-        container.addSubview(progressBackgroundView)
-        container.addSubview(progressView)
-        container.addSubview(imageView)
-
-        return container
-    }
-
-    private func createVolumeMenuItemView(percentage: Int) -> NSView {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 250, height: 50))
-
-        // 计算数字格式
-        let volumeScalar = CGFloat(percentage) / 100.0
+    private func formattedVolumeString(for percentage: Int) -> String {
+        let clamped = max(0, min(percentage, 100))
+        let volumeScalar = CGFloat(clamped) / 100.0
         let totalBlocks = volumeScalar * 16.0
         let quarterBlocks = (totalBlocks * 4).rounded() / 4
-        let volumeString = formatVolumeString(quarterBlocks: quarterBlocks)
-
-        // 文字标签
-        let label = NSTextField(labelWithString: "当前音量: \(volumeString)")
-        label.font = NSFont.systemFont(ofSize: 13)
-        label.textColor = NSColor.labelColor
-        label.frame = NSRect(x: 10, y: 28, width: 230, height: 16)
-
-        // 进度条背景
-        let progressBackgroundView = NSView(frame: NSRect(x: 10, y: 8, width: 230, height: 4))
-        progressBackgroundView.wantsLayer = true
-        progressBackgroundView.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        progressBackgroundView.layer?.cornerRadius = 2
-
-        // 进度条填充
-        let progressWidth = CGFloat(percentage) / 100.0 * 230.0
-        let progressView = NSView(frame: NSRect(x: 10, y: 8, width: progressWidth, height: 4))
-        progressView.wantsLayer = true
-        progressView.layer?.backgroundColor = NSColor.systemGray.cgColor
-        progressView.layer?.cornerRadius = 2
-
-        container.addSubview(label)
-        container.addSubview(progressBackgroundView)
-        container.addSubview(progressView)
-
-        return container
+        return formatVolumeString(quarterBlocks: quarterBlocks)
     }
 
     @objc private func toggleLaunchAtLogin() {

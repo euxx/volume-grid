@@ -147,6 +147,12 @@ class VolumeMonitor: ObservableObject {
             window.level = .floating
             window.backgroundColor = .clear
             window.isOpaque = false
+            window.collectionBehavior = [
+                .canJoinAllSpaces,
+                .transient,
+                .ignoresCycle
+            ]
+            window.ignoresMouseEvents = true
 
             // 创建容器视图，添加Mac风格的背景
             let containerView = NSView(frame: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight))
@@ -701,6 +707,7 @@ class VolumeMonitor: ObservableObject {
                     hudWindow.animator().alphaValue = self.hudAlpha
                 }, completionHandler: nil)
             } else {
+                hudWindow.orderFrontRegardless()
                 // 窗口已经显示，保持当前透明度
                 hudWindow.alphaValue = self.hudAlpha
             }

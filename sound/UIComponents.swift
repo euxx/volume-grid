@@ -79,17 +79,20 @@ final class VolumeMenuItemView: NSView {
     private let progressBackgroundView = NSView()
     private let progressView = NSView()
     private var progressWidthConstraint: NSLayoutConstraint?
-    private let progressMaxWidth: CGFloat = 230
+    private var progressFraction: CGFloat = 0
+    private let horizontalPadding: CGFloat = 16
+    private let verticalPadding: CGFloat = 12
+    private let interItemSpacing: CGFloat = 8
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 250, height: 50)
+        NSSize(width: 260, height: 56)
     }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
         setupSubviews()
-        update(percentage: 0, formattedVolume: "0")
+        update(percentage: 0, formattedVolume: "0", deviceName: "未知设备")
     }
 
     required init?(coder: NSCoder) {
@@ -119,14 +122,15 @@ final class VolumeMenuItemView: NSView {
         progressContainer.addSubview(progressView)
 
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 28),
-            label.widthAnchor.constraint(equalToConstant: progressMaxWidth),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: horizontalPadding),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -horizontalPadding),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: verticalPadding),
 
-            progressContainer.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            progressContainer.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            progressContainer.widthAnchor.constraint(equalToConstant: progressMaxWidth),
+            progressContainer.leadingAnchor.constraint(equalTo: leadingAnchor, constant: horizontalPadding),
+            progressContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -horizontalPadding),
+            progressContainer.topAnchor.constraint(equalTo: label.bottomAnchor, constant: interItemSpacing),
             progressContainer.heightAnchor.constraint(equalToConstant: 4),
+            progressContainer.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -verticalPadding),
 
             progressBackgroundView.leadingAnchor.constraint(equalTo: progressContainer.leadingAnchor),
             progressBackgroundView.trailingAnchor.constraint(equalTo: progressContainer.trailingAnchor),
@@ -142,10 +146,21 @@ final class VolumeMenuItemView: NSView {
         progressWidthConstraint?.isActive = true
     }
 
-    func update(percentage: Int, formattedVolume: String) {
+    func update(percentage: Int, formattedVolume: String, deviceName: String) {
         let clamped = max(0, min(percentage, 100))
-        label.stringValue = "当前音量: \(formattedVolume)"
-        let fraction = CGFloat(clamped) / 100.0
-        progressWidthConstraint?.constant = progressMaxWidth * fraction
+        label.stringValue = "\(deviceName) - \(formattedVolume)"
+        progressFraction = CGFloat(clamped) / 100.0
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+        updateProgressWidth()
+    }
+
+    private func updateProgressWidth() {
+        guard let progressWidthConstraint else { return }
+        let width = progressContainer.bounds.width
+        progressWidthConstraint.constant = width * progressFraction
     }
 }

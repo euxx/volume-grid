@@ -9,7 +9,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var volumeSubscriber: AnyCancellable?
     private var deviceSubscriber: AnyCancellable?
     private var volumeMenuItem: NSMenuItem?
-    private var deviceMenuItem: NSMenuItem?
     private var statusBarVolumeView: StatusBarVolumeView?
     private var volumeMenuContentView: VolumeMenuItemView?
 
@@ -56,20 +55,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 创建自定义视图容纳文字和进度条
         let initialVolume = volumeMonitor?.volumePercentage ?? 0
+        let initialDevice = volumeMonitor?.currentDevice?.name ?? "未知设备"
         let volumeView = VolumeMenuItemView()
-        volumeView.update(percentage: initialVolume, formattedVolume: formattedVolumeString(for: initialVolume))
+        volumeView.update(
+            percentage: initialVolume,
+            formattedVolume: formattedVolumeString(for: initialVolume),
+            deviceName: initialDevice
+        )
         volumeItem.view = volumeView
         volumeItem.isEnabled = false
         menu.addItem(volumeItem)
         volumeMenuItem = volumeItem
         volumeMenuContentView = volumeView
 
-        // 添加当前设备显示
-        let deviceItem = NSMenuItem()
-        deviceItem.title = "当前设备: \(volumeMonitor?.currentDevice?.name ?? "未知设备")"
-        deviceItem.isEnabled = false
-        menu.addItem(deviceItem)
-        deviceMenuItem = deviceItem
+        menu.minimumWidth = max(menu.minimumWidth, volumeView.intrinsicContentSize.width)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -104,8 +103,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 if let volumeItem = self.volumeMenuItem,
                    let menuView = self.volumeMenuContentView {
                     let formatted = self.formattedVolumeString(for: volume)
+                    let deviceName = self.volumeMonitor?.currentDevice?.name ?? "未知设备"
                     DispatchQueue.main.async {
-                        menuView.update(percentage: volume, formattedVolume: formatted)
+                        menuView.update(
+                            percentage: volume,
+                            formattedVolume: formatted,
+                            deviceName: deviceName
+                        )
                         self.statusMenu?.itemChanged(volumeItem)
                     }
                 }
@@ -114,10 +118,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         deviceSubscriber = volumeMonitor?.$currentDevice
             .receive(on: DispatchQueue.main)
             .sink { [weak self] device in
-                guard let self, let deviceItem = self.deviceMenuItem else { return }
+                guard let self,
+                      let volumeItem = self.volumeMenuItem,
+                      let menuView = self.volumeMenuContentView
+                else { return }
                 let name = device?.name ?? "未知设备"
-                deviceItem.title = "当前设备: \(name)"
-                self.statusMenu?.itemChanged(deviceItem)
+                let volume = self.volumeMonitor?.volumePercentage ?? 0
+                let formatted = self.formattedVolumeString(for: volume)
+                menuView.update(
+                    percentage: volume,
+                    formattedVolume: formatted,
+                    deviceName: name
+                )
+                self.statusMenu?.itemChanged(volumeItem)
             }
     }
 

@@ -55,6 +55,9 @@ class VolumeMonitor: ObservableObject {
     private var hideHUDWorkItem: DispatchWorkItem?
     private var volumeElements: [AudioObjectPropertyElement] = []
     private var lastVolumeScalar: CGFloat?
+    private var globalSystemEventMonitor: Any?
+    private var localSystemEventMonitor: Any?
+    private var lastHandledSystemEvent: (timestamp: TimeInterval, data: Int)?
 
     // HUD 常量
     private let hudWidth: CGFloat = 320
@@ -359,17 +362,27 @@ class VolumeMonitor: ObservableObject {
         let percentage = Int(round(clampedVolume * 100))
         DispatchQueue.main.async {
             let previousScalar = self.lastVolumeScalar
-            self.lastVolumeScalar = CGFloat(clampedVolume)
+            let currentScalar = CGFloat(clampedVolume)
+            self.lastVolumeScalar = currentScalar
             self.volumePercentage = percentage
-            let didChangeVolume: Bool
+            let epsilon: CGFloat = 0.001
+            var shouldShowHUD = false
             if let previousScalar {
                 // 忽略未造成实际音量变化的事件（例如系统通知带来的虚假回调）
-                didChangeVolume = abs(previousScalar - CGFloat(clampedVolume)) > 0.001
+                shouldShowHUD = abs(previousScalar - currentScalar) > epsilon
+                if !shouldShowHUD {
+                    // 在边界值（0 或最大音量）时，仍然响应用户的重复按键
+                    let isAtLowerBound = previousScalar <= epsilon && currentScalar <= epsilon
+                    let isAtUpperBound = previousScalar >= (1 - epsilon) && currentScalar >= (1 - epsilon)
+                    if isAtLowerBound || isAtUpperBound {
+                        shouldShowHUD = true
+                    }
+                }
             } else {
-                didChangeVolume = true
+                shouldShowHUD = true
             }
-            if didChangeVolume {
-                self.showVolumeHUD(volumeScalar: CGFloat(clampedVolume))
+            if shouldShowHUD {
+                self.showVolumeHUD(volumeScalar: currentScalar)
             }
             #if DEBUG
             print("Volume changed: \(percentage)%")
@@ -620,6 +633,80 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
+    private func startKeyMonitoring() {
+        if globalSystemEventMonitor == nil {
+            globalSystemEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .systemDefined) { [weak self] event in
+                DispatchQueue.main.async {
+                    self?.handleSystemDefinedEvent(event)
+                }
+            }
+        }
+
+        if localSystemEventMonitor == nil {
+            localSystemEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .systemDefined) { [weak self] event in
+                self?.handleSystemDefinedEvent(event)
+                return event
+            }
+        }
+    }
+
+    private func stopKeyMonitoring() {
+        if let monitor = globalSystemEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalSystemEventMonitor = nil
+        }
+        if let monitor = localSystemEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            localSystemEventMonitor = nil
+        }
+        lastHandledSystemEvent = nil
+    }
+
+    private func handleSystemDefinedEvent(_ event: NSEvent) {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.handleSystemDefinedEvent(event)
+            }
+            return
+        }
+
+        guard event.subtype.rawValue == 8 else { return }
+        let keyCode = (event.data1 & 0xFFFF0000) >> 16
+        let keyFlags = event.data1 & 0x0000FFFF
+        let keyState = (keyFlags & 0xFF00) >> 8
+        let isKeyDown = keyState == 0xA
+        guard isKeyDown else { return }
+
+        let signature = (timestamp: event.timestamp, data: event.data1)
+        if let last = lastHandledSystemEvent,
+           abs(last.timestamp - signature.timestamp) < 0.0001,
+           last.data == signature.data {
+            return
+        }
+        lastHandledSystemEvent = signature
+
+        switch keyCode & 0xFF {
+        case 0, 1, 7:  // NX_KEYTYPE_SOUND_UP, NX_KEYTYPE_SOUND_DOWN, NX_KEYTYPE_MUTE
+            showHUDForCurrentVolume()
+        default:
+            break
+        }
+    }
+
+    private func showHUDForCurrentVolume() {
+        if let volume = getCurrentVolume() {
+            let clamped = max(0, min(volume, 1))
+            let scalar = CGFloat(clamped)
+            lastVolumeScalar = scalar
+            volumePercentage = Int(round(clamped * 100))
+            showVolumeHUD(volumeScalar: scalar)
+        } else if let lastScalar = lastVolumeScalar {
+            showVolumeHUD(volumeScalar: lastScalar)
+        } else {
+            showVolumeHUD(volumeScalar: 0)
+        }
+    }
+
     // 注册监听器
     func startListening() {
         let deviceID = updateDefaultOutputDevice()
@@ -636,6 +723,8 @@ class VolumeMonitor: ObservableObject {
             #endif
             return
         }
+
+        startKeyMonitoring()
 
         // 音量变化监听
         volumeListener = { [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in
@@ -716,7 +805,12 @@ class VolumeMonitor: ObservableObject {
 
     // 停止监听
     func stopListening() {
-        guard let volumeListener = volumeListener, let deviceListener = deviceListener, let audioQueue = audioQueue else { return }
+        stopKeyMonitoring()
+        guard let audioQueue = audioQueue else {
+            volumeListener = nil
+            deviceListener = nil
+            return
+        }
 
         var deviceAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
@@ -724,16 +818,20 @@ class VolumeMonitor: ObservableObject {
             mElement: 0
         )
 
-        for element in volumeElements {
-            var volumeAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyVolumeScalar,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
-            )
-            AudioObjectRemovePropertyListenerBlock(defaultOutputDeviceID, &volumeAddress, audioQueue, volumeListener)
+        if let volumeListener = volumeListener {
+            for element in volumeElements {
+                var volumeAddress = AudioObjectPropertyAddress(
+                    mSelector: kAudioDevicePropertyVolumeScalar,
+                    mScope: kAudioDevicePropertyScopeOutput,
+                    mElement: element
+                )
+                AudioObjectRemovePropertyListenerBlock(defaultOutputDeviceID, &volumeAddress, audioQueue, volumeListener)
+            }
         }
 
-        AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
+        if let deviceListener = deviceListener {
+            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
+        }
 
         self.volumeListener = nil
         self.deviceListener = nil

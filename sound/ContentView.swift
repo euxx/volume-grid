@@ -438,7 +438,7 @@ class VolumeMonitor: ObservableObject {
 
         // 预计算文本宽度以调整窗口大小
         let deviceName = currentDevice?.name ?? "未知设备"
-        let deviceNSString = NSString(string: deviceName)
+        let deviceNSString = NSString(string: deviceName + "  -")
         let deviceFont = NSFont.systemFont(ofSize: 12)
         let deviceTextSize = deviceNSString.size(withAttributes: [.font: deviceFont])
         let volumeNSString = NSString(string: volumeString)
@@ -500,7 +500,7 @@ class VolumeMonitor: ObservableObject {
             let blocksView = createVolumeBlocksView(fillFraction: clampedScalar)
 
             // 创建设备名称标签
-            let deviceLabel = NSTextField(labelWithString: deviceName)
+            let deviceLabel = NSTextField(labelWithString: deviceName + "  -")
             deviceLabel.textColor = NSColor.white.withAlphaComponent(0.8)
             deviceLabel.font = .systemFont(ofSize: 12, weight: .regular)
             deviceLabel.alignment = .left

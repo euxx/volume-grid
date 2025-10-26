@@ -96,14 +96,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
 
                 // 更新菜单栏图标下的进度条
-                self.statusBarVolumeView?.update(percentage: volume)
+                DispatchQueue.main.async {
+                    self.statusBarVolumeView?.update(percentage: volume)
+                }
 
                 // 更新菜单中的自定义视图
                 if let volumeItem = self.volumeMenuItem,
                    let menuView = self.volumeMenuContentView {
                     let formatted = self.formattedVolumeString(for: volume)
-                    menuView.update(percentage: volume, formattedVolume: formatted)
-                    self.statusMenu?.itemChanged(volumeItem)
+                    DispatchQueue.main.async {
+                        menuView.update(percentage: volume, formattedVolume: formatted)
+                        self.statusMenu?.itemChanged(volumeItem)
+                    }
                 }
             }
 

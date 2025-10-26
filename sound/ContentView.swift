@@ -660,6 +660,10 @@ class VolumeMonitor: ObservableObject {
             volumeText.lineBreakMode = .byClipping
             volumeText.setContentHuggingPriority(.required, for: .horizontal)
             volumeText.setContentCompressionResistancePriority(.required, for: .horizontal)
+            let widthPadding: CGFloat = 6
+            let volumeWidthConstraint = volumeText.widthAnchor.constraint(equalToConstant: effectiveVolumeTextWidth + widthPadding)
+            volumeWidthConstraint.priority = .required
+            volumeWidthConstraint.isActive = true
 
             // 使用 StackView 保证垂直居中和等距
             let contentStack = NSStackView()

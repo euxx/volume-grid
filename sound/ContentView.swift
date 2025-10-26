@@ -461,13 +461,27 @@ class VolumeMonitor: ObservableObject {
             // 调整容器视图大小
             containerView.frame = NSRect(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
 
+            // 创建音量图标容器
+            let iconContainerSize: CGFloat = 48
+            let iconContainer = NSView(frame: NSRect(x: 0, y: 0, width: iconContainerSize, height: iconContainerSize))
+
             // 创建音量图标
             let iconName = clampedScalar == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill"
             let speakerImage = NSImage(systemSymbolName: iconName, accessibilityDescription: "Volume")
             let speakerImageView = NSImageView(image: speakerImage!)
-            speakerImageView.frame = NSRect(x: 0, y: 0, width: 44, height: 44)
+            // 图标在容器内居中显示，使用原始大小
+            let iconSize: CGFloat = clampedScalar == 0 ? 40 : 47
+            speakerImageView.frame = NSRect(
+                x: (iconContainerSize - iconSize) / 2,
+                y: (iconContainerSize - iconSize) / 2,
+                width: iconSize,
+                height: iconSize
+            )
             speakerImageView.imageScaling = .scaleProportionallyUpOrDown
             speakerImageView.contentTintColor = NSColor.white.withAlphaComponent(0.9)
+
+            // 将图标添加到容器中
+            iconContainer.addSubview(speakerImageView)
 
             // 创建音量方格视图
             let blocksView = createVolumeBlocksView(fillFraction: clampedScalar)
@@ -495,7 +509,7 @@ class VolumeMonitor: ObservableObject {
             // 新布局：图标、设备名+格数文本同行、音量块
             let spacingIconToDevice: CGFloat = 12
             let spacingDeviceToBlocks: CGFloat = 16
-            let iconHeight = speakerImageView.frame.height
+            let iconHeight = iconContainer.frame.height
             let blocksHeight = blocksView.frame.height
             let deviceLabelHeight: CGFloat = 18
             let volumeTextHeight: CGFloat = 18
@@ -504,15 +518,15 @@ class VolumeMonitor: ObservableObject {
             let totalContentHeight = iconHeight + spacingIconToDevice + deviceLabelHeight + spacingDeviceToBlocks + blocksHeight
             let startY = (hudHeight - totalContentHeight) / 2
 
-            // 图标
-            speakerImageView.frame.origin = CGPoint(
-                x: (dynamicHudWidth - speakerImageView.frame.width) / 2,
+            // 图标容器
+            iconContainer.frame.origin = CGPoint(
+                x: (dynamicHudWidth - iconContainer.frame.width) / 2,
                 y: hudHeight - startY - iconHeight
             )
 
             // 设备名和音量格数：作为一个整体居中显示
             let combinedStartX = (dynamicHudWidth - combinedWidth) / 2
-            let textY = speakerImageView.frame.origin.y - spacingIconToDevice - deviceLabelHeight
+            let textY = iconContainer.frame.origin.y - spacingIconToDevice - deviceLabelHeight
 
             // 增加缓冲宽度以避免裁剪
             let buffer: CGFloat = 10
@@ -536,7 +550,7 @@ class VolumeMonitor: ObservableObject {
                 y: deviceLabel.frame.origin.y - spacingDeviceToBlocks - blocksHeight
             )
 
-            containerView.addSubview(speakerImageView)
+            containerView.addSubview(iconContainer)
             containerView.addSubview(blocksView)
             containerView.addSubview(deviceLabel)
             containerView.addSubview(volumeText)

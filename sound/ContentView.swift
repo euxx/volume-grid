@@ -54,10 +54,13 @@ class VolumeMonitor: ObservableObject {
     private var audioQueue: DispatchQueue?
     private var hideHUDWorkItem: DispatchWorkItem?
     private var volumeElements: [AudioObjectPropertyElement] = []
+    private var muteElements: [AudioObjectPropertyElement] = []
     private var lastVolumeScalar: CGFloat?
+    private var isDeviceMuted: Bool = false
     private var globalSystemEventMonitor: Any?
     private var localSystemEventMonitor: Any?
     private var lastHandledSystemEvent: (timestamp: TimeInterval, data: Int)?
+    private var muteListener: AudioObjectPropertyListenerBlock?
 
     // HUD 常量
     private let hudWidth: CGFloat = 320
@@ -76,6 +79,7 @@ class VolumeMonitor: ObservableObject {
             volumePercentage = Int(volume * 100)
             lastVolumeScalar = CGFloat(volume)
         }
+        _ = refreshMuteState()
         // Get audio devices
         getAudioDevices()
     }
@@ -236,6 +240,45 @@ class VolumeMonitor: ObservableObject {
         return false
     }
 
+    @discardableResult
+    private func updateMuteElements(for deviceID: AudioDeviceID) -> Bool {
+        let candidates: [AudioObjectPropertyElement] = [
+            kAudioObjectPropertyElementMaster,
+            1,
+            2
+        ]
+
+        var detected: [AudioObjectPropertyElement] = []
+
+        for element in candidates {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyMute,
+                mScope: kAudioDevicePropertyScopeOutput,
+                mElement: element
+            )
+
+            if AudioObjectHasProperty(deviceID, &address) {
+                if element == kAudioObjectPropertyElementMaster {
+                    muteElements = [element]
+                    return true
+                }
+                detected.append(element)
+            }
+        }
+
+        if !detected.isEmpty {
+            muteElements = detected
+            return true
+        }
+
+        muteElements = []
+        return false
+    }
+
+    private func deviceSupportsMute(_ deviceID: AudioDeviceID) -> Bool {
+        return updateMuteElements(for: deviceID)
+    }
+
     // 检查设备是否支持音量控制
     private func deviceSupportsVolumeControl(_ deviceID: AudioDeviceID) -> Bool {
         return updateVolumeElements(for: deviceID)
@@ -349,6 +392,74 @@ class VolumeMonitor: ObservableObject {
         return name
     }
 
+    @discardableResult
+    private func refreshMuteState(for deviceID: AudioDeviceID? = nil) -> Bool? {
+        if !Thread.isMainThread {
+            var result: Bool?
+            DispatchQueue.main.sync {
+                result = self.refreshMuteState(for: deviceID)
+            }
+            return result
+        }
+
+        let resolvedDeviceID: AudioDeviceID
+        if let deviceID {
+            resolvedDeviceID = deviceID
+        } else {
+            let currentID = defaultOutputDeviceID != 0 ? defaultOutputDeviceID : updateDefaultOutputDevice()
+            guard currentID != 0 else {
+                isDeviceMuted = false
+                return nil
+            }
+            resolvedDeviceID = currentID
+        }
+
+        guard !muteElements.isEmpty || deviceSupportsMute(resolvedDeviceID) else {
+            isDeviceMuted = false
+            return nil
+        }
+
+        var muteDetected = false
+        var readAnyMuteChannel = false
+
+        for element in muteElements {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyMute,
+                mScope: kAudioDevicePropertyScopeOutput,
+                mElement: element
+            )
+
+            var muted: UInt32 = 0
+            var size = UInt32(MemoryLayout<UInt32>.size)
+            let status = AudioObjectGetPropertyData(resolvedDeviceID, &address, 0, nil, &size, &muted)
+            if status == noErr {
+                readAnyMuteChannel = true
+                if muted != 0 {
+                    muteDetected = true
+                    break
+                }
+            } else {
+                #if DEBUG
+                print("Error getting mute for element \(element): \(status)")
+                #endif
+            }
+        }
+
+        guard readAnyMuteChannel else {
+            #if DEBUG
+            print("No mute channels returned data")
+            #endif
+            isDeviceMuted = false
+            return nil
+        }
+
+        isDeviceMuted = muteDetected
+        if muteDetected {
+            volumePercentage = 0
+        }
+        return muteDetected
+    }
+
     // 音量变化回调
     private func volumeChanged(address _: AudioObjectPropertyAddress) {
         guard let volume = getCurrentVolume() else {
@@ -381,12 +492,21 @@ class VolumeMonitor: ObservableObject {
             } else {
                 shouldShowHUD = true
             }
+            if currentScalar > epsilon, self.isDeviceMuted {
+                self.isDeviceMuted = false
+            }
             if shouldShowHUD {
                 self.showVolumeHUD(volumeScalar: currentScalar)
             }
             #if DEBUG
             print("Volume changed: \(percentage)%")
             #endif
+        }
+    }
+
+    private func muteChanged(address _: AudioObjectPropertyAddress) {
+        DispatchQueue.main.async {
+            self.showHUDForCurrentVolume()
         }
     }
 
@@ -410,6 +530,7 @@ class VolumeMonitor: ObservableObject {
             currentDevice = nil
         }
 
+        _ = refreshMuteState()
         if let volume = getCurrentVolume() {
             let clampedVolume = max(0, min(volume, 1))
             let percentage = Int(round(clampedVolume * 100))
@@ -425,7 +546,10 @@ class VolumeMonitor: ObservableObject {
     // 显示音量 HUD
     private func showVolumeHUD(volumeScalar: CGFloat) {
         let clampedScalar = max(0, min(volumeScalar, 1))
-        let totalBlocks = clampedScalar * 16.0
+        let epsilon: CGFloat = 0.001
+        let isMutedForDisplay = isDeviceMuted || clampedScalar <= epsilon
+        let displayedScalar = isMutedForDisplay ? 0 : clampedScalar
+        let totalBlocks = displayedScalar * 16.0
         let quarterBlocks = (totalBlocks * 4).rounded() / 4
         let formattedQuarterBlocks = formatVolumeCount(quarterBlocks)
         let volumeString: String
@@ -444,7 +568,7 @@ class VolumeMonitor: ObservableObject {
         let volumeNSString = NSString(string: volumeString)
         let volumeFont = NSFont.systemFont(ofSize: 12)
         let volumeTextSize = volumeNSString.size(withAttributes: [.font: volumeFont])
-        let maxVolumeSampleString = "(15+3/4)"
+        let maxVolumeSampleString = "15+3/4"
         let maxVolumeSampleWidth = NSString(string: maxVolumeSampleString).size(withAttributes: [.font: volumeFont]).width
         let effectiveVolumeTextWidth = max(volumeTextSize.width, maxVolumeSampleWidth)
         let gapBetweenDeviceAndCount: CGFloat = 8
@@ -479,11 +603,11 @@ class VolumeMonitor: ObservableObject {
             let iconContainer = NSView(frame: NSRect(x: 0, y: 0, width: iconContainerSize, height: iconContainerSize))
 
             // 创建音量图标
-            let iconName = clampedScalar == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill"
+            let iconName = isMutedForDisplay ? "speaker.slash.fill" : "speaker.wave.2.fill"
             let speakerImage = NSImage(systemSymbolName: iconName, accessibilityDescription: "Volume")
             let speakerImageView = NSImageView(image: speakerImage!)
             // 图标在容器内居中显示，使用原始大小
-            let iconSize: CGFloat = clampedScalar == 0 ? 40 : 47
+            let iconSize: CGFloat = isMutedForDisplay ? 40 : 47
             speakerImageView.frame = NSRect(
                 x: (iconContainerSize - iconSize) / 2,
                 y: (iconContainerSize - iconSize) / 2,
@@ -497,7 +621,7 @@ class VolumeMonitor: ObservableObject {
             iconContainer.addSubview(speakerImageView)
 
             // 创建音量方格视图
-            let blocksView = createVolumeBlocksView(fillFraction: clampedScalar)
+            let blocksView = createVolumeBlocksView(fillFraction: displayedScalar)
 
             // 创建设备名称标签
             let deviceLabel = NSTextField(labelWithString: deviceName + "  -")
@@ -694,11 +818,16 @@ class VolumeMonitor: ObservableObject {
     }
 
     private func showHUDForCurrentVolume() {
+        _ = refreshMuteState()
         if let volume = getCurrentVolume() {
             let clamped = max(0, min(volume, 1))
             let scalar = CGFloat(clamped)
             lastVolumeScalar = scalar
-            volumePercentage = Int(round(clamped * 100))
+            if isDeviceMuted {
+                volumePercentage = 0
+            } else {
+                volumePercentage = Int(round(clamped * 100))
+            }
             showVolumeHUD(volumeScalar: scalar)
         } else if let lastScalar = lastVolumeScalar {
             showVolumeHUD(volumeScalar: lastScalar)
@@ -724,6 +853,8 @@ class VolumeMonitor: ObservableObject {
             return
         }
 
+        _ = deviceSupportsMute(deviceID)
+        _ = refreshMuteState(for: deviceID)
         startKeyMonitoring()
 
         // 音量变化监听
@@ -767,6 +898,37 @@ class VolumeMonitor: ObservableObject {
             print("Failed to register any volume listeners")
             #endif
             return
+        }
+
+        if !muteElements.isEmpty {
+            muteListener = { [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in
+                guard let self = self else {
+                    #if DEBUG
+                    print("VolumeMonitor deallocated in mute listener")
+                    #endif
+                    return
+                }
+                self.muteChanged(address: inAddresses.pointee)
+            }
+
+            if let muteListener = muteListener {
+                for element in muteElements {
+                    var muteAddress = AudioObjectPropertyAddress(
+                        mSelector: kAudioDevicePropertyMute,
+                        mScope: kAudioDevicePropertyScopeOutput,
+                        mElement: element
+                    )
+
+                    if AudioObjectHasProperty(deviceID, &muteAddress) {
+                        let muteStatus = AudioObjectAddPropertyListenerBlock(deviceID, &muteAddress, audioQueue, muteListener)
+                        if muteStatus != noErr {
+                            #if DEBUG
+                            print("Error adding mute listener for element \(element): \(muteStatus)")
+                            #endif
+                        }
+                    }
+                }
+            }
         }
 
         // 默认设备变化监听
@@ -829,12 +991,24 @@ class VolumeMonitor: ObservableObject {
             }
         }
 
+        if let muteListener = muteListener {
+            for element in muteElements {
+                var muteAddress = AudioObjectPropertyAddress(
+                    mSelector: kAudioDevicePropertyMute,
+                    mScope: kAudioDevicePropertyScopeOutput,
+                    mElement: element
+                )
+                AudioObjectRemovePropertyListenerBlock(defaultOutputDeviceID, &muteAddress, audioQueue, muteListener)
+            }
+        }
+
         if let deviceListener = deviceListener {
             AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
         }
 
         self.volumeListener = nil
         self.deviceListener = nil
+        self.muteListener = nil
         #if DEBUG
         print("Stopped listening")
         #endif

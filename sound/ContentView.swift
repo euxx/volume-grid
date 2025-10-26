@@ -695,7 +695,7 @@ class VolumeMonitor: ObservableObject {
             // 只在窗口未显示时执行淡入动画
             if !isAlreadyVisible {
                 hudWindow.alphaValue = 0
-                hudWindow.makeKeyAndOrderFront(nil)
+                hudWindow.orderFrontRegardless()
                 NSAnimationContext.runAnimationGroup({ context in
                     context.duration = 0.2
                     hudWindow.animator().alphaValue = self.hudAlpha

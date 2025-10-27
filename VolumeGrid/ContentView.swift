@@ -102,8 +102,8 @@ class VolumeMonitor: ObservableObject {
         let iconTintColor = resolveColor(NSColor.labelColor, for: appearance)
         let primaryTextColor = resolveColor(NSColor.labelColor, for: appearance)
         let secondaryTextColor = resolveColor(NSColor.secondaryLabelColor, for: appearance)
-        let accentColor = resolveColor(NSColor.controlAccentColor, for: appearance)
-        let blockFillColor = accentColor.withAlphaComponent(isDarkInterface ? 0.9 : 1.0)
+        let neutralFillBase = resolveColor(NSColor.systemGray, for: appearance)
+        let blockFillColor = neutralFillBase.withAlphaComponent(isDarkInterface ? 0.99 : 1.0)
         let blockEmptyColor = isDarkInterface
             ? NSColor.white.withAlphaComponent(0.25)
             : NSColor.black.withAlphaComponent(0.12)

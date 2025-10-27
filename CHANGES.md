@@ -70,7 +70,7 @@
 
 #### 代码位置：
 
-- **文件**：`soundApp.swift`
+- **文件**：`VolumeGridApp.swift`
 - **新增方法**：`createStatusBarCustomView(percentage: Int) -> NSView`
   - 创建包含图标和进度条的菜单栏自定义视图
 
@@ -94,7 +94,7 @@
 
 ## 下一步运行
 
-1. 双击 `/tmp/sound-build/Build/Products/Debug/sound.app` 运行应用
-2. 或使用命令：`open /tmp/sound-build/Build/Products/Debug/sound.app`
+1. 双击 `/tmp/volumegrid-build/Build/Products/Debug/VolumeGrid.app` 运行应用
+2. 或使用命令：`open /tmp/volumegrid-build/Build/Products/Debug/VolumeGrid.app`
 3. 调整系统音量，菜单栏进度条会实时显示
 4. 点击菜单栏图标查看详细菜单信息

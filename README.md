@@ -1,9 +1,9 @@
-# sound
+# VolumeGrid
 
 
 macOS Tohoe 26 改变了系统音量调节弹窗的样式，只在激活显示器右上角显示音量弹窗，且样式简化为单一条形显示，缺少了经典的16个方格显示音量级别的视觉反馈。
 
-音量调节显示弹窗，这个项目是为了恢复原有的音量调节弹窗样式，并且加上了 macOS Tohoe 26 中当前输出设备显示的功能。
+音量调节显示弹窗，这个项目（VolumeGrid）是为了恢复原有的音量调节弹窗样式，并且加上了 macOS Tohoe 26 中当前输出设备显示的功能。
 适用于经常调节音量、有多显示器需求的用户。
 
 ## 功能特性
@@ -25,7 +25,7 @@ macOS Tohoe 26 改变了系统音量调节弹窗的样式，只在激活显示�
 - [ ] 应用图标
 - [ ] 开启启动功能生效
 - [ ] 关于 - 显示应用版本、联系方式等信息
-- [ ] 重命名
+- [x] 重命名
 - [ ] 所有中文内容替换为英文
 - [ ] Linters, type checkers, auto-formatters
 
@@ -39,22 +39,22 @@ macOS Tohoe 26 改变了系统音量调节弹窗的样式，只在激活显示�
 
 ## 构建 .app
 
-1. 安装 Xcode (14+)，并打开 `sound.xcodeproj`
-2. 在 Xcode 中选择 `sound` scheme，`Any Mac (Intel/Apple Silicon)` 目标
+1. 安装 Xcode (14+)，并打开 `VolumeGrid.xcodeproj`
+2. 在 Xcode 中选择 `VolumeGrid` scheme，`Any Mac (Intel/Apple Silicon)` 目标
 3. 选择菜单 `Product > Archive` 或执行 `⌘⇧B` 进行 Release 构建
-4. 构建完成后 `.app` 会出现在 `~/Library/Developer/Xcode/DerivedData/.../Build/Products/Release/sound.app`
+4. 构建完成后 `.app` 会出现在 `~/Library/Developer/Xcode/DerivedData/.../Build/Products/Release/VolumeGrid.app`
 5. 你也可以使用命令行快速生成（将派生数据固定到下载目录）：
    ```bash
    xcodebuild \
-     -project sound.xcodeproj \
-     -scheme sound \
+     -project VolumeGrid.xcodeproj \
+     -scheme VolumeGrid \
      -configuration Release \
-     -derivedDataPath ~/Downloads/sound-build
+     -derivedDataPath ~/Downloads/volumegrid-build
    ```
-   完成后 `.app` 位于 `~/Downloads/sound-build/Build/Products/Release/sound.app`
-6. 若使用 Xcode GUI，可在 `Xcode > Settings... > Locations > Derived Data` 中选择 `Custom`, 将路径设置到 `~/Downloads/sound-build`，然后执行 `Product > Archive`，输出同样会落在下载目录
+   完成后 `.app` 位于 `~/Downloads/volumegrid-build/Build/Products/Release/VolumeGrid.app`
+6. 若使用 Xcode GUI，可在 `Xcode > Settings... > Locations > Derived Data` 中选择 `Custom`, 将路径设置到 `~/Downloads/volumegrid-build`，然后执行 `Product > Archive`，输出同样会落在下载目录
 
 ## 运行方式
 
-- 双击 `.app`，或使用 `open build/Build/Products/Release/sound.app`
+- 双击 `.app`，或使用 `open build/Build/Products/Release/VolumeGrid.app`
 - 在 Xcode 中选择 `Product > Run`（快捷键 `⌘R`），可以直接调试运行

@@ -1,5 +1,66 @@
 import AppKit
 
+/// Simple linear progress view that draws a rounded track and fill using AppKit drawing.
+private final class LinearProgressView: NSView {
+    var trackColor: NSColor = NSColor.controlBackgroundColor.withAlphaComponent(0.6) {
+        didSet { needsDisplay = true }
+    }
+    var fillColor: NSColor = NSColor.systemGray {
+        didSet { needsDisplay = true }
+    }
+    var cornerRadius: CGFloat = 2 {
+        didSet { needsDisplay = true }
+    }
+
+    var progress: CGFloat {
+        get { storedProgress }
+        set {
+            let clamped = max(0, min(newValue, 1))
+            guard abs(clamped - storedProgress) > .ulpOfOne else { return }
+            storedProgress = clamped
+            needsDisplay = true
+        }
+    }
+
+    private var storedProgress: CGFloat = 0
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard bounds.width > 0, bounds.height > 0 else { return }
+
+        let trackPath = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
+        trackColor.setFill()
+        trackPath.fill()
+
+        if storedProgress > 0 {
+            var fillRect = bounds
+            fillRect.size.width = bounds.width * storedProgress
+            // Ensure the fill rect respects the corner radius by not exceeding bounds width.
+            fillRect.size.width = min(fillRect.width, bounds.width)
+            let fillPath = NSBezierPath(
+                roundedRect: fillRect,
+                xRadius: cornerRadius,
+                yRadius: cornerRadius
+            )
+            fillColor.setFill()
+            fillPath.fill()
+        }
+    }
+}
+
 /// Compact status bar view that shows the current volume with an icon and a progress bar.
 final class StatusBarVolumeView: NSView {
     private let iconView = NSImageView()
@@ -75,11 +136,7 @@ final class StatusBarVolumeView: NSView {
 /// Custom view used inside the menu item to display the volume value and a linear indicator.
 final class VolumeMenuItemView: NSView {
     private let label = NSTextField(labelWithString: "")
-    private let progressContainer = NSView()
-    private let progressBackgroundView = NSView()
-    private let progressView = NSView()
-    private var progressWidthConstraint: NSLayoutConstraint?
-    private var progressFraction: CGFloat = 0
+    private let progressView = LinearProgressView()
     private let horizontalPadding: CGFloat = 16
     private let verticalPadding: CGFloat = 12
     private let interItemSpacing: CGFloat = 8
@@ -103,64 +160,32 @@ final class VolumeMenuItemView: NSView {
         label.translatesAutoresizingMaskIntoConstraints = false
         label.font = NSFont.systemFont(ofSize: 13)
         label.textColor = NSColor.labelColor
+        label.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
 
-        progressContainer.translatesAutoresizingMaskIntoConstraints = false
-
-        progressBackgroundView.translatesAutoresizingMaskIntoConstraints = false
-        progressBackgroundView.wantsLayer = true
-        progressBackgroundView.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        progressBackgroundView.layer?.cornerRadius = 2
-
-        progressView.translatesAutoresizingMaskIntoConstraints = false
-        progressView.wantsLayer = true
-        progressView.layer?.backgroundColor = NSColor.systemGray.cgColor
-        progressView.layer?.cornerRadius = 2
+        progressView.trackColor = NSColor.controlBackgroundColor
+        progressView.fillColor = NSColor.systemGray
+        progressView.cornerRadius = 2
 
         addSubview(label)
-        addSubview(progressContainer)
-        progressContainer.addSubview(progressBackgroundView)
-        progressContainer.addSubview(progressView)
+        addSubview(progressView)
 
         NSLayoutConstraint.activate([
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: horizontalPadding),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -horizontalPadding),
             label.topAnchor.constraint(equalTo: topAnchor, constant: verticalPadding),
 
-            progressContainer.leadingAnchor.constraint(equalTo: leadingAnchor, constant: horizontalPadding),
-            progressContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -horizontalPadding),
-            progressContainer.topAnchor.constraint(equalTo: label.bottomAnchor, constant: interItemSpacing),
-            progressContainer.heightAnchor.constraint(equalToConstant: 4),
-            progressContainer.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -verticalPadding),
-
-            progressBackgroundView.leadingAnchor.constraint(equalTo: progressContainer.leadingAnchor),
-            progressBackgroundView.trailingAnchor.constraint(equalTo: progressContainer.trailingAnchor),
-            progressBackgroundView.topAnchor.constraint(equalTo: progressContainer.topAnchor),
-            progressBackgroundView.bottomAnchor.constraint(equalTo: progressContainer.bottomAnchor),
-
-            progressView.leadingAnchor.constraint(equalTo: progressContainer.leadingAnchor),
-            progressView.topAnchor.constraint(equalTo: progressContainer.topAnchor),
-            progressView.bottomAnchor.constraint(equalTo: progressContainer.bottomAnchor)
+            progressView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: horizontalPadding),
+            progressView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -horizontalPadding),
+            progressView.topAnchor.constraint(equalTo: label.bottomAnchor, constant: interItemSpacing),
+            progressView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -verticalPadding),
+            progressView.heightAnchor.constraint(equalToConstant: 4)
         ])
-
-        progressWidthConstraint = progressView.widthAnchor.constraint(equalToConstant: 0)
-        progressWidthConstraint?.isActive = true
+        progressView.progress = 0
     }
 
     func update(percentage: Int, formattedVolume: String, deviceName: String) {
         let clamped = max(0, min(percentage, 100))
         label.stringValue = "\(deviceName) - \(formattedVolume)"
-        progressFraction = CGFloat(clamped) / 100.0
-        needsLayout = true
-    }
-
-    override func layout() {
-        super.layout()
-        updateProgressWidth()
-    }
-
-    private func updateProgressWidth() {
-        guard let progressWidthConstraint else { return }
-        let width = progressContainer.bounds.width
-        progressWidthConstraint.constant = width * progressFraction
+        progressView.progress = CGFloat(clamped) / 100.0
     }
 }

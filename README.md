@@ -27,6 +27,7 @@ macOS Tohoe 26 改变了系统音量调节弹窗的样式，只在激活显示�
 - [ ] 关于 - 显示应用版本、联系方式等信息
 - [ ] 重命名
 - [ ] 所有中文内容替换为英文
+- [ ] Linters, type checkers, auto-formatters
 
 ## 使用方法
 

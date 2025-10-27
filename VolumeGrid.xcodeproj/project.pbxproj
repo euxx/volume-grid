@@ -7,13 +7,13 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		043089CB2EA61F7A005D83F7 /* sound.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = sound.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		043089CB2EA61F7A005D83F7 /* VolumeGrid.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VolumeGrid.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		043089CD2EA61F7A005D83F7 /* sound */ = {
+		043089CD2EA61F7A005D83F7 /* VolumeGrid */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = sound;
+			path = VolumeGrid;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,7 +32,7 @@
 		043089C22EA61F7A005D83F7 = {
 			isa = PBXGroup;
 			children = (
-				043089CD2EA61F7A005D83F7 /* sound */,
+				043089CD2EA61F7A005D83F7 /* VolumeGrid */,
 				043089CC2EA61F7A005D83F7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -40,7 +40,7 @@
 		043089CC2EA61F7A005D83F7 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				043089CB2EA61F7A005D83F7 /* sound.app */,
+				043089CB2EA61F7A005D83F7 /* VolumeGrid.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,9 +48,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		043089CA2EA61F7A005D83F7 /* sound */ = {
+		043089CA2EA61F7A005D83F7 /* VolumeGrid */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 043089D62EA61F7B005D83F7 /* Build configuration list for PBXNativeTarget "sound" */;
+			buildConfigurationList = 043089D62EA61F7B005D83F7 /* Build configuration list for PBXNativeTarget "VolumeGrid" */;
 			buildPhases = (
 				043089C72EA61F7A005D83F7 /* Sources */,
 				043089C82EA61F7A005D83F7 /* Frameworks */,
@@ -61,13 +61,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				043089CD2EA61F7A005D83F7 /* sound */,
+				043089CD2EA61F7A005D83F7 /* VolumeGrid */,
 			);
-			name = sound;
+			name = VolumeGrid;
 			packageProductDependencies = (
 			);
-			productName = sound;
-			productReference = 043089CB2EA61F7A005D83F7 /* sound.app */;
+			productName = VolumeGrid;
+			productReference = 043089CB2EA61F7A005D83F7 /* VolumeGrid.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -85,7 +85,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 043089C62EA61F7A005D83F7 /* Build configuration list for PBXProject "sound" */;
+			buildConfigurationList = 043089C62EA61F7A005D83F7 /* Build configuration list for PBXProject "VolumeGrid" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -99,7 +99,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				043089CA2EA61F7A005D83F7 /* sound */,
+				043089CA2EA61F7A005D83F7 /* VolumeGrid */,
 			);
 		};
 /* End PBXProject section */
@@ -265,7 +265,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = eux.sound;
+				PRODUCT_BUNDLE_IDENTIFIER = eux.volumegrid;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -295,7 +295,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = eux.sound;
+				PRODUCT_BUNDLE_IDENTIFIER = eux.volumegrid;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -310,7 +310,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		043089C62EA61F7A005D83F7 /* Build configuration list for PBXProject "sound" */ = {
+		043089C62EA61F7A005D83F7 /* Build configuration list for PBXProject "VolumeGrid" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				043089D42EA61F7B005D83F7 /* Debug */,
@@ -319,7 +319,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		043089D62EA61F7B005D83F7 /* Build configuration list for PBXNativeTarget "sound" */ = {
+		043089D62EA61F7B005D83F7 /* Build configuration list for PBXNativeTarget "VolumeGrid" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				043089D72EA61F7B005D83F7 /* Debug */,

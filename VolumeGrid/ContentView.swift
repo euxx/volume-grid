@@ -18,7 +18,7 @@ struct ContentView: View {
             Image(systemName: "speaker.wave.2.fill")
                 .imageScale(.large)
                 .foregroundStyle(.tint)
-            Text("Sound Monitor")
+            Text("VolumeGrid")
                 .font(.headline)
             Text("当前音量: \(volumeMonitor.volumePercentage)%")
                 .font(.title2)
@@ -123,7 +123,7 @@ class VolumeMonitor: ObservableObject {
         // Initialize HUD window once
         setupHUDWindow()
         // Create audio queue once
-        audioQueue = DispatchQueue(label: "com.soundmonitor.audio", qos: .userInitiated)
+        audioQueue = DispatchQueue(label: "com.volumegrid.audio", qos: .userInitiated)
         // Get initial volume
         if let volume = getCurrentVolume() {
             volumePercentage = Int(volume * 100)

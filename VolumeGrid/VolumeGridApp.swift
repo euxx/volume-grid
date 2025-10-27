@@ -192,7 +192,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func isLaunchAtLoginEnabled() -> Bool {
         let launchAgentsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
-        let plistPath = launchAgentsPath.appendingPathComponent("eux.sound.plist")
+        let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
 
         return FileManager.default.fileExists(atPath: plistPath.path)
     }
@@ -204,7 +204,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 确保目录存在
         try? FileManager.default.createDirectory(at: launchAgentsPath, withIntermediateDirectories: true)
 
-        let plistPath = launchAgentsPath.appendingPathComponent("eux.sound.plist")
+        let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
 
         // 获取应用路径
         let appPath = Bundle.main.bundlePath
@@ -215,7 +215,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         <plist version="1.0">
         <dict>
             <key>Label</key>
-            <string>eux.sound</string>
+            <string>eux.volumegrid</string>
             <key>ProgramArguments</key>
             <array>
                 <string>open</string>
@@ -224,9 +224,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             <key>RunAtLoad</key>
             <true/>
             <key>StandardErrorPath</key>
-            <string>/tmp/eux.sound.stderr</string>
+            <string>/tmp/eux.volumegrid.stderr</string>
             <key>StandardOutPath</key>
-            <string>/tmp/eux.sound.stdout</string>
+            <string>/tmp/eux.volumegrid.stdout</string>
         </dict>
         </plist>
         """
@@ -247,7 +247,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func disableLaunchAtLogin() {
         let launchAgentsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
-        let plistPath = launchAgentsPath.appendingPathComponent("eux.sound.plist")
+        let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
 
         do {
             // 卸载Launch Agent
@@ -266,7 +266,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct VolumeMonitorApp: App {
+struct VolumeGridApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {

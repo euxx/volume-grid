@@ -48,19 +48,29 @@ class VolumeMonitor: ObservableObject {
     @Published var audioDevices: [AudioDevice] = []
     @Published var currentDevice: AudioDevice?
     private var defaultOutputDeviceID: AudioDeviceID = 0
+    private var listeningDeviceID: AudioDeviceID?
     private var volumeListener: AudioObjectPropertyListenerBlock?
     private var deviceListener: AudioObjectPropertyListenerBlock?
-    private var hudWindows: [NSWindow] = []
+    private struct HUDWindowContext {
+        let screenID: CGDirectDisplayID
+        let window: NSWindow
+    }
+
+    private var hudWindows: [HUDWindowContext] = []
     private var audioQueue: DispatchQueue?
     private var hideHUDWorkItem: DispatchWorkItem?
     private var volumeElements: [AudioObjectPropertyElement] = []
     private var muteElements: [AudioObjectPropertyElement] = []
+    private var registeredVolumeElements: [AudioObjectPropertyElement] = []
+    private var registeredMuteElements: [AudioObjectPropertyElement] = []
     private var lastVolumeScalar: CGFloat?
     private var isDeviceMuted: Bool = false
     private var globalSystemEventMonitor: Any?
     private var localSystemEventMonitor: Any?
     private var lastHandledSystemEvent: (timestamp: TimeInterval, data: Int)?
     private var muteListener: AudioObjectPropertyListenerBlock?
+    private var screenChangeObserver: NSObjectProtocol?
+    private var isListening = false
 
     // HUD constants.
     private let hudWidth: CGFloat = 320
@@ -122,8 +132,15 @@ class VolumeMonitor: ObservableObject {
     }
 
     init() {
-        // Initialize HUD window once
-        setupHUDWindow()
+        // Initialize HUD windows once
+        syncHUDWindowsWithScreens()
+        screenChangeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.syncHUDWindowsWithScreens()
+        }
         // Create audio queue once
         audioQueue = DispatchQueue(label: "com.volumegrid.audio", qos: .userInitiated)
         // Get initial volume
@@ -139,6 +156,10 @@ class VolumeMonitor: ObservableObject {
     deinit {
         stopListening()
         hideHUDWorkItem?.cancel()
+        if let observer = screenChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            screenChangeObserver = nil
+        }
         #if DEBUG
             print("VolumeMonitor deinit")
         #endif
@@ -190,55 +211,84 @@ class VolumeMonitor: ObservableObject {
         return containerView
     }
 
-    // Configure the HUD windows.
-    private func setupHUDWindow() {
-        hudWindows = NSScreen.screens.map { screen in
-            let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight),
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false
-            )
-            window.level = .floating
-            window.backgroundColor = .clear
-            window.isOpaque = false
-            window.collectionBehavior = [
-                .canJoinAllSpaces,
-                .transient,
-                .ignoresCycle,
-            ]
-            window.ignoresMouseEvents = true
-
-            // Build the container view with a macOS-style background.
-            let containerView = NSView(
-                frame: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight))
-            containerView.wantsLayer = true
-            let style = hudStyle(for: window.effectiveAppearance)
-            containerView.layer?.backgroundColor = style.backgroundColor.cgColor
-            containerView.layer?.cornerRadius = 12
-            containerView.layer?.masksToBounds = true
-
-            // Add a subtle shadow.
-            containerView.layer?.shadowColor = style.shadowColor.cgColor
-            containerView.layer?.shadowOpacity = 1.0
-            containerView.layer?.shadowOffset = CGSize(width: 0, height: 2)
-            containerView.layer?.shadowRadius = 8
-
-            window.contentView = containerView
-
-            // Center the window on its screen.
-            let screenFrame = screen.frame
-            let windowOrigin = CGPoint(
-                x: screenFrame.origin.x + (screenFrame.width - hudWidth) / 2,
-                y: screenFrame.origin.y + (screenFrame.height - hudHeight) / 2
-            )
-            window.setFrameOrigin(windowOrigin)
-
-            // Set the initial opacity.
-            window.alphaValue = self.hudAlpha
-
-            return window
+    private func screenID(for screen: NSScreen) -> CGDirectDisplayID? {
+        if let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+            as? NSNumber
+        {
+            return CGDirectDisplayID(number.uint32Value)
         }
+        return nil
+    }
+
+    private func makeHUDWindow(for screen: NSScreen) -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.level = .floating
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.collectionBehavior = [
+            .canJoinAllSpaces,
+            .transient,
+            .ignoresCycle,
+        ]
+        window.ignoresMouseEvents = true
+
+        let containerView = NSView(
+            frame: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight))
+        containerView.wantsLayer = true
+        let style = hudStyle(for: window.effectiveAppearance)
+        containerView.layer?.backgroundColor = style.backgroundColor.cgColor
+        containerView.layer?.cornerRadius = 12
+        containerView.layer?.masksToBounds = true
+        containerView.layer?.shadowColor = style.shadowColor.cgColor
+        containerView.layer?.shadowOpacity = 1.0
+        containerView.layer?.shadowOffset = CGSize(width: 0, height: 2)
+        containerView.layer?.shadowRadius = 8
+        window.contentView = containerView
+
+        let screenFrame = screen.frame
+        let windowOrigin = CGPoint(
+            x: screenFrame.origin.x + (screenFrame.width - hudWidth) / 2,
+            y: screenFrame.origin.y + (screenFrame.height - hudHeight) / 2
+        )
+        window.setFrameOrigin(windowOrigin)
+        window.alphaValue = hudAlpha
+
+        return window
+    }
+
+    // Configure the HUD windows.
+    private func syncHUDWindowsWithScreens() {
+        if !Thread.isMainThread {
+            DispatchQueue.main.sync {
+                self.syncHUDWindowsWithScreens()
+            }
+            return
+        }
+
+        var remaining = hudWindows
+        var updated: [HUDWindowContext] = []
+
+        for screen in NSScreen.screens {
+            guard let screenID = screenID(for: screen) else { continue }
+            if let index = remaining.firstIndex(where: { $0.screenID == screenID }) {
+                let context = remaining.remove(at: index)
+                updated.append(context)
+            } else {
+                let window = makeHUDWindow(for: screen)
+                updated.append(HUDWindowContext(screenID: screenID, window: window))
+            }
+        }
+
+        for context in remaining {
+            context.window.orderOut(nil)
+        }
+
+        hudWindows = updated
     }
 
     // Fetch the default output device ID.
@@ -652,14 +702,18 @@ class VolumeMonitor: ObservableObject {
         // Minimum 320 to keep text visible.
         let dynamicHudWidth = max(320, combinedWidth + 2 * marginX)
 
-        for hudWindow in hudWindows {
+        syncHUDWindowsWithScreens()
+
+        let screens = NSScreen.screens
+        for (screen, context) in zip(screens, hudWindows) {
+            let hudWindow = context.window
             // Check whether the window is already visible.
             let isAlreadyVisible = hudWindow.isVisible && hudWindow.alphaValue > 0.1
 
             let style = hudStyle(for: hudWindow.effectiveAppearance)
 
             // Resize the window to fit the content.
-            let screenFrame = NSScreen.screens[hudWindows.firstIndex(of: hudWindow)!].frame
+            let screenFrame = screen.frame
             let newWindowFrame = NSRect(
                 x: screenFrame.origin.x + (screenFrame.width - dynamicHudWidth) / 2,
                 y: screenFrame.origin.y + (screenFrame.height - hudHeight) / 2,
@@ -820,7 +874,8 @@ class VolumeMonitor: ObservableObject {
 
         // Schedule a new hide task.
         let workItem = DispatchWorkItem {
-            for hudWindow in self.hudWindows {
+            for context in self.hudWindows {
+                let hudWindow = context.window
                 NSAnimationContext.runAnimationGroup(
                     { context in
                         context.duration = 0.2
@@ -960,6 +1015,16 @@ class VolumeMonitor: ObservableObject {
             return
         }
 
+        if isListening {
+            if listeningDeviceID == deviceID {
+                return
+            }
+            stopListening()
+        }
+
+        registeredVolumeElements = []
+        registeredMuteElements = []
+
         guard deviceSupportsVolumeControl(deviceID) else {
             #if DEBUG
                 print("Device does not support volume control, skipping listener setup")
@@ -1015,6 +1080,9 @@ class VolumeMonitor: ObservableObject {
             #endif
             return
         }
+        registeredVolumeElements = volumeElements
+        listeningDeviceID = deviceID
+        isListening = true
 
         if !muteElements.isEmpty {
             muteListener = {
@@ -1029,6 +1097,7 @@ class VolumeMonitor: ObservableObject {
             }
 
             if let muteListener = muteListener {
+                var muteRegistered = false
                 for element in muteElements {
                     var muteAddress = AudioObjectPropertyAddress(
                         mSelector: kAudioDevicePropertyMute,
@@ -1045,9 +1114,12 @@ class VolumeMonitor: ObservableObject {
                                     "Error adding mute listener for element \(element): \(muteStatus)"
                                 )
                             #endif
+                        } else {
+                            muteRegistered = true
                         }
                     }
                 }
+                registeredMuteElements = muteRegistered ? muteElements : []
             }
         }
 
@@ -1092,6 +1164,11 @@ class VolumeMonitor: ObservableObject {
         guard let audioQueue = audioQueue else {
             volumeListener = nil
             deviceListener = nil
+            muteListener = nil
+            listeningDeviceID = nil
+            registeredVolumeElements = []
+            registeredMuteElements = []
+            isListening = false
             return
         }
 
@@ -1101,27 +1178,33 @@ class VolumeMonitor: ObservableObject {
             mElement: 0
         )
 
+        let removalDeviceID = listeningDeviceID ?? defaultOutputDeviceID
+
         if let volumeListener = volumeListener {
-            for element in volumeElements {
+            for element in registeredVolumeElements {
                 var volumeAddress = AudioObjectPropertyAddress(
                     mSelector: kAudioDevicePropertyVolumeScalar,
                     mScope: kAudioDevicePropertyScopeOutput,
                     mElement: element
                 )
-                AudioObjectRemovePropertyListenerBlock(
-                    defaultOutputDeviceID, &volumeAddress, audioQueue, volumeListener)
+                if removalDeviceID != 0 {
+                    AudioObjectRemovePropertyListenerBlock(
+                        removalDeviceID, &volumeAddress, audioQueue, volumeListener)
+                }
             }
         }
 
         if let muteListener = muteListener {
-            for element in muteElements {
+            for element in registeredMuteElements {
                 var muteAddress = AudioObjectPropertyAddress(
                     mSelector: kAudioDevicePropertyMute,
                     mScope: kAudioDevicePropertyScopeOutput,
                     mElement: element
                 )
-                AudioObjectRemovePropertyListenerBlock(
-                    defaultOutputDeviceID, &muteAddress, audioQueue, muteListener)
+                if removalDeviceID != 0 {
+                    AudioObjectRemovePropertyListenerBlock(
+                        removalDeviceID, &muteAddress, audioQueue, muteListener)
+                }
             }
         }
 
@@ -1133,6 +1216,10 @@ class VolumeMonitor: ObservableObject {
         self.volumeListener = nil
         self.deviceListener = nil
         self.muteListener = nil
+        listeningDeviceID = nil
+        registeredVolumeElements = []
+        registeredMuteElements = []
+        isListening = false
         #if DEBUG
             print("Stopped listening")
         #endif

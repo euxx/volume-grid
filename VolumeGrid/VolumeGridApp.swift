@@ -1,6 +1,6 @@
-import SwiftUI
 import AppKit
 import Combine
+import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
@@ -40,7 +40,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.addSubview(statusView)
             NSLayoutConstraint.activate([
                 statusView.centerXAnchor.constraint(equalTo: button.centerXAnchor),
-                statusView.centerYAnchor.constraint(equalTo: button.centerYAnchor)
+                statusView.centerYAnchor.constraint(equalTo: button.centerYAnchor),
             ])
             let initialVolume = volumeMonitor?.volumePercentage ?? 0
             statusView.update(percentage: initialVolume)
@@ -73,7 +73,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
 
         // 添加开机启动选项
-        let launchAtLoginItem = NSMenuItem(title: "Start at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        let launchAtLoginItem = NSMenuItem(
+            title: "Start at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launchAtLoginItem.target = self
         launchAtLoginItem.state = isLaunchAtLoginEnabled() ? .on : .off
         menu.addItem(launchAtLoginItem)
@@ -107,7 +108,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
                 // 更新菜单中的自定义视图
                 if let volumeItem = self.volumeMenuItem,
-                   let menuView = self.volumeMenuContentView {
+                    let menuView = self.volumeMenuContentView
+                {
                     let formatted = self.formattedVolumeString(for: volume)
                     let deviceName = self.volumeMonitor?.currentDevice?.name ?? "未知设备"
                     DispatchQueue.main.async {
@@ -125,8 +127,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] device in
                 guard let self,
-                      let volumeItem = self.volumeMenuItem,
-                      let menuView = self.volumeMenuContentView
+                    let volumeItem = self.volumeMenuItem,
+                    let menuView = self.volumeMenuContentView
                 else { return }
                 let name = device?.name ?? "未知设备"
                 let volume = self.volumeMonitor?.volumePercentage ?? 0
@@ -145,8 +147,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showAbout() {
-        let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "VolumeGrid"
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知版本"
+        let appName =
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "VolumeGrid"
+        let version =
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "未知版本"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "未知构建"
 
         let alert = NSAlert()
@@ -223,7 +228,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // 更新菜单状态
         if let menu = statusItem?.menu,
-           let launchItem = menu.items.first(where: { $0.title == "开机启动" }) {
+            let launchItem = menu.items.first(where: { $0.title == "开机启动" })
+        {
             launchItem.state = isLaunchAtLoginEnabled() ? .on : .off
         }
     }
@@ -241,7 +247,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .appendingPathComponent("Library/LaunchAgents")
 
         // 确保目录存在
-        try? FileManager.default.createDirectory(at: launchAgentsPath, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(
+            at: launchAgentsPath, withIntermediateDirectories: true)
 
         let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
 
@@ -249,26 +256,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let appPath = Bundle.main.bundlePath
 
         let plistContent = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>Label</key>
-            <string>eux.volumegrid</string>
-            <key>ProgramArguments</key>
-            <array>
-                <string>open</string>
-                <string>\(appPath)</string>
-            </array>
-            <key>RunAtLoad</key>
-            <true/>
-            <key>StandardErrorPath</key>
-            <string>/tmp/eux.volumegrid.stderr</string>
-            <key>StandardOutPath</key>
-            <string>/tmp/eux.volumegrid.stdout</string>
-        </dict>
-        </plist>
-        """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+                <key>Label</key>
+                <string>eux.volumegrid</string>
+                <key>ProgramArguments</key>
+                <array>
+                    <string>open</string>
+                    <string>\(appPath)</string>
+                </array>
+                <key>RunAtLoad</key>
+                <true/>
+                <key>StandardErrorPath</key>
+                <string>/tmp/eux.volumegrid.stderr</string>
+                <key>StandardOutPath</key>
+                <string>/tmp/eux.volumegrid.stdout</string>
+            </dict>
+            </plist>
+            """
 
         do {
             try plistContent.write(to: plistPath, atomically: true, encoding: .utf8)

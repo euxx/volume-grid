@@ -41,7 +41,8 @@ private final class LinearProgressView: NSView {
 
         guard bounds.width > 0, bounds.height > 0 else { return }
 
-        let trackPath = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
+        let trackPath = NSBezierPath(
+            roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
         trackColor.setFill()
         trackPath.fill()
 
@@ -90,7 +91,8 @@ final class StatusBarVolumeView: NSView {
 
         progressBackgroundView.translatesAutoresizingMaskIntoConstraints = false
         progressBackgroundView.wantsLayer = true
-        progressBackgroundView.layer?.backgroundColor = NSColor.systemGray.withAlphaComponent(0.3).cgColor
+        progressBackgroundView.layer?.backgroundColor =
+            NSColor.systemGray.withAlphaComponent(0.3).cgColor
         progressBackgroundView.layer?.cornerRadius = 1
 
         progressView.translatesAutoresizingMaskIntoConstraints = false
@@ -115,13 +117,14 @@ final class StatusBarVolumeView: NSView {
             iconView.heightAnchor.constraint(equalToConstant: 16),
 
             progressBackgroundView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
-            progressBackgroundView.trailingAnchor.constraint(equalTo: leadingAnchor, constant: 3 + progressWidth),
+            progressBackgroundView.trailingAnchor.constraint(
+                equalTo: leadingAnchor, constant: 3 + progressWidth),
             progressBackgroundView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
             progressBackgroundView.heightAnchor.constraint(equalToConstant: 2),
 
             progressView.leadingAnchor.constraint(equalTo: progressBackgroundView.leadingAnchor),
             progressView.bottomAnchor.constraint(equalTo: progressBackgroundView.bottomAnchor),
-            progressView.topAnchor.constraint(equalTo: progressBackgroundView.topAnchor)
+            progressView.topAnchor.constraint(equalTo: progressBackgroundView.topAnchor),
         ])
     }
 
@@ -174,11 +177,14 @@ final class VolumeMenuItemView: NSView {
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -horizontalPadding),
             label.topAnchor.constraint(equalTo: topAnchor, constant: verticalPadding),
 
-            progressView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: horizontalPadding),
-            progressView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -horizontalPadding),
-            progressView.topAnchor.constraint(equalTo: label.bottomAnchor, constant: interItemSpacing),
+            progressView.leadingAnchor.constraint(
+                equalTo: leadingAnchor, constant: horizontalPadding),
+            progressView.trailingAnchor.constraint(
+                equalTo: trailingAnchor, constant: -horizontalPadding),
+            progressView.topAnchor.constraint(
+                equalTo: label.bottomAnchor, constant: interItemSpacing),
             progressView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -verticalPadding),
-            progressView.heightAnchor.constraint(equalToConstant: 4)
+            progressView.heightAnchor.constraint(equalToConstant: 4),
         ])
         progressView.progress = 0
     }

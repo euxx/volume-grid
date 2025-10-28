@@ -1,7 +1,7 @@
-import SwiftUI
-import Combine
-import Cocoa
 import AudioToolbox
+import Cocoa
+import Combine
+import SwiftUI
 
 // 音频设备结构体
 struct AudioDevice: Identifiable, Hashable {
@@ -88,12 +88,13 @@ class VolumeMonitor: ObservableObject {
     }
 
     private func hudStyle(for appearance: NSAppearance) -> HUDStyle {
-        let bestMatch = appearance.bestMatch(from: [
-            .darkAqua,
-            .vibrantDark,
-            .aqua,
-            .vibrantLight
-        ]) ?? .aqua
+        let bestMatch =
+            appearance.bestMatch(from: [
+                .darkAqua,
+                .vibrantDark,
+                .aqua,
+                .vibrantLight,
+            ]) ?? .aqua
         let isDarkInterface = (bestMatch == .darkAqua || bestMatch == .vibrantDark)
 
         let backgroundBase = resolveColor(NSColor.windowBackgroundColor, for: appearance)
@@ -104,7 +105,8 @@ class VolumeMonitor: ObservableObject {
         let secondaryTextColor = resolveColor(NSColor.secondaryLabelColor, for: appearance)
         let neutralFillBase = resolveColor(NSColor.systemGray, for: appearance)
         let blockFillColor = neutralFillBase.withAlphaComponent(isDarkInterface ? 0.99 : 1.0)
-        let blockEmptyColor = isDarkInterface
+        let blockEmptyColor =
+            isDarkInterface
             ? NSColor.white.withAlphaComponent(0.25)
             : NSColor.black.withAlphaComponent(0.12)
 
@@ -138,7 +140,7 @@ class VolumeMonitor: ObservableObject {
         stopListening()
         hideHUDWorkItem?.cancel()
         #if DEBUG
-        print("VolumeMonitor deinit")
+            print("VolumeMonitor deinit")
         #endif
     }
 
@@ -150,18 +152,20 @@ class VolumeMonitor: ObservableObject {
         let blockSpacing: CGFloat = 2  // 减小间距
 
         let totalWidth = CGFloat(blockCount) * blockWidth + CGFloat(blockCount - 1) * blockSpacing
-        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: totalWidth, height: blockHeight))
+        let containerView = NSView(
+            frame: NSRect(x: 0, y: 0, width: totalWidth, height: blockHeight))
 
         let clampedFraction = max(0, min(1, fillFraction))
         let totalBlocks = clampedFraction * CGFloat(blockCount)
 
         for i in 0..<blockCount {
-            let block = NSView(frame: NSRect(
-                x: CGFloat(i) * (blockWidth + blockSpacing),
-                y: 0,
-                width: blockWidth,
-                height: blockHeight
-            ))
+            let block = NSView(
+                frame: NSRect(
+                    x: CGFloat(i) * (blockWidth + blockSpacing),
+                    y: 0,
+                    width: blockWidth,
+                    height: blockHeight
+                ))
 
             block.wantsLayer = true
             block.layer?.cornerRadius = 0.5  // 更小的圆角，更精致
@@ -175,7 +179,8 @@ class VolumeMonitor: ObservableObject {
                 let fillLayer = CALayer()
                 fillLayer.backgroundColor = style.blockFillColor.cgColor
                 fillLayer.cornerRadius = 0.5
-                fillLayer.frame = CGRect(x: 0, y: 0, width: blockWidth * blockFill, height: blockHeight)
+                fillLayer.frame = CGRect(
+                    x: 0, y: 0, width: blockWidth * blockFill, height: blockHeight)
                 block.layer?.addSublayer(fillLayer)
             }
 
@@ -200,12 +205,13 @@ class VolumeMonitor: ObservableObject {
             window.collectionBehavior = [
                 .canJoinAllSpaces,
                 .transient,
-                .ignoresCycle
+                .ignoresCycle,
             ]
             window.ignoresMouseEvents = true
 
             // 创建容器视图，添加Mac风格的背景
-            let containerView = NSView(frame: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight))
+            let containerView = NSView(
+                frame: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight))
             containerView.wantsLayer = true
             let style = hudStyle(for: window.effectiveAppearance)
             containerView.layer?.backgroundColor = style.backgroundColor.cgColor
@@ -246,16 +252,17 @@ class VolumeMonitor: ObservableObject {
 
         var deviceID: AudioDeviceID = 0
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        let status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
         if status == noErr {
             self.defaultOutputDeviceID = deviceID
             #if DEBUG
-            print("Updated default device ID: \(deviceID)")
+                print("Updated default device ID: \(deviceID)")
             #endif
             return deviceID
         } else {
             #if DEBUG
-            print("Error getting default output device: \(status)")
+                print("Error getting default output device: \(status)")
             #endif
             return 0
         }
@@ -267,7 +274,7 @@ class VolumeMonitor: ObservableObject {
         let candidates: [AudioObjectPropertyElement] = [
             kAudioObjectPropertyElementMain,
             1,
-            2
+            2,
         ]
 
         var detected: [AudioObjectPropertyElement] = []
@@ -302,7 +309,7 @@ class VolumeMonitor: ObservableObject {
         let candidates: [AudioObjectPropertyElement] = [
             kAudioObjectPropertyElementMain,
             1,
-            2
+            2,
         ]
 
         var detected: [AudioObjectPropertyElement] = []
@@ -348,7 +355,7 @@ class VolumeMonitor: ObservableObject {
 
         guard deviceSupportsVolumeControl(deviceID) else {
             #if DEBUG
-            print("Device does not support volume control")
+                print("Device does not support volume control")
             #endif
             return nil
         }
@@ -373,7 +380,7 @@ class VolumeMonitor: ObservableObject {
                 channelVolumes.append(volume)
             } else {
                 #if DEBUG
-                print("Error getting volume for element \(element): \(status)")
+                    print("Error getting volume for element \(element): \(status)")
                 #endif
             }
         }
@@ -393,20 +400,22 @@ class VolumeMonitor: ObservableObject {
         )
 
         var size: UInt32 = 0
-        var status = AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size)
+        var status = AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size)
         guard status == noErr else {
             #if DEBUG
-            print("Error getting devices size: \(status)")
+                print("Error getting devices size: \(status)")
             #endif
             return
         }
 
         let deviceCount = Int(size) / MemoryLayout<AudioDeviceID>.size
         var deviceIDs = [AudioDeviceID](repeating: 0, count: deviceCount)
-        status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceIDs)
+        status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceIDs)
         guard status == noErr else {
             #if DEBUG
-            print("Error getting devices: \(status)")
+                print("Error getting devices: \(status)")
             #endif
             return
         }
@@ -421,7 +430,9 @@ class VolumeMonitor: ObservableObject {
         DispatchQueue.main.async {
             self.audioDevices = devices
             // 设置当前设备
-            let currentID = self.defaultOutputDeviceID != 0 ? self.defaultOutputDeviceID : self.updateDefaultOutputDevice()
+            let currentID =
+                self.defaultOutputDeviceID != 0
+                ? self.defaultOutputDeviceID : self.updateDefaultOutputDevice()
             if currentID != 0, let currentDevice = devices.first(where: { $0.id == currentID }) {
                 self.currentDevice = currentDevice
             }
@@ -441,7 +452,7 @@ class VolumeMonitor: ObservableObject {
         let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &unmanagedName)
         guard status == noErr, let unmanaged = unmanagedName else {
             #if DEBUG
-            print("Error getting device name for \(deviceID): \(status)")
+                print("Error getting device name for \(deviceID): \(status)")
             #endif
             return nil
         }
@@ -463,7 +474,8 @@ class VolumeMonitor: ObservableObject {
         if let deviceID {
             resolvedDeviceID = deviceID
         } else {
-            let currentID = defaultOutputDeviceID != 0 ? defaultOutputDeviceID : updateDefaultOutputDevice()
+            let currentID =
+                defaultOutputDeviceID != 0 ? defaultOutputDeviceID : updateDefaultOutputDevice()
             guard currentID != 0 else {
                 isDeviceMuted = false
                 return nil
@@ -488,7 +500,8 @@ class VolumeMonitor: ObservableObject {
 
             var muted: UInt32 = 0
             var size = UInt32(MemoryLayout<UInt32>.size)
-            let status = AudioObjectGetPropertyData(resolvedDeviceID, &address, 0, nil, &size, &muted)
+            let status = AudioObjectGetPropertyData(
+                resolvedDeviceID, &address, 0, nil, &size, &muted)
             if status == noErr {
                 readAnyMuteChannel = true
                 if muted != 0 {
@@ -497,14 +510,14 @@ class VolumeMonitor: ObservableObject {
                 }
             } else {
                 #if DEBUG
-                print("Error getting mute for element \(element): \(status)")
+                    print("Error getting mute for element \(element): \(status)")
                 #endif
             }
         }
 
         guard readAnyMuteChannel else {
             #if DEBUG
-            print("No mute channels returned data")
+                print("No mute channels returned data")
             #endif
             isDeviceMuted = false
             return nil
@@ -521,7 +534,7 @@ class VolumeMonitor: ObservableObject {
     private func volumeChanged(address _: AudioObjectPropertyAddress) {
         guard let volume = getCurrentVolume() else {
             #if DEBUG
-            print("Failed to read volume after change")
+                print("Failed to read volume after change")
             #endif
             return
         }
@@ -541,7 +554,8 @@ class VolumeMonitor: ObservableObject {
                 if !shouldShowHUD {
                     // 在边界值（0 或最大音量）时，仍然响应用户的重复按键
                     let isAtLowerBound = previousScalar <= epsilon && currentScalar <= epsilon
-                    let isAtUpperBound = previousScalar >= (1 - epsilon) && currentScalar >= (1 - epsilon)
+                    let isAtUpperBound =
+                        previousScalar >= (1 - epsilon) && currentScalar >= (1 - epsilon)
                     if isAtLowerBound || isAtUpperBound {
                         shouldShowHUD = true
                     }
@@ -556,7 +570,7 @@ class VolumeMonitor: ObservableObject {
                 self.showVolumeHUD(volumeScalar: currentScalar)
             }
             #if DEBUG
-            print("Volume changed: \(percentage)%")
+                print("Volume changed: \(percentage)%")
             #endif
         }
     }
@@ -595,7 +609,7 @@ class VolumeMonitor: ObservableObject {
             self.lastVolumeScalar = CGFloat(clampedVolume)
             self.showVolumeHUD(volumeScalar: CGFloat(clampedVolume))
             #if DEBUG
-            print("Device switched, new volume: \(percentage)%")
+                print("Device switched, new volume: \(percentage)%")
             #endif
         }
     }
@@ -611,7 +625,8 @@ class VolumeMonitor: ObservableObject {
         let formattedQuarterBlocks = formatVolumeCount(quarterBlocks)
         let volumeString: String
         if formattedQuarterBlocks.contains("/") {
-            let normalizedNumerator = formattedQuarterBlocks.replacingOccurrences(of: " ", with: "+")
+            let normalizedNumerator = formattedQuarterBlocks.replacingOccurrences(
+                of: " ", with: "+")
             volumeString = normalizedNumerator
         } else {
             volumeString = formattedQuarterBlocks
@@ -626,10 +641,13 @@ class VolumeMonitor: ObservableObject {
         let volumeFont = NSFont.systemFont(ofSize: 12)
         let volumeTextSize = volumeNSString.size(withAttributes: [.font: volumeFont])
         let maxVolumeSampleString = "15+3/4"
-        let maxVolumeSampleWidth = NSString(string: maxVolumeSampleString).size(withAttributes: [.font: volumeFont]).width
+        let maxVolumeSampleWidth = NSString(string: maxVolumeSampleString).size(withAttributes: [
+            .font: volumeFont
+        ]).width
         let effectiveVolumeTextWidth = max(volumeTextSize.width, maxVolumeSampleWidth)
         let gapBetweenDeviceAndCount: CGFloat = 8
-        let combinedWidth = deviceTextSize.width + gapBetweenDeviceAndCount + effectiveVolumeTextWidth
+        let combinedWidth =
+            deviceTextSize.width + gapBetweenDeviceAndCount + effectiveVolumeTextWidth
         let marginX: CGFloat = 24
         let dynamicHudWidth = max(320, combinedWidth + 2 * marginX)  // 最小320，确保文本不被裁剪
 
@@ -652,7 +670,9 @@ class VolumeMonitor: ObservableObject {
             guard let containerView = hudWindow.contentView else { continue }
 
             // 清空之前的内容
-            containerView.subviews.forEach { $0.removeFromSuperview() }
+            for subview in containerView.subviews {
+                subview.removeFromSuperview()
+            }
 
             // 调整容器视图大小
             containerView.frame = NSRect(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
@@ -667,7 +687,8 @@ class VolumeMonitor: ObservableObject {
 
             // 创建音量图标
             let iconName = isMutedForDisplay ? "speaker.slash.fill" : "speaker.wave.2.fill"
-            let speakerImage = NSImage(systemSymbolName: iconName, accessibilityDescription: "Volume")
+            let speakerImage = NSImage(
+                systemSymbolName: iconName, accessibilityDescription: "Volume")
             let speakerImageView = NSImageView(image: speakerImage!)
             // 图标在容器内居中显示，使用原始大小
             let iconSize: CGFloat = isMutedForDisplay ? 40 : 47
@@ -681,7 +702,7 @@ class VolumeMonitor: ObservableObject {
                 speakerImageView.centerXAnchor.constraint(equalTo: iconContainer.centerXAnchor),
                 speakerImageView.centerYAnchor.constraint(equalTo: iconContainer.centerYAnchor),
                 speakerImageView.widthAnchor.constraint(equalToConstant: iconSize),
-                speakerImageView.heightAnchor.constraint(equalToConstant: iconSize)
+                speakerImageView.heightAnchor.constraint(equalToConstant: iconSize),
             ])
 
             // 创建音量方格视图
@@ -717,7 +738,8 @@ class VolumeMonitor: ObservableObject {
             volumeText.setContentHuggingPriority(.required, for: .horizontal)
             volumeText.setContentCompressionResistancePriority(.required, for: .horizontal)
             let widthPadding: CGFloat = 6
-            let volumeWidthConstraint = volumeText.widthAnchor.constraint(equalToConstant: effectiveVolumeTextWidth + widthPadding)
+            let volumeWidthConstraint = volumeText.widthAnchor.constraint(
+                equalToConstant: effectiveVolumeTextWidth + widthPadding)
             volumeWidthConstraint.priority = .required
             volumeWidthConstraint.isActive = true
 
@@ -734,22 +756,26 @@ class VolumeMonitor: ObservableObject {
             NSLayoutConstraint.activate([
                 contentStack.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
                 contentStack.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-                contentStack.leadingAnchor.constraint(greaterThanOrEqualTo: containerView.leadingAnchor, constant: marginX),
-                contentStack.trailingAnchor.constraint(lessThanOrEqualTo: containerView.trailingAnchor, constant: -marginX)
+                contentStack.leadingAnchor.constraint(
+                    greaterThanOrEqualTo: containerView.leadingAnchor, constant: marginX),
+                contentStack.trailingAnchor.constraint(
+                    lessThanOrEqualTo: containerView.trailingAnchor, constant: -marginX),
             ])
 
-            let topConstraint = contentStack.topAnchor.constraint(greaterThanOrEqualTo: containerView.topAnchor, constant: minVerticalPadding)
+            let topConstraint = contentStack.topAnchor.constraint(
+                greaterThanOrEqualTo: containerView.topAnchor, constant: minVerticalPadding)
             topConstraint.priority = .defaultHigh
             topConstraint.isActive = true
 
-            let bottomConstraint = contentStack.bottomAnchor.constraint(lessThanOrEqualTo: containerView.bottomAnchor, constant: -minVerticalPadding)
+            let bottomConstraint = contentStack.bottomAnchor.constraint(
+                lessThanOrEqualTo: containerView.bottomAnchor, constant: -minVerticalPadding)
             bottomConstraint.priority = .defaultHigh
             bottomConstraint.isActive = true
 
             contentStack.addArrangedSubview(iconContainer)
             NSLayoutConstraint.activate([
                 iconContainer.widthAnchor.constraint(equalToConstant: iconContainerSize),
-                iconContainer.heightAnchor.constraint(equalToConstant: iconContainerSize)
+                iconContainer.heightAnchor.constraint(equalToConstant: iconContainerSize),
             ])
 
             let textStack = NSStackView()
@@ -769,17 +795,18 @@ class VolumeMonitor: ObservableObject {
             contentStack.addArrangedSubview(blocksView)
             NSLayoutConstraint.activate([
                 blocksView.widthAnchor.constraint(equalToConstant: blocksSize.width),
-                blocksView.heightAnchor.constraint(equalToConstant: blocksSize.height)
+                blocksView.heightAnchor.constraint(equalToConstant: blocksSize.height),
             ])
 
             // 只在窗口未显示时执行淡入动画
             if !isAlreadyVisible {
                 hudWindow.alphaValue = 0
                 hudWindow.orderFrontRegardless()
-                NSAnimationContext.runAnimationGroup({ context in
-                    context.duration = 0.2
-                    hudWindow.animator().alphaValue = self.hudAlpha
-                }, completionHandler: nil)
+                NSAnimationContext.runAnimationGroup(
+                    { context in
+                        context.duration = 0.2
+                        hudWindow.animator().alphaValue = self.hudAlpha
+                    }, completionHandler: nil)
             } else {
                 hudWindow.orderFrontRegardless()
                 // 窗口已经显示，保持当前透明度
@@ -793,12 +820,14 @@ class VolumeMonitor: ObservableObject {
         // 创建新的隐藏任务
         let workItem = DispatchWorkItem {
             for hudWindow in self.hudWindows {
-                NSAnimationContext.runAnimationGroup({ context in
-                    context.duration = 0.2
-                    hudWindow.animator().alphaValue = 0
-                }, completionHandler: {
-                    hudWindow.orderOut(nil)
-                })
+                NSAnimationContext.runAnimationGroup(
+                    { context in
+                        context.duration = 0.2
+                        hudWindow.animator().alphaValue = 0
+                    },
+                    completionHandler: {
+                        hudWindow.orderOut(nil)
+                    })
             }
         }
         hideHUDWorkItem = workItem
@@ -840,7 +869,8 @@ class VolumeMonitor: ObservableObject {
 
     private func startKeyMonitoring() {
         if globalSystemEventMonitor == nil {
-            globalSystemEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .systemDefined) { [weak self] event in
+            globalSystemEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .systemDefined) {
+                [weak self] event in
                 DispatchQueue.main.async {
                     self?.handleSystemDefinedEvent(event)
                 }
@@ -848,7 +878,8 @@ class VolumeMonitor: ObservableObject {
         }
 
         if localSystemEventMonitor == nil {
-            localSystemEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .systemDefined) { [weak self] event in
+            localSystemEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .systemDefined) {
+                [weak self] event in
                 self?.handleSystemDefinedEvent(event)
                 return event
             }
@@ -876,16 +907,17 @@ class VolumeMonitor: ObservableObject {
         }
 
         guard event.subtype.rawValue == 8 else { return }
-        let keyCode = (event.data1 & 0xFFFF0000) >> 16
-        let keyFlags = event.data1 & 0x0000FFFF
+        let keyCode = (event.data1 & 0xFFFF_0000) >> 16
+        let keyFlags = event.data1 & 0x0000_FFFF
         let keyState = (keyFlags & 0xFF00) >> 8
         let isKeyDown = keyState == 0xA
         guard isKeyDown else { return }
 
         let signature = (timestamp: event.timestamp, data: event.data1)
         if let last = lastHandledSystemEvent,
-           abs(last.timestamp - signature.timestamp) < 0.0001,
-           last.data == signature.data {
+            abs(last.timestamp - signature.timestamp) < 0.0001,
+            last.data == signature.data
+        {
             return
         }
         lastHandledSystemEvent = signature
@@ -922,14 +954,14 @@ class VolumeMonitor: ObservableObject {
         let deviceID = updateDefaultOutputDevice()
         guard deviceID != 0 else {
             #if DEBUG
-            print("No valid output device")
+                print("No valid output device")
             #endif
             return
         }
 
         guard deviceSupportsVolumeControl(deviceID) else {
             #if DEBUG
-            print("Device does not support volume control, skipping listener setup")
+                print("Device does not support volume control, skipping listener setup")
             #endif
             return
         }
@@ -939,10 +971,11 @@ class VolumeMonitor: ObservableObject {
         startKeyMonitoring()
 
         // 音量变化监听
-        volumeListener = { [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in
+        volumeListener = {
+            [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in
             guard let self = self else {
                 #if DEBUG
-                print("VolumeMonitor deallocated in volume listener")
+                    print("VolumeMonitor deallocated in volume listener")
                 #endif
                 return
             }
@@ -951,7 +984,7 @@ class VolumeMonitor: ObservableObject {
 
         guard let audioQueue = audioQueue, let volumeListener = volumeListener else {
             #if DEBUG
-            print("Failed to initialize audio queue or volume listener")
+                print("Failed to initialize audio queue or volume listener")
             #endif
             return
         }
@@ -964,28 +997,30 @@ class VolumeMonitor: ObservableObject {
                 mElement: element
             )
 
-            let volumeStatus = AudioObjectAddPropertyListenerBlock(deviceID, &volumeAddress, audioQueue, volumeListener)
+            let volumeStatus = AudioObjectAddPropertyListenerBlock(
+                deviceID, &volumeAddress, audioQueue, volumeListener)
             if volumeStatus == noErr {
                 listenerRegistered = true
             } else {
                 #if DEBUG
-                print("Error adding volume listener for element \(element): \(volumeStatus)")
+                    print("Error adding volume listener for element \(element): \(volumeStatus)")
                 #endif
             }
         }
 
         guard listenerRegistered else {
             #if DEBUG
-            print("Failed to register any volume listeners")
+                print("Failed to register any volume listeners")
             #endif
             return
         }
 
         if !muteElements.isEmpty {
-            muteListener = { [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in
+            muteListener = {
+                [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in
                 guard let self = self else {
                     #if DEBUG
-                    print("VolumeMonitor deallocated in mute listener")
+                        print("VolumeMonitor deallocated in mute listener")
                     #endif
                     return
                 }
@@ -1001,10 +1036,13 @@ class VolumeMonitor: ObservableObject {
                     )
 
                     if AudioObjectHasProperty(deviceID, &muteAddress) {
-                        let muteStatus = AudioObjectAddPropertyListenerBlock(deviceID, &muteAddress, audioQueue, muteListener)
+                        let muteStatus = AudioObjectAddPropertyListenerBlock(
+                            deviceID, &muteAddress, audioQueue, muteListener)
                         if muteStatus != noErr {
                             #if DEBUG
-                            print("Error adding mute listener for element \(element): \(muteStatus)")
+                                print(
+                                    "Error adding mute listener for element \(element): \(muteStatus)"
+                                )
                             #endif
                         }
                     }
@@ -1022,7 +1060,7 @@ class VolumeMonitor: ObservableObject {
         deviceListener = { [weak self] (_: UInt32, _: UnsafePointer<AudioObjectPropertyAddress>) in
             guard let self = self else {
                 #if DEBUG
-                print("VolumeMonitor deallocated in device listener")
+                    print("VolumeMonitor deallocated in device listener")
                 #endif
                 return
             }
@@ -1033,15 +1071,16 @@ class VolumeMonitor: ObservableObject {
 
         guard let deviceListener = deviceListener else {
             #if DEBUG
-            print("Failed to initialize device listener")
+                print("Failed to initialize device listener")
             #endif
             return
         }
 
-        let deviceStatus = AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
+        let deviceStatus = AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
         if deviceStatus != noErr {
             #if DEBUG
-            print("Error adding device listener: \(deviceStatus)")
+                print("Error adding device listener: \(deviceStatus)")
             #endif
         }
     }
@@ -1068,7 +1107,8 @@ class VolumeMonitor: ObservableObject {
                     mScope: kAudioDevicePropertyScopeOutput,
                     mElement: element
                 )
-                AudioObjectRemovePropertyListenerBlock(defaultOutputDeviceID, &volumeAddress, audioQueue, volumeListener)
+                AudioObjectRemovePropertyListenerBlock(
+                    defaultOutputDeviceID, &volumeAddress, audioQueue, volumeListener)
             }
         }
 
@@ -1079,19 +1119,21 @@ class VolumeMonitor: ObservableObject {
                     mScope: kAudioDevicePropertyScopeOutput,
                     mElement: element
                 )
-                AudioObjectRemovePropertyListenerBlock(defaultOutputDeviceID, &muteAddress, audioQueue, muteListener)
+                AudioObjectRemovePropertyListenerBlock(
+                    defaultOutputDeviceID, &muteAddress, audioQueue, muteListener)
             }
         }
 
         if let deviceListener = deviceListener {
-            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
         }
 
         self.volumeListener = nil
         self.deviceListener = nil
         self.muteListener = nil
         #if DEBUG
-        print("Stopped listening")
+            print("Stopped listening")
         #endif
     }
 }

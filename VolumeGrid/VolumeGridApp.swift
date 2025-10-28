@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import ServiceManagement
 import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -11,6 +12,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var volumeMenuItem: NSMenuItem?
     private var statusBarVolumeView: StatusBarVolumeView?
     private var volumeMenuContentView: VolumeMenuItemView?
+    private var launchAtLoginMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Treat the app as an accessory so it stays out of the Dock.
@@ -78,6 +80,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         launchAtLoginItem.target = self
         launchAtLoginItem.state = isLaunchAtLoginEnabled() ? .on : .off
         menu.addItem(launchAtLoginItem)
+        launchAtLoginMenuItem = launchAtLoginItem
 
         menu.addItem(NSMenuItem.separator())
 
@@ -231,32 +234,84 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             enableLaunchAtLogin()
         }
         // Refresh the menu state.
-        if let menu = statusItem?.menu,
-            let launchItem = menu.items.first(where: { $0.title == "Start at Login" })
-        {
-            launchItem.state = isLaunchAtLoginEnabled() ? .on : .off
-        }
+        launchAtLoginMenuItem?.state = isLaunchAtLoginEnabled() ? .on : .off
     }
 
     private func isLaunchAtLoginEnabled() -> Bool {
-        let launchAgentsPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents")
-        let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
-
-        return FileManager.default.fileExists(atPath: plistPath.path)
+        if #available(macOS 13.0, *) {
+            return SMAppService.mainApp.status == .enabled
+        } else {
+            // Fallback for older macOS versions: check plist
+            let launchAgentsPath = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/LaunchAgents")
+            let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
+            return FileManager.default.fileExists(atPath: plistPath.path)
+        }
     }
 
     private func enableLaunchAtLogin() {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+
+            if #available(macOS 13.0, *) {
+                do {
+                    try SMAppService.mainApp.register()
+                    DispatchQueue.main.async {
+                        self.launchAtLoginMenuItem?.state = .on
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        self.showError(
+                            "Failed to enable launch at login: \(error.localizedDescription)")
+                    }
+                }
+            } else {
+                // Fallback to plist-based approach for older macOS
+                self.enableLaunchAtLoginLegacy()
+            }
+        }
+    }
+
+    private func disableLaunchAtLogin() {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+
+            if #available(macOS 13.0, *) {
+                do {
+                    try SMAppService.mainApp.unregister()
+                    DispatchQueue.main.async {
+                        self.launchAtLoginMenuItem?.state = .off
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        self.showError(
+                            "Failed to disable launch at login: \(error.localizedDescription)")
+                    }
+                }
+            } else {
+                // Fallback to plist-based approach for older macOS
+                self.disableLaunchAtLoginLegacy()
+            }
+        }
+    }
+
+    private func enableLaunchAtLoginLegacy() {
         let launchAgentsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
 
         // Ensure the directory exists.
-        try? FileManager.default.createDirectory(
-            at: launchAgentsPath, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: launchAgentsPath, withIntermediateDirectories: true)
+        } catch {
+            DispatchQueue.main.async {
+                self.showError(
+                    "Failed to create LaunchAgents directory: \(error.localizedDescription)")
+            }
+            return
+        }
 
         let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
-
-        // Locate the app bundle.
         let appPath = Bundle.main.bundlePath
 
         let plistContent = """
@@ -268,15 +323,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 <string>eux.volumegrid</string>
                 <key>ProgramArguments</key>
                 <array>
-                    <string>open</string>
+                    <string>/usr/bin/open</string>
                     <string>\(appPath)</string>
                 </array>
                 <key>RunAtLoad</key>
                 <true/>
-                <key>StandardErrorPath</key>
-                <string>/tmp/eux.volumegrid.stderr</string>
-                <key>StandardOutPath</key>
-                <string>/tmp/eux.volumegrid.stdout</string>
             </dict>
             </plist>
             """
@@ -289,12 +340,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             process.arguments = ["load", plistPath.path]
             try process.run()
             process.waitUntilExit()
+
+            DispatchQueue.main.async {
+                self.launchAtLoginMenuItem?.state = .on
+            }
         } catch {
-            print("Failed to enable launch at login: \(error)")
+            DispatchQueue.main.async {
+                self.showError("Failed to enable launch at login: \(error.localizedDescription)")
+            }
         }
     }
 
-    private func disableLaunchAtLogin() {
+    private func disableLaunchAtLoginLegacy() {
         let launchAgentsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
         let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
@@ -309,9 +366,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             // Remove the plist file.
             try FileManager.default.removeItem(at: plistPath)
+
+            DispatchQueue.main.async {
+                self.launchAtLoginMenuItem?.state = .off
+            }
         } catch {
-            print("Failed to disable launch at login: \(error)")
+            DispatchQueue.main.async {
+                self.showError("Failed to disable launch at login: \(error.localizedDescription)")
+            }
         }
+    }
+
+    private func showError(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Launch at Login"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 }
 

@@ -74,7 +74,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
-          name: VolumeGrid ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           files: VolumeGrid-${{ github.ref_name }}.dmg
           generate_release_notes: true
         env:

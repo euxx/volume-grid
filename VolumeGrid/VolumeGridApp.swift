@@ -73,15 +73,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem.separator())
 
         // 添加开机启动选项
-        let launchAtLoginItem = NSMenuItem(title: "开机启动", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        let launchAtLoginItem = NSMenuItem(title: "Start at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launchAtLoginItem.target = self
         launchAtLoginItem.state = isLaunchAtLoginEnabled() ? .on : .off
         menu.addItem(launchAtLoginItem)
 
         menu.addItem(NSMenuItem.separator())
 
+        let aboutItem = NSMenuItem(title: "About", action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         // 添加退出选项
-        let quitItem = NSMenuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -136,6 +142,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
+    }
+
+    @objc private func showAbout() {
+        let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "VolumeGrid"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知版本"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "未知构建"
+
+        let alert = NSAlert()
+        alert.messageText = appName
+        alert.informativeText = "Version：\(version)"
+        alert.alertStyle = .informational
+
+        let contactString = NSMutableAttributedString(string: "GitHub")
+        let range = (contactString.string as NSString).range(of: "GitHub")
+        if range.location != NSNotFound {
+            contactString.addAttribute(
+                .link,
+                value: "https://github.com/euxx/VolumeGrid",
+                range: range
+            )
+        }
+
+        let contactLabel = NSTextField(labelWithAttributedString: contactString)
+        contactLabel.allowsEditingTextAttributes = true
+        contactLabel.isSelectable = true
+        contactLabel.lineBreakMode = .byWordWrapping
+        contactLabel.maximumNumberOfLines = 0
+        contactLabel.translatesAutoresizingMaskIntoConstraints = false
+        alert.accessoryView = contactLabel
+        contactLabel.widthAnchor.constraint(equalToConstant: 280).isActive = true
+
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     // 将格数转换为字符串格式（简化为只显示当前音量）

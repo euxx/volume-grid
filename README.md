@@ -64,3 +64,12 @@ macOS Tohoe 26 改变了系统音量调节弹窗的样式，只在激活显示�
 
 - 双击 `.app`，或使用 `open build/Build/Products/Release/VolumeGrid.app`
 - 在 Xcode 中选择 `Product > Run`（快捷键 `⌘R`），可以直接调试运行
+
+
+## Description
+
+Brings back the classic volume HUD style on macOS Tohoe 26 and more.
+
+Naive, Lightweight, and Minimalistic volume HUD replacement for macOS Tohoe 26+.
+
+Suit for users who frequently adjust volume and have multi-monitor setups.

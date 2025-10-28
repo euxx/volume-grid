@@ -35,6 +35,11 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
+      - name: Install create-dmg
+        shell: bash
+        run: |
+          brew install create-dmg
+
       - name: Package app bundle
         shell: bash
         run: |
@@ -47,7 +52,16 @@ jobs:
           TMP_DIR="tmp_dmg"
           mkdir -p "${TMP_DIR}"
           cp -r "${APP_PATH}" "${TMP_DIR}/"
-          hdiutil create -volname "VolumeGrid" -srcfolder "${TMP_DIR}" -ov -format UDZO "VolumeGrid-${GITHUB_REF_NAME}.dmg"
+          create-dmg \
+            --volname "VolumeGrid" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "VolumeGrid.app" 150 200 \
+            --app-drop-link 450 200 \
+            "VolumeGrid-${GITHUB_REF_NAME}.dmg" \
+            "${TMP_DIR}"
+
           rm -rf "${TMP_DIR}"
 
       - name: Upload build artifact

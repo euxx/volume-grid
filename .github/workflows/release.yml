@@ -44,20 +44,24 @@ jobs:
             echo "Expected app bundle not found at ${APP_PATH}"
             exit 1
           fi
-          ditto -c -k --keepParent "${APP_PATH}" "VolumeGrid-${GITHUB_REF_NAME}.zip"
+          TMP_DIR="tmp_dmg"
+          mkdir -p "${TMP_DIR}"
+          cp -r "${APP_PATH}" "${TMP_DIR}/"
+          hdiutil create -volname "VolumeGrid" -srcfolder "${TMP_DIR}" -ov -format UDZO "VolumeGrid-${GITHUB_REF_NAME}.dmg"
+          rm -rf "${TMP_DIR}"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: VolumeGrid-${{ github.ref_name }}-app
-          path: VolumeGrid-${{ github.ref_name }}.zip
+          path: VolumeGrid-${{ github.ref_name }}.dmg
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
           name: VolumeGrid ${{ github.ref_name }}
-          files: VolumeGrid-${{ github.ref_name }}.zip
+          files: VolumeGrid-${{ github.ref_name }}.dmg
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

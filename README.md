@@ -20,10 +20,10 @@ macOS Tohoe 26 改变了系统音量调节弹窗的样式，只在激活显示�
 - [x] 黑暗模式适配/浅色模式适配 / 根据背景色调整弹窗 hub 颜色
 - [x] 支持静音图标显示
 - [ ] 开源许可证选择
-- [ ] Github Action 自动构建发布
+- [x] Github Action 自动构建发布
 - [ ] 国际化支持
 - [ ] 应用图标
-- [ ] 开启启动功能生效
+- [ ] 开机启动功能生效
 - [ ] 关于 - 显示应用版本、联系方式等信息
 - [x] 重命名
 - [ ] 所有中文内容替换为英文
@@ -53,6 +53,12 @@ macOS Tohoe 26 改变了系统音量调节弹窗的样式，只在激活显示�
    ```
    完成后 `.app` 位于 `~/Downloads/volumegrid-build/Build/Products/Release/VolumeGrid.app`
 6. 若使用 Xcode GUI，可在 `Xcode > Settings... > Locations > Derived Data` 中选择 `Custom`, 将路径设置到 `~/Downloads/volumegrid-build`，然后执行 `Product > Archive`，输出同样会落在下载目录
+
+## 自动化构建发布
+
+- 推送 `v*` 格式的标签（例如 `v0.1.0`）到远程仓库会自动触发 GitHub Action
+- CI 会在 macOS runner 上使用 Xcode 15.4 执行 Release 构建
+- 构建完成后会把 `VolumeGrid-<tag>.zip` 上传到新的 GitHub Release，同时保留 workflow artifact 方便调试
 
 ## 运行方式
 

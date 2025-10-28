@@ -1,0 +1,63 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Build VolumeGrid Release
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "latest-stable"
+
+      - name: Build VolumeGrid
+        shell: bash
+        run: |
+          set -eo pipefail
+          xcodebuild \
+            -project VolumeGrid.xcodeproj \
+            -scheme VolumeGrid \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package app bundle
+        shell: bash
+        run: |
+          set -eo pipefail
+          APP_PATH="build/Build/Products/Release/VolumeGrid.app"
+          if [[ ! -d "${APP_PATH}" ]]; then
+            echo "Expected app bundle not found at ${APP_PATH}"
+            exit 1
+          fi
+          ditto -c -k --keepParent "${APP_PATH}" "VolumeGrid-${GITHUB_REF_NAME}.zip"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VolumeGrid-${{ github.ref_name }}-app
+          path: VolumeGrid-${{ github.ref_name }}.zip
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: VolumeGrid ${{ github.ref_name }}
+          files: VolumeGrid-${{ github.ref_name }}.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

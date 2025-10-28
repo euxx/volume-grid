@@ -21,7 +21,7 @@ VolumeGrid restores that classic HUD and adds the current output device indicato
 - [x] Automate releases with GitHub Actions
 - [ ] Add internationalization
 - [ ] Create an app icon
-- [ ] Finalize launch-at-login behavior
+- [x] Finalize launch-at-login behavior
 - [x] About view with app version and contact details
 - [x] Rename the project
 - [x] Replace all Chinese content with English

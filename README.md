@@ -47,7 +47,7 @@ These tools ensure code adheres to project standards and run automatically durin
 
 - [x] Dark and light mode support / adapt HUD colors to the background
 - [x] Display a mute icon
-- [ ] Choose an open-source license
+- [x] Choose an open-source license
 - [x] Automate releases with GitHub Actions
 - [ ] Add internationalization
 - [ ] Create an app icon
@@ -56,3 +56,7 @@ These tools ensure code adheres to project standards and run automatically durin
 - [x] Rename the project
 - [x] Replace all Chinese content with English
 - [x] Linters, type checkers, auto-formatters
+
+## License
+
+VolumeGrid is available under the MIT License. See `LICENSE` for details.

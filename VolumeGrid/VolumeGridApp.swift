@@ -13,15 +13,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var volumeMenuContentView: VolumeMenuItemView?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 设置应用为辅助应用，不显示在Dock中
+        // Treat the app as an accessory so it stays out of the Dock.
         NSApplication.shared.setActivationPolicy(.accessory)
 
-        // 创建音量监听器
+        // Start the volume monitor.
         volumeMonitor = VolumeMonitor()
         volumeMonitor?.startListening()
         volumeMonitor?.getAudioDevices()
 
-        // 创建菜单栏图标
+        // Create the menu bar status item.
         setupStatusBarItem()
     }
 
@@ -35,7 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: 20)
 
         if let button = statusItem?.button {
-            // 创建自定义视图，包含图标和进度条
+            // Attach the custom view with the icon and progress indicator.
             let statusView = StatusBarVolumeView()
             button.addSubview(statusView)
             NSLayoutConstraint.activate([
@@ -47,15 +47,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             statusBarVolumeView = statusView
         }
 
-        // 创建菜单
+        // Build the status menu.
         let menu = NSMenu()
 
-        // 添加当前音量显示（包含进度条）
+        // Add the menu item that shows the current volume (with a progress bar).
         let volumeItem = NSMenuItem()
 
-        // 创建自定义视图容纳文字和进度条
+        // Create the custom view that holds the text and progress bar.
         let initialVolume = volumeMonitor?.volumePercentage ?? 0
-        let initialDevice = volumeMonitor?.currentDevice?.name ?? "未知设备"
+        let initialDevice = volumeMonitor?.currentDevice?.name ?? "Unknown Device"
         let volumeView = VolumeMenuItemView()
         volumeView.update(
             percentage: initialVolume,
@@ -72,7 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        // 添加开机启动选项
+        // Add the launch-at-login toggle.
         let launchAtLoginItem = NSMenuItem(
             title: "Start at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launchAtLoginItem.target = self
@@ -87,7 +87,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        // 添加退出选项
+        // Add the quit action.
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -95,23 +95,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.menu = menu
         statusMenu = menu
 
-        // 实时更新菜单中的音量和设备显示
+        // Keep menu volume and device information in sync.
         volumeSubscriber = volumeMonitor?.$volumePercentage
             .receive(on: DispatchQueue.main)
             .sink { [weak self] volume in
                 guard let self else { return }
 
-                // 更新菜单栏图标下的进度条
+                // Refresh the progress indicator below the status bar icon.
                 DispatchQueue.main.async {
                     self.statusBarVolumeView?.update(percentage: volume)
                 }
 
-                // 更新菜单中的自定义视图
+                // Update the custom view inside the menu.
                 if let volumeItem = self.volumeMenuItem,
                     let menuView = self.volumeMenuContentView
                 {
                     let formatted = self.formattedVolumeString(for: volume)
-                    let deviceName = self.volumeMonitor?.currentDevice?.name ?? "未知设备"
+                    let deviceName = self.volumeMonitor?.currentDevice?.name ?? "Unknown Device"
                     DispatchQueue.main.async {
                         menuView.update(
                             percentage: volume,
@@ -130,7 +130,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     let volumeItem = self.volumeMenuItem,
                     let menuView = self.volumeMenuContentView
                 else { return }
-                let name = device?.name ?? "未知设备"
+                let name = device?.name ?? "Unknown Device"
                 let volume = self.volumeMonitor?.volumePercentage ?? 0
                 let formatted = self.formattedVolumeString(for: volume)
                 menuView.update(
@@ -150,13 +150,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let appName =
             Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "VolumeGrid"
         let version =
-            Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "未知版本"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "未知构建"
+            Bundle.main.object(
+                forInfoDictionaryKey: "CFBundleShortVersionString"
+            ) as? String ?? "Unknown Version"
+
+        let build =
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+            ?? "Unknown Build"
 
         let alert = NSAlert()
         alert.messageText = appName
-        alert.informativeText = "Version：\(version)"
+        alert.informativeText = "Version: \(version) (Build \(build))"
         alert.alertStyle = .informational
 
         let contactString = NSMutableAttributedString(string: "GitHub")
@@ -182,7 +186,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         alert.runModal()
     }
 
-    // 将格数转换为字符串格式（简化为只显示当前音量）
+    // Convert the block count into a readable string (simplified to only show the current volume).
     private func formatVolumeString(quarterBlocks: CGFloat) -> String {
         let integerPart = Int(quarterBlocks)
         let fractionalPart = quarterBlocks - CGFloat(integerPart)
@@ -226,9 +230,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             enableLaunchAtLogin()
         }
-        // 更新菜单状态
+        // Refresh the menu state.
         if let menu = statusItem?.menu,
-            let launchItem = menu.items.first(where: { $0.title == "开机启动" })
+            let launchItem = menu.items.first(where: { $0.title == "Start at Login" })
         {
             launchItem.state = isLaunchAtLoginEnabled() ? .on : .off
         }
@@ -246,13 +250,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let launchAgentsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents")
 
-        // 确保目录存在
+        // Ensure the directory exists.
         try? FileManager.default.createDirectory(
             at: launchAgentsPath, withIntermediateDirectories: true)
 
         let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
 
-        // 获取应用路径
+        // Locate the app bundle.
         let appPath = Bundle.main.bundlePath
 
         let plistContent = """
@@ -279,7 +283,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             try plistContent.write(to: plistPath, atomically: true, encoding: .utf8)
-            // 加载Launch Agent
+            // Load the Launch Agent.
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
             process.arguments = ["load", plistPath.path]
@@ -296,14 +300,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
 
         do {
-            // 卸载Launch Agent
+            // Unload the Launch Agent.
             let unloadProcess = Process()
             unloadProcess.executableURL = URL(fileURLWithPath: "/bin/launchctl")
             unloadProcess.arguments = ["unload", plistPath.path]
             try unloadProcess.run()
             unloadProcess.waitUntilExit()
 
-            // 删除plist文件
+            // Remove the plist file.
             try FileManager.default.removeItem(at: plistPath)
         } catch {
             print("Failed to disable launch at login: \(error)")
@@ -316,7 +320,7 @@ struct VolumeGridApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // 移除WindowGroup，使应用后台运行
+        // Remove the WindowGroup so the app runs in the background.
         Settings {
             EmptyView()
         }

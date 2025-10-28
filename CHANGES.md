@@ -1,100 +1,100 @@
-# 更新说明
+# Release Notes
 
-## 最新更新 v2.4 - 2025-10-25
+## Latest Update v2.4 - 2025-10-25
 
-### 界面优化
+### UI Improvements
 
-- **进度条背景色调整**：改为半透明灰色（30%不透明度），与填充色区分开
-- 现在可以清楚看到进度条的变化和音量级别
+- **Progress bar background color**: switched to a translucent gray (30% opacity) to separate it from the fill color.
+- The progress bar now makes volume changes and levels easier to read at a glance.
 
-## 最新更新 v2.3 - 2025-10-25
+## Latest Update v2.3 - 2025-10-25
 
-### 界面优化
+### UI Improvements
 
-- **进度条颜色调整**：从蓝色改为灰色，更低调优雅
-- 同时调整了菜单栏进度条和菜单中的进度条颜色
+- **Progress bar color**: changed from blue to gray for a more understated look.
+- Updated the colors for both the menu bar indicator and the in-menu progress bar.
 
-## 最新更新 v2.2 - 2025-10-25
+## Latest Update v2.2 - 2025-10-25
 
-### 界面优化
+### UI Improvements
 
-- **菜单栏图标宽度调整**：从 30pt 减少到 20pt，与小喇叭图标尺寸适配
-- **水平居中布局**：小喇叭图标和进度条在菜单栏项中水平居中对齐
-- **紧凑设计**：整体占用更少的菜单栏空间，视觉更协调
+- **Menu bar icon width**: reduced from 30pt to 20pt to match the speaker glyph.
+- **Centered layout**: the speaker glyph and progress bar are now horizontally centered.
+- **Compact design**: the item consumes less menu bar space for a more balanced appearance.
 
-## 最新更新 v2.1 - 2025-10-25
+## Latest Update v2.1 - 2025-10-25
 
-### 界面优化
+### UI Improvements
 
-- **进度条长度调整**：从 44pt 减少到 14pt，更精致紧凑
-- **菜单栏项宽度优化**：从 60pt 减少到 30pt，节省菜单栏空间
+- **Progress bar length**: reduced from 44pt to 14pt for a tighter look.
+- **Menu bar item width**: reduced from 60pt to 30pt to save space.
 
-## 功能变更 v2.0
+## Feature Update v2.0
 
-### 菜单栏音量进度条显示
+### Menu Bar Volume Progress Indicator
 
-现在在菜单栏的小喇叭图标下方直接显示一个小横条进度条，实时显示当前音量级别。同时保留了点击菜单中的详细音量信息。
+The menu bar now shows a slim progress indicator directly beneath the speaker icon, updating in real time while keeping the detailed volume information inside the menu.
 
-#### 具体改动：
+#### Detailed Changes
 
-1. **菜单栏图标下的进度条**（NEW）：
-   - 位置：小喇叭图标下方
-   - 样式：2pt 高、浅灰背景、深灰填充
-   - 宽度：14pt，根据音量百分比（0-100%）动态更新
-   - 响应速度：实时，无延迟
+1. **Progress indicator beneath the menu bar icon (NEW):**
+   - Placement: directly under the speaker icon.
+  - Appearance: 2pt tall with a light gray track and dark gray fill.
+  - Width: 14pt, updated dynamically based on the volume percentage (0-100%).
+  - Responsiveness: real time with no delay.
 
-2. **菜单项中的详细音量信息**（RETAIN）：
-   - 保留了原来的菜单中音量显示（包含进度条 + 百分比文字）
-   - 点击菜单栏图标时可查看详细信息
+2. **Detailed volume info in the menu (RETAINED):**
+   - Keeps the original in-menu view (progress bar + percentage text).
+   - View the details by clicking the menu bar icon.
 
-#### 视觉效果：
+#### Visual Example
 
 ```
-菜单栏示例：
+Menu bar example:
 ┌─────────────────┐
-│ 🔊              │  ← 图标
-│ ────────        │  ← 新增进度条（显示 50% 音量）
+│ 🔊              │  ← Icon
+│ ────────        │  ← New indicator (shows 50% volume)
 └─────────────────┘
 
-点击后的菜单：
-[菜单]
-  ├─ 当前音量: 50%
-  │  [██████░░░░░░░░] ← 详细进度条
+Menu after click:
+[Menu]
+  ├─ Current Volume: 50%
+  │  [██████░░░░░░░░] ← Detailed progress bar
   │
-  ├─ 当前设备: Built-in Speaker
+  ├─ Current Device: Built-in Speaker
   ├─ ────────────
-  ├─ 开机启动 ☑
+  ├─ Launch at Login ☑
   ├─ ────────────
-  └─ 退出
+  └─ Quit
 ```
 
-#### 代码位置：
+#### Code Locations
 
-- **文件**：`VolumeGridApp.swift`
-- **新增方法**：`createStatusBarCustomView(percentage: Int) -> NSView`
-  - 创建包含图标和进度条的菜单栏自定义视图
+- **File**: `VolumeGridApp.swift`
+- **New method**: `createStatusBarCustomView(percentage: Int) -> NSView`
+  - Builds the custom menu bar view with the icon and progress indicator.
 
-- **修改的方法**：
-  - `setupStatusBarItem()`：初始化时使用自定义视图而非纯图标
-  - 音量订阅块：同时更新菜单栏图标下的进度条和菜单中的详细信息
+- **Updated methods:**
+  - `setupStatusBarItem()`: now initializes the custom view instead of a plain icon.
+  - Volume subscription block: updates both the menu bar indicator and the in-menu details simultaneously.
 
-- **删除的方法**：
-  - `updateStatusBarIcon()`：已被自定义视图方法替代
+- **Removed method:**
+  - `updateStatusBarIcon()`: replaced by the custom view approach.
 
-#### 技术细节：
+#### Technical Notes
 
-- 菜单栏项宽度设置为 20pt（与图标适配）
-- 小喇叭图标和进度条水平居中对齐
-- 实时响应音量变化，无防抖延迟
-- 自动适应暗/亮模式主题
+- Menu bar item width set to 20pt to match the icon.
+- Speaker icon and progress bar remain horizontally centered.
+- Reacts to volume changes instantly with no debounce delay.
+- Automatically adapts to dark and light system themes.
 
-## 编译状态
+## Build Status
 
-✅ 项目已成功编译（Build Succeeded）
+✅ Build succeeded.
 
-## 下一步运行
+## Next Steps
 
-1. 双击 `/tmp/volumegrid-build/Build/Products/Debug/VolumeGrid.app` 运行应用
-2. 或使用命令：`open /tmp/volumegrid-build/Build/Products/Debug/VolumeGrid.app`
-3. 调整系统音量，菜单栏进度条会实时显示
-4. 点击菜单栏图标查看详细菜单信息
+1. Double-click `/tmp/volumegrid-build/Build/Products/Debug/VolumeGrid.app` to launch the app.
+2. Or run: `open /tmp/volumegrid-build/Build/Products/Debug/VolumeGrid.app`
+3. Adjust the system volume to see the menu bar indicator update.
+4. Click the menu bar icon to view detailed information.

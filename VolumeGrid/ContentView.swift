@@ -3,13 +3,13 @@ import Cocoa
 import Combine
 import SwiftUI
 
-// 音频设备结构体
+// Audio device model.
 struct AudioDevice: Identifiable, Hashable {
     let id: AudioDeviceID
     let name: String
 }
 
-// SwiftUI 视图
+// SwiftUI view.
 struct ContentView: View {
     @EnvironmentObject private var volumeMonitor: VolumeMonitor
 
@@ -20,13 +20,13 @@ struct ContentView: View {
                 .foregroundStyle(.tint)
             Text("VolumeGrid")
                 .font(.headline)
-            Text("当前音量: \(volumeMonitor.volumePercentage)%")
+            Text("Current Volume: \(volumeMonitor.volumePercentage)%")
                 .font(.title2)
                 .padding()
 
-            // 显示当前设备
+            // Show the current output device.
             if let currentDevice = volumeMonitor.currentDevice {
-                Text("当前设备: \(currentDevice.name)")
+                Text("Current Device: \(currentDevice.name)")
                     .font(.subheadline)
                     .padding(.bottom, 10)
             }
@@ -42,7 +42,7 @@ struct ContentView: View {
     }
 }
 
-// VolumeMonitor 类
+// VolumeMonitor class.
 class VolumeMonitor: ObservableObject {
     @Published var volumePercentage: Int = 0
     @Published var audioDevices: [AudioDevice] = []
@@ -62,7 +62,7 @@ class VolumeMonitor: ObservableObject {
     private var lastHandledSystemEvent: (timestamp: TimeInterval, data: Int)?
     private var muteListener: AudioObjectPropertyListenerBlock?
 
-    // HUD 常量
+    // HUD constants.
     private let hudWidth: CGFloat = 320
     private let hudHeight: CGFloat = 160
     private let hudAlpha: CGFloat = 0.97
@@ -144,12 +144,12 @@ class VolumeMonitor: ObservableObject {
         #endif
     }
 
-    // 创建音量方格视图
+    // Build the grid of volume blocks.
     private func createVolumeBlocksView(fillFraction: CGFloat, style: HUDStyle) -> NSView {
         let blockCount = 16
-        let blockWidth: CGFloat = 14  // 稍微增宽
-        let blockHeight: CGFloat = 6  // 稍微减高，更细长
-        let blockSpacing: CGFloat = 2  // 减小间距
+        let blockWidth: CGFloat = 14  // Slightly wider blocks.
+        let blockHeight: CGFloat = 6  // Slightly shorter, more slender blocks.
+        let blockSpacing: CGFloat = 2  // Reduced spacing.
 
         let totalWidth = CGFloat(blockCount) * blockWidth + CGFloat(blockCount - 1) * blockSpacing
         let containerView = NSView(
@@ -168,12 +168,12 @@ class VolumeMonitor: ObservableObject {
                 ))
 
             block.wantsLayer = true
-            block.layer?.cornerRadius = 0.5  // 更小的圆角，更精致
+            block.layer?.cornerRadius = 0.5  // Smaller corner radius for a refined look.
             block.layer?.backgroundColor = style.blockEmptyColor.cgColor
 
             var blockFill = totalBlocks - CGFloat(i)
             blockFill = max(0, min(1, blockFill))
-            blockFill = (blockFill * 4).rounded() / 4  // 最小支持 1/4 单位
+            blockFill = (blockFill * 4).rounded() / 4  // Support quarter-block increments.
 
             if blockFill > 0 {
                 let fillLayer = CALayer()
@@ -190,7 +190,7 @@ class VolumeMonitor: ObservableObject {
         return containerView
     }
 
-    // 设置 HUD 窗口
+    // Configure the HUD windows.
     private func setupHUDWindow() {
         hudWindows = NSScreen.screens.map { screen in
             let window = NSWindow(
@@ -209,7 +209,7 @@ class VolumeMonitor: ObservableObject {
             ]
             window.ignoresMouseEvents = true
 
-            // 创建容器视图，添加Mac风格的背景
+            // Build the container view with a macOS-style background.
             let containerView = NSView(
                 frame: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight))
             containerView.wantsLayer = true
@@ -218,7 +218,7 @@ class VolumeMonitor: ObservableObject {
             containerView.layer?.cornerRadius = 12
             containerView.layer?.masksToBounds = true
 
-            // 添加轻微的阴影效果
+            // Add a subtle shadow.
             containerView.layer?.shadowColor = style.shadowColor.cgColor
             containerView.layer?.shadowOpacity = 1.0
             containerView.layer?.shadowOffset = CGSize(width: 0, height: 2)
@@ -226,7 +226,7 @@ class VolumeMonitor: ObservableObject {
 
             window.contentView = containerView
 
-            // 设置窗口在对应屏幕的中心
+            // Center the window on its screen.
             let screenFrame = screen.frame
             let windowOrigin = CGPoint(
                 x: screenFrame.origin.x + (screenFrame.width - hudWidth) / 2,
@@ -234,14 +234,14 @@ class VolumeMonitor: ObservableObject {
             )
             window.setFrameOrigin(windowOrigin)
 
-            // 设置初始透明度
+            // Set the initial opacity.
             window.alphaValue = self.hudAlpha
 
             return window
         }
     }
 
-    // 获取默认输出设备 ID
+    // Fetch the default output device ID.
     @discardableResult
     private func updateDefaultOutputDevice() -> AudioDeviceID {
         var address = AudioObjectPropertyAddress(
@@ -268,7 +268,7 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
-    // 更新可用的音量通道（优先主通道，其次左右声道）
+    // Update available volume elements (prefer main, then left/right channels).
     @discardableResult
     private func updateVolumeElements(for deviceID: AudioDeviceID) -> Bool {
         let candidates: [AudioObjectPropertyElement] = [
@@ -343,12 +343,12 @@ class VolumeMonitor: ObservableObject {
         return updateMuteElements(for: deviceID)
     }
 
-    // 检查设备是否支持音量控制
+    // Check whether the device supports volume control.
     private func deviceSupportsVolumeControl(_ deviceID: AudioDeviceID) -> Bool {
         return updateVolumeElements(for: deviceID)
     }
 
-    // 获取当前音量
+    // Read the current volume.
     func getCurrentVolume() -> Float32? {
         let deviceID = updateDefaultOutputDevice()
         guard deviceID != 0 else { return nil }
@@ -391,7 +391,7 @@ class VolumeMonitor: ObservableObject {
         return total / Float32(channelVolumes.count)
     }
 
-    // 获取音频设备列表
+    // Fetch audio devices.
     func getAudioDevices() {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
@@ -429,7 +429,7 @@ class VolumeMonitor: ObservableObject {
 
         DispatchQueue.main.async {
             self.audioDevices = devices
-            // 设置当前设备
+            // Update the current device reference.
             let currentID =
                 self.defaultOutputDeviceID != 0
                 ? self.defaultOutputDeviceID : self.updateDefaultOutputDevice()
@@ -439,7 +439,7 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
-    // 获取设备名称
+    // Resolve the device name.
     private func getDeviceName(_ deviceID: AudioDeviceID) -> String? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceNameCFString,
@@ -530,7 +530,7 @@ class VolumeMonitor: ObservableObject {
         return muteDetected
     }
 
-    // 音量变化回调
+    // Handle volume changes.
     private func volumeChanged(address _: AudioObjectPropertyAddress) {
         guard let volume = getCurrentVolume() else {
             #if DEBUG
@@ -549,10 +549,10 @@ class VolumeMonitor: ObservableObject {
             let epsilon: CGFloat = 0.001
             var shouldShowHUD = false
             if let previousScalar {
-                // 忽略未造成实际音量变化的事件（例如系统通知带来的虚假回调）
+                // Ignore events that do not affect the actual volume (e.g., system notification noise).
                 shouldShowHUD = abs(previousScalar - currentScalar) > epsilon
                 if !shouldShowHUD {
-                    // 在边界值（0 或最大音量）时，仍然响应用户的重复按键
+                    // At min/max volume keep responding to repeated key presses.
                     let isAtLowerBound = previousScalar <= epsilon && currentScalar <= epsilon
                     let isAtUpperBound =
                         previousScalar >= (1 - epsilon) && currentScalar >= (1 - epsilon)
@@ -581,7 +581,7 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
-    // 默认设备变化回调
+    // Handle default device changes.
     private func deviceChanged() {
         stopListening()
         updateDefaultOutputDevice()
@@ -614,7 +614,7 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
-    // 显示音量 HUD
+    // Present the volume HUD.
     private func showVolumeHUD(volumeScalar: CGFloat) {
         let clampedScalar = max(0, min(volumeScalar, 1))
         let epsilon: CGFloat = 0.001
@@ -632,8 +632,8 @@ class VolumeMonitor: ObservableObject {
             volumeString = formattedQuarterBlocks
         }
 
-        // 预计算文本宽度以调整窗口大小
-        let deviceName = currentDevice?.name ?? "未知设备"
+        // Pre-compute text width so the window can match the content.
+        let deviceName = currentDevice?.name ?? "Unknown Device"
         let deviceNSString = NSString(string: deviceName + "  -")
         let deviceFont = NSFont.systemFont(ofSize: 12)
         let deviceTextSize = deviceNSString.size(withAttributes: [.font: deviceFont])
@@ -649,15 +649,16 @@ class VolumeMonitor: ObservableObject {
         let combinedWidth =
             deviceTextSize.width + gapBetweenDeviceAndCount + effectiveVolumeTextWidth
         let marginX: CGFloat = 24
-        let dynamicHudWidth = max(320, combinedWidth + 2 * marginX)  // 最小320，确保文本不被裁剪
+        // Minimum 320 to keep text visible.
+        let dynamicHudWidth = max(320, combinedWidth + 2 * marginX)
 
         for hudWindow in hudWindows {
-            // 检查窗口是否已经显示
+            // Check whether the window is already visible.
             let isAlreadyVisible = hudWindow.isVisible && hudWindow.alphaValue > 0.1
 
             let style = hudStyle(for: hudWindow.effectiveAppearance)
 
-            // 调整窗口宽度以适应内容
+            // Resize the window to fit the content.
             let screenFrame = NSScreen.screens[hudWindows.firstIndex(of: hudWindow)!].frame
             let newWindowFrame = NSRect(
                 x: screenFrame.origin.x + (screenFrame.width - dynamicHudWidth) / 2,
@@ -669,34 +670,34 @@ class VolumeMonitor: ObservableObject {
 
             guard let containerView = hudWindow.contentView else { continue }
 
-            // 清空之前的内容
+            // Remove any previous subviews.
             for subview in containerView.subviews {
                 subview.removeFromSuperview()
             }
 
-            // 调整容器视图大小
+            // Resize the container.
             containerView.frame = NSRect(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
             containerView.layer?.backgroundColor = style.backgroundColor.cgColor
             containerView.layer?.shadowColor = style.shadowColor.cgColor
             containerView.layer?.shadowOpacity = 1.0
 
-            // 创建音量图标容器
+            // Create the icon container.
             let iconContainerSize: CGFloat = 40
             let iconContainer = NSView()
             iconContainer.translatesAutoresizingMaskIntoConstraints = false
 
-            // 创建音量图标
+            // Create the volume icon.
             let iconName = isMutedForDisplay ? "speaker.slash.fill" : "speaker.wave.2.fill"
             let speakerImage = NSImage(
                 systemSymbolName: iconName, accessibilityDescription: "Volume")
             let speakerImageView = NSImageView(image: speakerImage!)
-            // 图标在容器内居中显示，使用原始大小
+            // Keep the icon centered in its container at its native size.
             let iconSize: CGFloat = isMutedForDisplay ? 40 : 47
             speakerImageView.imageScaling = .scaleProportionallyUpOrDown
             speakerImageView.contentTintColor = style.iconTintColor
 
             speakerImageView.translatesAutoresizingMaskIntoConstraints = false
-            // 将图标添加到容器中
+            // Add the icon to the container.
             iconContainer.addSubview(speakerImageView)
             NSLayoutConstraint.activate([
                 speakerImageView.centerXAnchor.constraint(equalTo: iconContainer.centerXAnchor),
@@ -705,12 +706,12 @@ class VolumeMonitor: ObservableObject {
                 speakerImageView.heightAnchor.constraint(equalToConstant: iconSize),
             ])
 
-            // 创建音量方格视图
+            // Create the grid of volume blocks.
             let blocksView = createVolumeBlocksView(fillFraction: displayedScalar, style: style)
             let blocksSize = blocksView.frame.size
             blocksView.translatesAutoresizingMaskIntoConstraints = false
 
-            // 创建设备名称标签
+            // Create the device name label.
             let deviceLabel = NSTextField(labelWithString: deviceName + "  -")
             deviceLabel.translatesAutoresizingMaskIntoConstraints = false
             deviceLabel.textColor = style.secondaryTextColor
@@ -724,7 +725,7 @@ class VolumeMonitor: ObservableObject {
             deviceLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
             deviceLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
 
-            // 创建音量格数标签
+            // Create the volume count label.
             let volumeText = NSTextField(labelWithString: volumeString)
             volumeText.translatesAutoresizingMaskIntoConstraints = false
             volumeText.textColor = style.primaryTextColor
@@ -743,7 +744,7 @@ class VolumeMonitor: ObservableObject {
             volumeWidthConstraint.priority = .required
             volumeWidthConstraint.isActive = true
 
-            // 使用 StackView 保证垂直居中和等距
+            // Use a stack view to keep everything centered and evenly spaced.
             let contentStack = NSStackView()
             contentStack.translatesAutoresizingMaskIntoConstraints = false
             contentStack.orientation = .vertical
@@ -798,7 +799,7 @@ class VolumeMonitor: ObservableObject {
                 blocksView.heightAnchor.constraint(equalToConstant: blocksSize.height),
             ])
 
-            // 只在窗口未显示时执行淡入动画
+            // Only run the fade-in animation if the window is not already visible.
             if !isAlreadyVisible {
                 hudWindow.alphaValue = 0
                 hudWindow.orderFrontRegardless()
@@ -809,15 +810,15 @@ class VolumeMonitor: ObservableObject {
                     }, completionHandler: nil)
             } else {
                 hudWindow.orderFrontRegardless()
-                // 窗口已经显示，保持当前透明度
+                // If the window is already visible, keep the current opacity.
                 hudWindow.alphaValue = self.hudAlpha
             }
         }
 
-        // 取消之前的隐藏任务
+        // Cancel any pending hide task.
         hideHUDWorkItem?.cancel()
 
-        // 创建新的隐藏任务
+        // Schedule a new hide task.
         let workItem = DispatchWorkItem {
             for hudWindow in self.hudWindows {
                 NSAnimationContext.runAnimationGroup(
@@ -834,7 +835,7 @@ class VolumeMonitor: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + hudDisplayDuration, execute: workItem)
     }
 
-    // 将 0.25、0.5、0.75 等小数格式化为 1/4、2/4、3/4
+    // Format fractional values like 0.25, 0.5, 0.75 into 1/4, 2/4, 3/4 markers.
     private func formatVolumeCount(_ value: CGFloat) -> String {
         let integerPart = Int(value)
         let fractionalPart = value - CGFloat(integerPart)
@@ -949,7 +950,7 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
-    // 注册监听器
+    // Register listeners.
     func startListening() {
         let deviceID = updateDefaultOutputDevice()
         guard deviceID != 0 else {
@@ -970,7 +971,7 @@ class VolumeMonitor: ObservableObject {
         _ = refreshMuteState(for: deviceID)
         startKeyMonitoring()
 
-        // 音量变化监听
+        // Subscribe to volume changes.
         volumeListener = {
             [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in
             guard let self = self else {
@@ -1050,7 +1051,7 @@ class VolumeMonitor: ObservableObject {
             }
         }
 
-        // 默认设备变化监听
+        // Subscribe to default device changes.
         var deviceAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -1085,7 +1086,7 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
-    // 停止监听
+    // Stop listening.
     func stopListening() {
         stopKeyMonitoring()
         guard let audioQueue = audioQueue else {

@@ -152,7 +152,7 @@ final class VolumeMenuItemView: NSView {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
         setupSubviews()
-        update(percentage: 0, formattedVolume: "0", deviceName: "未知设备")
+        update(percentage: 0, formattedVolume: "0", deviceName: "Unknown Device")
     }
 
     required init?(coder: NSCoder) {

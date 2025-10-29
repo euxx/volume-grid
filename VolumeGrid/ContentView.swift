@@ -71,6 +71,61 @@ class VolumeMonitor: ObservableObject {
     private var muteListener: AudioObjectPropertyListenerBlock?
     private var screenChangeObserver: NSObjectProtocol?
     private var isListening = false
+    private let stateLock = NSLock()
+
+    private func withStateLock<T>(_ body: () -> T) -> T {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return body()
+    }
+
+    private func setDefaultOutputDeviceID(_ id: AudioDeviceID) {
+        withStateLock { defaultOutputDeviceID = id }
+    }
+
+    private func getDefaultOutputDeviceID() -> AudioDeviceID {
+        withStateLock { defaultOutputDeviceID }
+    }
+
+    private func setListeningDeviceID(_ id: AudioDeviceID?) {
+        withStateLock { listeningDeviceID = id }
+    }
+
+    private func getListeningDeviceID() -> AudioDeviceID? {
+        withStateLock { listeningDeviceID }
+    }
+
+    private func setVolumeElements(_ elements: [AudioObjectPropertyElement]) {
+        withStateLock { volumeElements = elements }
+    }
+
+    private func getVolumeElements() -> [AudioObjectPropertyElement] {
+        withStateLock { volumeElements }
+    }
+
+    private func setMuteElements(_ elements: [AudioObjectPropertyElement]) {
+        withStateLock { muteElements = elements }
+    }
+
+    private func getMuteElements() -> [AudioObjectPropertyElement] {
+        withStateLock { muteElements }
+    }
+
+    private func setRegisteredVolumeElements(_ elements: [AudioObjectPropertyElement]) {
+        withStateLock { registeredVolumeElements = elements }
+    }
+
+    private func getRegisteredVolumeElements() -> [AudioObjectPropertyElement] {
+        withStateLock { registeredVolumeElements }
+    }
+
+    private func setRegisteredMuteElements(_ elements: [AudioObjectPropertyElement]) {
+        withStateLock { registeredMuteElements = elements }
+    }
+
+    private func getRegisteredMuteElements() -> [AudioObjectPropertyElement] {
+        withStateLock { registeredMuteElements }
+    }
 
     // HUD constants.
     private let hudWidth: CGFloat = 320
@@ -305,12 +360,13 @@ class VolumeMonitor: ObservableObject {
         let status = AudioObjectGetPropertyData(
             AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
         if status == noErr {
-            self.defaultOutputDeviceID = deviceID
+            self.setDefaultOutputDeviceID(deviceID)
             #if DEBUG
                 print("Updated default device ID: \(deviceID)")
             #endif
             return deviceID
         } else {
+            self.setDefaultOutputDeviceID(0)
             #if DEBUG
                 print("Error getting default output device: \(status)")
             #endif
@@ -338,7 +394,7 @@ class VolumeMonitor: ObservableObject {
 
             if AudioObjectHasProperty(deviceID, &address) {
                 if element == kAudioObjectPropertyElementMain {
-                    volumeElements = [element]
+                    setVolumeElements([element])
                     return true
                 }
                 detected.append(element)
@@ -346,11 +402,11 @@ class VolumeMonitor: ObservableObject {
         }
 
         if !detected.isEmpty {
-            volumeElements = detected
+            setVolumeElements(detected)
             return true
         }
 
-        volumeElements = []
+        setVolumeElements([])
         return false
     }
 
@@ -380,7 +436,7 @@ class VolumeMonitor: ObservableObject {
 
                 if readStatus == noErr {
                     if element == kAudioObjectPropertyElementMain {
-                        muteElements = [element]
+                        setMuteElements([element])
                         return true
                     }
                     detected.append(element)
@@ -389,11 +445,11 @@ class VolumeMonitor: ObservableObject {
         }
 
         if !detected.isEmpty {
-            muteElements = detected
+            setMuteElements(detected)
             return true
         }
 
-        muteElements = []
+        setMuteElements([])
         return false
     }
 
@@ -418,7 +474,7 @@ class VolumeMonitor: ObservableObject {
             return nil
         }
 
-        let elements = volumeElements
+        let elements = getVolumeElements()
         guard !elements.isEmpty else { return nil }
 
         var channelVolumes: [Float32] = []
@@ -480,7 +536,7 @@ class VolumeMonitor: ObservableObject {
                 return
             }
 
-            let elements = self.volumeElements
+            let elements = self.getVolumeElements()
             guard !elements.isEmpty else { return }
 
             let value = clampedScalar
@@ -521,7 +577,7 @@ class VolumeMonitor: ObservableObject {
     private func setMuteState(_ muted: Bool, for deviceID: AudioDeviceID) {
         guard deviceSupportsMute(deviceID) else { return }
 
-        let elements = muteElements
+        let elements = getMuteElements()
         guard !elements.isEmpty else { return }
 
         let muteValue: UInt32 = muted ? 1 : 0
@@ -591,10 +647,9 @@ class VolumeMonitor: ObservableObject {
         DispatchQueue.main.async {
             self.audioDevices = devices
             // Update the current device reference.
-            let currentID =
-                self.defaultOutputDeviceID != 0
-                ? self.defaultOutputDeviceID : self.updateDefaultOutputDevice()
-            if currentID != 0, let currentDevice = devices.first(where: { $0.id == currentID }) {
+            let existingID = self.getDefaultOutputDeviceID()
+            let resolvedID = existingID != 0 ? existingID : self.updateDefaultOutputDevice()
+            if resolvedID != 0, let currentDevice = devices.first(where: { $0.id == resolvedID }) {
                 self.currentDevice = currentDevice
             }
         }
@@ -635,24 +690,26 @@ class VolumeMonitor: ObservableObject {
         if let deviceID {
             resolvedDeviceID = deviceID
         } else {
-            let currentID =
-                defaultOutputDeviceID != 0 ? defaultOutputDeviceID : updateDefaultOutputDevice()
-            guard currentID != 0 else {
+            let currentID = getDefaultOutputDeviceID()
+            let effectiveID = currentID != 0 ? currentID : updateDefaultOutputDevice()
+            guard effectiveID != 0 else {
                 isDeviceMuted = false
                 return nil
             }
-            resolvedDeviceID = currentID
+            resolvedDeviceID = effectiveID
         }
 
-        guard !muteElements.isEmpty || deviceSupportsMute(resolvedDeviceID) else {
+        var muteElementsSnapshot = getMuteElements()
+        if muteElementsSnapshot.isEmpty && !deviceSupportsMute(resolvedDeviceID) {
             isDeviceMuted = false
             return nil
         }
+        muteElementsSnapshot = getMuteElements()
 
         var muteDetected = false
         var readAnyMuteChannel = false
 
-        for element in muteElements {
+        for element in muteElementsSnapshot {
             var address = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyMute,
                 mScope: kAudioDevicePropertyScopeOutput,
@@ -750,11 +807,12 @@ class VolumeMonitor: ObservableObject {
         startListening()
 
         // Refresh the current device immediately so the HUD reflects the new selection.
-        if defaultOutputDeviceID != 0 {
-            if let current = audioDevices.first(where: { $0.id == defaultOutputDeviceID }) {
+        let currentOutputID = getDefaultOutputDeviceID()
+        if currentOutputID != 0 {
+            if let current = audioDevices.first(where: { $0.id == currentOutputID }) {
                 currentDevice = current
-            } else if let name = getDeviceName(defaultOutputDeviceID) {
-                currentDevice = AudioDevice(id: defaultOutputDeviceID, name: name)
+            } else if let name = getDeviceName(currentOutputID) {
+                currentDevice = AudioDevice(id: currentOutputID, name: name)
             } else {
                 currentDevice = nil
             }
@@ -763,7 +821,7 @@ class VolumeMonitor: ObservableObject {
         }
 
         // Only refresh mute state if the device supports volume (and potentially mute)
-        if deviceSupportsVolumeControl(defaultOutputDeviceID) {
+        if currentOutputID != 0 && deviceSupportsVolumeControl(currentOutputID) {
             _ = refreshMuteState()
         }
         if let volume = getCurrentVolume() {
@@ -888,9 +946,18 @@ class VolumeMonitor: ObservableObject {
                 iconSize = 47
             }
 
-            let speakerImage = NSImage(
+            let speakerImageView = NSImageView()
+            if let speakerImage = NSImage(
                 systemSymbolName: iconName, accessibilityDescription: "Volume")
-            let speakerImageView = NSImageView(image: speakerImage!)
+            {
+                speakerImageView.image = speakerImage
+            } else if let fallbackImage = NSImage(
+                named: NSImage.touchBarAudioOutputVolumeHighTemplateName)
+            {
+                speakerImageView.image = fallbackImage
+            } else {
+                speakerImageView.image = NSImage(size: NSSize(width: iconSize, height: iconSize))
+            }
             // Keep the icon centered in its container at its native size.
             speakerImageView.imageScaling = .scaleProportionallyUpOrDown
             speakerImageView.contentTintColor = style.iconTintColor
@@ -1164,14 +1231,14 @@ class VolumeMonitor: ObservableObject {
         }
 
         if isListening {
-            if listeningDeviceID == deviceID {
+            if getListeningDeviceID() == deviceID {
                 return
             }
             stopListening()
         }
 
-        registeredVolumeElements = []
-        registeredMuteElements = []
+        setRegisteredVolumeElements([])
+        setRegisteredMuteElements([])
 
         let supportsVolume = deviceSupportsVolumeControl(deviceID)
 
@@ -1182,7 +1249,7 @@ class VolumeMonitor: ObservableObject {
                 )
             #endif
             // Clear mute elements for unsupported devices to prevent stale element errors
-            muteElements = []
+            setMuteElements([])
         }
 
         if supportsVolume {
@@ -1209,7 +1276,8 @@ class VolumeMonitor: ObservableObject {
             }
 
             var listenerRegistered = false
-            for element in volumeElements {
+            let volumeElementsSnapshot = getVolumeElements()
+            for element in volumeElementsSnapshot {
                 var volumeAddress = AudioObjectPropertyAddress(
                     mSelector: kAudioDevicePropertyVolumeScalar,
                     mScope: kAudioDevicePropertyScopeOutput,
@@ -1234,9 +1302,10 @@ class VolumeMonitor: ObservableObject {
                 #endif
                 return
             }
-            registeredVolumeElements = volumeElements
+            setRegisteredVolumeElements(volumeElementsSnapshot)
 
-            if !muteElements.isEmpty {
+            let muteElementsSnapshot = getMuteElements()
+            if !muteElementsSnapshot.isEmpty {
                 muteListener = {
                     [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>)
                     in
@@ -1251,7 +1320,7 @@ class VolumeMonitor: ObservableObject {
 
                 if let muteListener = muteListener {
                     var validMuteElements: [AudioObjectPropertyElement] = []
-                    for element in muteElements {
+                    for element in muteElementsSnapshot {
                         var muteAddress = AudioObjectPropertyAddress(
                             mSelector: kAudioDevicePropertyMute,
                             mScope: kAudioDevicePropertyScopeOutput,
@@ -1287,7 +1356,7 @@ class VolumeMonitor: ObservableObject {
                             }
                         }
                     }
-                    registeredMuteElements = validMuteElements
+                    setRegisteredMuteElements(validMuteElements)
                 }
             }
         }
@@ -1331,7 +1400,7 @@ class VolumeMonitor: ObservableObject {
         }
 
         // Mark that we are listening even if the current device doesn't support volume control
-        listeningDeviceID = deviceID
+        setListeningDeviceID(deviceID)
         isListening = true
     }
 
@@ -1342,9 +1411,9 @@ class VolumeMonitor: ObservableObject {
             volumeListener = nil
             deviceListener = nil
             muteListener = nil
-            listeningDeviceID = nil
-            registeredVolumeElements = []
-            registeredMuteElements = []
+            setListeningDeviceID(nil)
+            setRegisteredVolumeElements([])
+            setRegisteredMuteElements([])
             isListening = false
             return
         }
@@ -1355,10 +1424,11 @@ class VolumeMonitor: ObservableObject {
             mElement: 0
         )
 
-        let removalDeviceID = listeningDeviceID ?? defaultOutputDeviceID
+        let removalDeviceID = getListeningDeviceID() ?? getDefaultOutputDeviceID()
 
         if let volumeListener = volumeListener {
-            for element in registeredVolumeElements {
+            let registeredVolumes = getRegisteredVolumeElements()
+            for element in registeredVolumes {
                 var volumeAddress = AudioObjectPropertyAddress(
                     mSelector: kAudioDevicePropertyVolumeScalar,
                     mScope: kAudioDevicePropertyScopeOutput,
@@ -1372,7 +1442,8 @@ class VolumeMonitor: ObservableObject {
         }
 
         if let muteListener = muteListener {
-            for element in registeredMuteElements {
+            let registeredMutes = getRegisteredMuteElements()
+            for element in registeredMutes {
                 var muteAddress = AudioObjectPropertyAddress(
                     mSelector: kAudioDevicePropertyMute,
                     mScope: kAudioDevicePropertyScopeOutput,
@@ -1393,9 +1464,9 @@ class VolumeMonitor: ObservableObject {
         self.volumeListener = nil
         self.deviceListener = nil
         self.muteListener = nil
-        listeningDeviceID = nil
-        registeredVolumeElements = []
-        registeredMuteElements = []
+        setListeningDeviceID(nil)
+        setRegisteredVolumeElements([])
+        setRegisteredMuteElements([])
         isListening = false
         #if DEBUG
             print("Stopped listening")

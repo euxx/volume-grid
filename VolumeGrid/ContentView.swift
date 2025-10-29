@@ -870,18 +870,18 @@ class VolumeMonitor: ObservableObject {
 
             if isUnsupported {
                 iconName = "nosign"
-                iconSize = 47
+                iconSize = 30
             } else if isMutedForDisplay {
                 iconName = "speaker.slash.fill"
-                iconSize = 40
+                iconSize = 32
             } else if volumePercentage < 33 {
                 // Low volume
                 iconName = "speaker.wave.1.fill"
-                iconSize = 47
+                iconSize = 36
             } else if volumePercentage < 66 {
                 // Medium volume
                 iconName = "speaker.wave.2.fill"
-                iconSize = 47
+                iconSize = 41
             } else {
                 // High volume
                 iconName = "speaker.wave.3.fill"

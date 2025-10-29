@@ -1,5 +1,7 @@
 # Rules
 
+Don't say sentences that begin with perfect.
+
 ## Development
 
 Run commands after code changes to ensure consistent formatting:

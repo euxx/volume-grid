@@ -981,7 +981,7 @@ class VolumeMonitor: ObservableObject {
             let textStack = NSStackView()
             textStack.translatesAutoresizingMaskIntoConstraints = false
             textStack.orientation = .horizontal
-            textStack.alignment = .firstBaseline
+            textStack.alignment = .centerY
             textStack.spacing = gapBetweenDeviceAndCount
             textStack.addArrangedSubview(deviceLabel)
             textStack.addArrangedSubview(volumeText)

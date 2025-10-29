@@ -34,7 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupStatusBarItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: 20)
+        statusItem = NSStatusBar.system.statusItem(withLength: 24)
 
         if let button = statusItem?.button {
             // Attach the custom view with the icon and progress indicator.

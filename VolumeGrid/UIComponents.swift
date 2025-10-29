@@ -68,8 +68,10 @@ final class StatusBarVolumeView: NSView {
     private let progressBackgroundView = NSView()
     private let progressView = NSView()
     private var progressWidthConstraint: NSLayoutConstraint?
+    private var iconWidthConstraint: NSLayoutConstraint?
+    private var iconHeightConstraint: NSLayoutConstraint?
 
-    private let progressWidth: CGFloat = 14.0
+    private let progressWidth: CGFloat = 20.0
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -107,19 +109,21 @@ final class StatusBarVolumeView: NSView {
         progressWidthConstraint = progressView.widthAnchor.constraint(equalToConstant: 0)
         progressWidthConstraint?.isActive = true
 
+        iconWidthConstraint = iconView.widthAnchor.constraint(equalToConstant: 20)
+        iconHeightConstraint = iconView.heightAnchor.constraint(equalToConstant: 20)
+        iconWidthConstraint?.isActive = true
+        iconHeightConstraint?.isActive = true
+
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 20),
-            heightAnchor.constraint(equalToConstant: 22),
+            widthAnchor.constraint(equalToConstant: 24),
+            heightAnchor.constraint(equalToConstant: 24),
 
             iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 1),
-            iconView.widthAnchor.constraint(equalToConstant: 16),
-            iconView.heightAnchor.constraint(equalToConstant: 16),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            progressBackgroundView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
-            progressBackgroundView.trailingAnchor.constraint(
-                equalTo: leadingAnchor, constant: 3 + progressWidth),
-            progressBackgroundView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+            progressBackgroundView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            progressBackgroundView.widthAnchor.constraint(equalToConstant: progressWidth),
+            progressBackgroundView.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 10),
             progressBackgroundView.heightAnchor.constraint(equalToConstant: 2),
 
             progressView.leadingAnchor.constraint(equalTo: progressBackgroundView.leadingAnchor),
@@ -130,22 +134,45 @@ final class StatusBarVolumeView: NSView {
 
     func update(percentage: Int) {
         let clamped = max(0, min(percentage, 100))
-        let iconName = clamped == 0 ? "speaker.slash" : "speaker.wave.2"
-        iconView.image = NSImage(systemSymbolName: iconName, accessibilityDescription: "Volume")
+
+        var iconName: String
+        var iconSize: CGFloat = 20.0
+
+        if clamped == 0 {
+            // Muted - smaller icon
+            iconName = "speaker.slash"
+            iconSize = 15.0
+        } else if clamped < 33 {
+            // Low volume
+            iconName = "speaker.wave.1"
+        } else if clamped < 66 {
+            // Medium volume
+            iconName = "speaker.wave.2"
+        } else {
+            // High volume
+            iconName = "speaker.wave.3"
+        }
+
+        iconView.image = NSImage(
+            systemSymbolName: iconName, accessibilityDescription: "Volume")
+        iconWidthConstraint?.constant = iconSize
+        iconHeightConstraint?.constant = iconSize
         progressWidthConstraint?.constant = CGFloat(clamped) / 100.0 * progressWidth
     }
 }
 
 /// Custom view used inside the menu item to display the volume value and a linear indicator.
 final class VolumeMenuItemView: NSView {
+    private let iconView = NSImageView()
     private let label = NSTextField(labelWithString: "")
     private let progressView = LinearProgressView()
     private let horizontalPadding: CGFloat = 16
     private let verticalPadding: CGFloat = 12
     private let interItemSpacing: CGFloat = 8
+    private let iconSize: CGFloat = 16
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 260, height: 56)
+        NSSize(width: 280, height: 56)
     }
 
     override init(frame frameRect: NSRect) {
@@ -160,6 +187,10 @@ final class VolumeMenuItemView: NSView {
     }
 
     private func setupSubviews() {
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        iconView.contentTintColor = NSColor.controlTextColor
+
         label.translatesAutoresizingMaskIntoConstraints = false
         label.font = NSFont.systemFont(ofSize: 13)
         label.textColor = NSColor.labelColor
@@ -169,11 +200,18 @@ final class VolumeMenuItemView: NSView {
         progressView.fillColor = NSColor.systemGray
         progressView.cornerRadius = 2
 
+        addSubview(iconView)
         addSubview(label)
         addSubview(progressView)
 
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: horizontalPadding),
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: horizontalPadding),
+            iconView.widthAnchor.constraint(equalToConstant: iconSize),
+            iconView.heightAnchor.constraint(equalToConstant: iconSize),
+            iconView.centerYAnchor.constraint(equalTo: label.centerYAnchor),
+
+            label.leadingAnchor.constraint(
+                equalTo: iconView.trailingAnchor, constant: horizontalPadding / 2),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -horizontalPadding),
             label.topAnchor.constraint(equalTo: topAnchor, constant: verticalPadding),
 
@@ -191,6 +229,25 @@ final class VolumeMenuItemView: NSView {
 
     func update(percentage: Int, formattedVolume: String, deviceName: String) {
         let clamped = max(0, min(percentage, 100))
+
+        // Determine icon based on volume level
+        var iconName: String
+        if clamped == 0 {
+            // Muted
+            iconName = "speaker.slash"
+        } else if clamped < 33 {
+            // Low volume
+            iconName = "speaker.wave.1"
+        } else if clamped < 66 {
+            // Medium volume
+            iconName = "speaker.wave.2"
+        } else {
+            // High volume
+            iconName = "speaker.wave.3"
+        }
+
+        iconView.image = NSImage(
+            systemSymbolName: iconName, accessibilityDescription: "Volume")
         label.stringValue = "\(deviceName) - \(formattedVolume)"
         progressView.progress = CGFloat(clamped) / 100.0
     }

@@ -64,8 +64,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             formattedVolume: formattedVolumeString(for: initialVolume),
             deviceName: initialDevice
         )
+        volumeView.setVolumeChangeHandler { [weak self] ratio in
+            self?.volumeMonitor?.setVolume(scalar: Float32(ratio))
+        }
         volumeItem.view = volumeView
-        volumeItem.isEnabled = false
+        volumeItem.isEnabled = true
         menu.addItem(volumeItem)
         volumeMenuItem = volumeItem
         volumeMenuContentView = volumeView

@@ -170,6 +170,8 @@ final class VolumeMenuItemView: NSView {
     private let verticalPadding: CGFloat = 12
     private let interItemSpacing: CGFloat = 8
     private let iconSize: CGFloat = 16
+    private var onVolumeChange: ((CGFloat) -> Void)?
+    private var isDragging = false
 
     override var intrinsicContentSize: NSSize {
         NSSize(width: 280, height: 56)
@@ -227,6 +229,10 @@ final class VolumeMenuItemView: NSView {
         progressView.progress = 0
     }
 
+    func setVolumeChangeHandler(_ handler: ((CGFloat) -> Void)?) {
+        onVolumeChange = handler
+    }
+
     func update(percentage: Int, formattedVolume: String, deviceName: String) {
         let clamped = max(0, min(percentage, 100))
 
@@ -250,5 +256,50 @@ final class VolumeMenuItemView: NSView {
             systemSymbolName: iconName, accessibilityDescription: "Volume")
         label.stringValue = "\(deviceName) - \(formattedVolume)"
         progressView.progress = CGFloat(clamped) / 100.0
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard onVolumeChange != nil else {
+            super.mouseDown(with: event)
+            return
+        }
+        isDragging = true
+        updateVolume(with: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard isDragging else {
+            super.mouseDragged(with: event)
+            return
+        }
+        updateVolume(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard isDragging else {
+            super.mouseUp(with: event)
+            return
+        }
+        isDragging = false
+        updateVolume(with: event)
+    }
+
+    private func updateVolume(with event: NSEvent) {
+        guard let handler = onVolumeChange else { return }
+        layoutSubtreeIfNeeded()
+
+        let pointInProgress = progressView.convert(event.locationInWindow, from: nil)
+        let bounds = progressView.bounds
+        guard bounds.width > 0 else { return }
+
+        let clampedX = min(max(pointInProgress.x, 0), bounds.width)
+        let ratio = clampedX / bounds.width
+
+        progressView.progress = ratio
+        handler(ratio)
     }
 }

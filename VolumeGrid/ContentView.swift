@@ -449,6 +449,109 @@ class VolumeMonitor: ObservableObject {
         return total / Float32(channelVolumes.count)
     }
 
+    // Update the current volume using a percentage in the range 0...100.
+    func setVolume(percentage: Int) {
+        let clamped = max(0, min(percentage, 100))
+        let scalar = Float32(Double(clamped) / 100.0)
+        setVolume(scalar: scalar)
+    }
+
+    // Update the current volume using a 0...1 scalar.
+    func setVolume(scalar: Float32) {
+        let clampedScalar = max(0, min(scalar, 1))
+
+        guard let audioQueue else {
+            #if DEBUG
+                print("Audio queue unavailable when setting volume")
+            #endif
+            return
+        }
+
+        audioQueue.async { [weak self] in
+            guard let self else { return }
+
+            let deviceID = self.updateDefaultOutputDevice()
+            guard deviceID != 0 else { return }
+
+            guard self.deviceSupportsVolumeControl(deviceID) else {
+                #if DEBUG
+                    print("Device does not support volume control")
+                #endif
+                return
+            }
+
+            let elements = self.volumeElements
+            guard !elements.isEmpty else { return }
+
+            let value = clampedScalar
+            let size = UInt32(MemoryLayout<Float32>.size)
+
+            for element in elements {
+                var address = AudioObjectPropertyAddress(
+                    mSelector: kAudioDevicePropertyVolumeScalar,
+                    mScope: kAudioDevicePropertyScopeOutput,
+                    mElement: element
+                )
+
+                var mutableValue = value
+                let status = AudioObjectSetPropertyData(
+                    deviceID, &address, 0, nil, size, &mutableValue)
+                if status != noErr {
+                    #if DEBUG
+                        print("Error setting volume for element \(element): \(status)")
+                    #endif
+                }
+            }
+
+            if clampedScalar > 0 {
+                self.setMuteState(false, for: deviceID)
+            }
+
+            let uiScalar = CGFloat(clampedScalar)
+            DispatchQueue.main.async {
+                self.lastVolumeScalar = uiScalar
+                self.volumePercentage = Int(round(uiScalar * 100))
+                if clampedScalar > 0 {
+                    self.isDeviceMuted = false
+                }
+            }
+        }
+    }
+
+    private func setMuteState(_ muted: Bool, for deviceID: AudioDeviceID) {
+        guard deviceSupportsMute(deviceID) else { return }
+
+        let elements = muteElements
+        guard !elements.isEmpty else { return }
+
+        let muteValue: UInt32 = muted ? 1 : 0
+        let size = UInt32(MemoryLayout<UInt32>.size)
+
+        for element in elements {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyMute,
+                mScope: kAudioDevicePropertyScopeOutput,
+                mElement: element
+            )
+            var mutableValue = muteValue
+            let status = AudioObjectSetPropertyData(
+                deviceID, &address, 0, nil, size, &mutableValue)
+            if status != noErr {
+                #if DEBUG
+                    print("Error setting mute for element \(element): \(status)")
+                #endif
+            }
+        }
+
+        DispatchQueue.main.async {
+            self.isDeviceMuted = muted
+            if muted {
+                self.volumePercentage = 0
+                self.lastVolumeScalar = 0
+            }
+        }
+    }
+
     // Fetch audio devices.
     func getAudioDevices() {
         var address = AudioObjectPropertyAddress(

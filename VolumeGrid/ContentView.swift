@@ -740,13 +740,32 @@ class VolumeMonitor: ObservableObject {
             let iconContainer = NSView()
             iconContainer.translatesAutoresizingMaskIntoConstraints = false
 
-            // Create the volume icon.
-            let iconName = isMutedForDisplay ? "speaker.slash.fill" : "speaker.wave.2.fill"
+            // Create the volume icon based on volume level.
+            let volumePercentage = Int(clampedScalar * 100)
+            var iconName: String
+            var iconSize: CGFloat
+
+            if isMutedForDisplay {
+                iconName = "speaker.slash.fill"
+                iconSize = 40
+            } else if volumePercentage < 33 {
+                // Low volume
+                iconName = "speaker.wave.1.fill"
+                iconSize = 47
+            } else if volumePercentage < 66 {
+                // Medium volume
+                iconName = "speaker.wave.2.fill"
+                iconSize = 47
+            } else {
+                // High volume
+                iconName = "speaker.wave.3.fill"
+                iconSize = 47
+            }
+
             let speakerImage = NSImage(
                 systemSymbolName: iconName, accessibilityDescription: "Volume")
             let speakerImageView = NSImageView(image: speakerImage!)
             // Keep the icon centered in its container at its native size.
-            let iconSize: CGFloat = isMutedForDisplay ? 40 : 47
             speakerImageView.imageScaling = .scaleProportionallyUpOrDown
             speakerImageView.contentTintColor = style.iconTintColor
 

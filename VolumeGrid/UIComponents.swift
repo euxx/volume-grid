@@ -136,21 +136,24 @@ final class StatusBarVolumeView: NSView {
         let clamped = max(0, min(percentage, 100))
 
         var iconName: String
-        var iconSize: CGFloat = 20.0
+        var iconSize: CGFloat = 20
 
         if clamped == 0 {
             // Muted - smaller icon
             iconName = "speaker.slash"
-            iconSize = 15.0
+            iconSize = 15
         } else if clamped < 33 {
             // Low volume
             iconName = "speaker.wave.1"
+            iconSize = 17
         } else if clamped < 66 {
             // Medium volume
             iconName = "speaker.wave.2"
+            iconSize = 19
         } else {
             // High volume
             iconName = "speaker.wave.3"
+            iconSize = 21
         }
 
         iconView.image = NSImage(
@@ -238,22 +241,28 @@ final class VolumeMenuItemView: NSView {
 
         // Determine icon based on volume level
         var iconName: String
+        var iconSize: CGFloat = 20
         if clamped == 0 {
             // Muted
             iconName = "speaker.slash"
+            iconSize = 15
         } else if clamped < 33 {
             // Low volume
             iconName = "speaker.wave.1"
+            iconSize = 17
         } else if clamped < 66 {
             // Medium volume
             iconName = "speaker.wave.2"
+            iconSize = 19
         } else {
             // High volume
             iconName = "speaker.wave.3"
+            iconSize = 21
         }
 
-        iconView.image = NSImage(
-            systemSymbolName: iconName, accessibilityDescription: "Volume")
+        let config = NSImage.SymbolConfiguration(pointSize: iconSize, weight: .regular)
+        let image = NSImage(systemSymbolName: iconName, accessibilityDescription: "Volume")
+        iconView.image = image?.withSymbolConfiguration(config)
         label.stringValue = "\(deviceName) - \(formattedVolume)"
         progressView.progress = CGFloat(clamped) / 100.0
     }

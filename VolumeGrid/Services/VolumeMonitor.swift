@@ -1,7 +1,6 @@
 import AudioToolbox
 import Cocoa
 import Combine
-import SwiftUI
 
 // VolumeMonitor class - coordinates volume monitoring and HUD display
 class VolumeMonitor: ObservableObject {
@@ -10,9 +9,9 @@ class VolumeMonitor: ObservableObject {
     @Published var currentDevice: AudioDevice?
 
     private let deviceManager = AudioDeviceManager()
-    private let hudManager = HUDManager()
     private let state = VolumeStateStore()
     private let systemEventMonitor = SystemEventMonitor()
+    private let hudEventSubject = PassthroughSubject<VolumeHUDContext, Never>()
 
     private var volumeListener: AudioObjectPropertyListenerBlock?
     private var deviceListener: AudioObjectPropertyListenerBlock?
@@ -36,6 +35,10 @@ class VolumeMonitor: ObservableObject {
 
     deinit {
         stopListening()
+    }
+
+    var hudEvents: AnyPublisher<VolumeHUDContext, Never> {
+        hudEventSubject.eraseToAnyPublisher()
     }
 
     // MARK: - Device Management
@@ -243,12 +246,7 @@ class VolumeMonitor: ObservableObject {
     // MARK: - HUD Display
 
     private func showVolumeHUD(volumeScalar: CGFloat, isUnsupported: Bool = false) {
-        hudManager.showHUD(
-            volumeScalar: volumeScalar,
-            deviceName: currentDevice?.name,
-            isMuted: state.deviceMuted(),
-            isUnsupported: isUnsupported
-        )
+        emitHUDEvent(volumeScalar: volumeScalar, isUnsupported: isUnsupported)
     }
 
     private func showHUDForCurrentVolume() {
@@ -458,5 +456,24 @@ class VolumeMonitor: ObservableObject {
         state.updateRegisteredVolumeElements([])
         state.updateRegisteredMuteElements([])
         state.setListeningActive(false)
+    }
+
+    // MARK: - HUD Event Broadcasting
+
+    private func emitHUDEvent(volumeScalar: CGFloat, isUnsupported: Bool) {
+        let context = VolumeHUDContext(
+            volumeScalar: volumeScalar,
+            deviceName: currentDevice?.name,
+            isMuted: state.deviceMuted(),
+            isUnsupported: isUnsupported
+        )
+
+        if Thread.isMainThread {
+            hudEventSubject.send(context)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.hudEventSubject.send(context)
+            }
+        }
     }
 }

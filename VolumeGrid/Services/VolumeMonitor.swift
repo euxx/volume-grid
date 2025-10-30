@@ -3,31 +3,55 @@ import Cocoa
 import Combine
 import SwiftUI
 
-// VolumeMonitor class.
+// VolumeMonitor class - coordinates volume monitoring and HUD display
 class VolumeMonitor: ObservableObject {
     @Published var volumePercentage: Int = 0
     @Published var audioDevices: [AudioDevice] = []
     @Published var currentDevice: AudioDevice?
+
+    private let deviceManager = AudioDeviceManager()
+    private let hudManager = HUDManager()
+    private let stateLock = NSLock()
+
     private var defaultOutputDeviceID: AudioDeviceID = 0
     private var listeningDeviceID: AudioDeviceID?
-    private var volumeListener: AudioObjectPropertyListenerBlock?
-    private var deviceListener: AudioObjectPropertyListenerBlock?
-    private var hudWindows: [HUDWindowContext] = []
-    private var audioQueue: DispatchQueue?
-    private var hideHUDWorkItem: DispatchWorkItem?
     private var volumeElements: [AudioObjectPropertyElement] = []
     private var muteElements: [AudioObjectPropertyElement] = []
     private var registeredVolumeElements: [AudioObjectPropertyElement] = []
     private var registeredMuteElements: [AudioObjectPropertyElement] = []
     private var lastVolumeScalar: CGFloat?
     private var isDeviceMuted: Bool = false
+    private var isListening = false
+
+    private var volumeListener: AudioObjectPropertyListenerBlock?
+    private var deviceListener: AudioObjectPropertyListenerBlock?
+    private var muteListener: AudioObjectPropertyListenerBlock?
+    private var audioQueue: DispatchQueue?
+
     private var globalSystemEventMonitor: Any?
     private var localSystemEventMonitor: Any?
     private var lastHandledSystemEvent: (timestamp: TimeInterval, data: Int)?
-    private var muteListener: AudioObjectPropertyListenerBlock?
-    private var screenChangeObserver: NSObjectProtocol?
-    private var isListening = false
-    private let stateLock = NSLock()
+
+    init() {
+        audioQueue = DispatchQueue(label: "com.volumegrid.audio", qos: .userInitiated)
+
+        let deviceID = updateDefaultOutputDevice()
+        if deviceID != 0 {
+            if let volume = getCurrentVolume() {
+                volumePercentage = Int(volume * 100)
+                lastVolumeScalar = CGFloat(volume)
+            }
+            _ = refreshMuteState()
+        }
+
+        getAudioDevices()
+    }
+
+    deinit {
+        stopListening()
+    }
+
+    // MARK: - Thread-safe property accessors
 
     private func withStateLock<T>(_ body: () -> T) -> T {
         stateLock.lock()
@@ -83,424 +107,51 @@ class VolumeMonitor: ObservableObject {
         withStateLock { registeredMuteElements }
     }
 
-    // HUD constants.
-    private let hudWidth: CGFloat = 320
-    private let hudHeight: CGFloat = 160
-    private let hudAlpha: CGFloat = 0.97
-    private let hudDisplayDuration: TimeInterval = 2.0
-    private let hudFontSize: CGFloat = 24
+    // MARK: - Device Management
 
-    init() {
-        // Initialize HUD windows once
-        syncHUDWindowsWithScreens()
-        screenChangeObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.syncHUDWindowsWithScreens()
-        }
-        // Create audio queue once
-        audioQueue = DispatchQueue(label: "com.volumegrid.audio", qos: .userInitiated)
-        // Get initial volume
-        if let volume = getCurrentVolume() {
-            volumePercentage = Int(volume * 100)
-            lastVolumeScalar = CGFloat(volume)
-        }
-        _ = refreshMuteState()
-        // Get audio devices
-        getAudioDevices()
-    }
-
-    deinit {
-        stopListening()
-        hideHUDWorkItem?.cancel()
-        if let observer = screenChangeObserver {
-            NotificationCenter.default.removeObserver(observer)
-            screenChangeObserver = nil
-        }
-        #if DEBUG
-            print("VolumeMonitor deinit")
-        #endif
-    }
-
-    private func screenID(for screen: NSScreen) -> CGDirectDisplayID? {
-        if let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-            as? NSNumber
-        {
-            return CGDirectDisplayID(number.uint32Value)
-        }
-        return nil
-    }
-
-    private func makeHUDWindow(for screen: NSScreen, screenID: CGDirectDisplayID)
-        -> HUDWindowContext
-    {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.level = .floating
-        window.backgroundColor = .clear
-        window.isOpaque = false
-        window.collectionBehavior = [
-            .canJoinAllSpaces,
-            .transient,
-            .ignoresCycle,
-        ]
-        window.ignoresMouseEvents = true
-
-        let containerView = NSView(
-            frame: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight))
-        containerView.wantsLayer = true
-        let style = hudStyle(for: window.effectiveAppearance)
-        containerView.layer?.backgroundColor = style.backgroundColor.cgColor
-        containerView.layer?.cornerRadius = 12
-        containerView.layer?.masksToBounds = true
-        containerView.layer?.shadowColor = style.shadowColor.cgColor
-        containerView.layer?.shadowOpacity = 1.0
-        containerView.layer?.shadowOffset = CGSize(width: 0, height: 2)
-        containerView.layer?.shadowRadius = 8
-        window.contentView = containerView
-
-        let contentStack = NSStackView()
-        contentStack.translatesAutoresizingMaskIntoConstraints = false
-        contentStack.orientation = .vertical
-        contentStack.alignment = .centerX
-        contentStack.spacing = 0
-        containerView.addSubview(contentStack)
-
-        let marginX: CGFloat = 24
-        let minVerticalPadding: CGFloat = 14
-        NSLayoutConstraint.activate([
-            contentStack.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
-            contentStack.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-            contentStack.leadingAnchor.constraint(
-                greaterThanOrEqualTo: containerView.leadingAnchor, constant: marginX),
-            contentStack.trailingAnchor.constraint(
-                lessThanOrEqualTo: containerView.trailingAnchor, constant: -marginX),
-        ])
-        let topConstraint = contentStack.topAnchor.constraint(
-            greaterThanOrEqualTo: containerView.topAnchor, constant: minVerticalPadding)
-        topConstraint.priority = .defaultHigh
-        topConstraint.isActive = true
-        let bottomConstraint = contentStack.bottomAnchor.constraint(
-            lessThanOrEqualTo: containerView.bottomAnchor, constant: -minVerticalPadding)
-        bottomConstraint.priority = .defaultHigh
-        bottomConstraint.isActive = true
-
-        let iconContainerSize: CGFloat = 40
-        let iconContainer = NSView()
-        iconContainer.translatesAutoresizingMaskIntoConstraints = false
-
-        let iconView = NSImageView()
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.imageScaling = .scaleProportionallyUpOrDown
-        iconView.contentTintColor = style.iconTintColor
-        iconContainer.addSubview(iconView)
-
-        let iconWidthConstraint = iconView.widthAnchor.constraint(
-            equalToConstant: iconContainerSize)
-        let iconHeightConstraint = iconView.heightAnchor.constraint(
-            equalToConstant: iconContainerSize)
-        iconWidthConstraint.isActive = true
-        iconHeightConstraint.isActive = true
-
-        NSLayoutConstraint.activate([
-            iconView.centerXAnchor.constraint(equalTo: iconContainer.centerXAnchor),
-            iconView.centerYAnchor.constraint(equalTo: iconContainer.centerYAnchor),
-            iconContainer.widthAnchor.constraint(equalToConstant: iconContainerSize),
-            iconContainer.heightAnchor.constraint(equalToConstant: iconContainerSize),
-        ])
-
-        contentStack.addArrangedSubview(iconContainer)
-
-        let textStack = NSStackView()
-        textStack.translatesAutoresizingMaskIntoConstraints = false
-        textStack.orientation = .horizontal
-        textStack.alignment = .centerY
-        textStack.spacing = 8
-
-        let deviceLabel = NSTextField(labelWithString: "")
-        deviceLabel.translatesAutoresizingMaskIntoConstraints = false
-        deviceLabel.textColor = style.secondaryTextColor
-        deviceLabel.font = .systemFont(ofSize: 12, weight: .regular)
-        deviceLabel.alignment = .left
-        deviceLabel.isBordered = false
-        deviceLabel.backgroundColor = .clear
-        deviceLabel.isEditable = false
-        deviceLabel.isSelectable = false
-        deviceLabel.lineBreakMode = .byTruncatingTail
-        deviceLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        deviceLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
-
-        let volumeLabel = NSTextField(labelWithString: "")
-        volumeLabel.translatesAutoresizingMaskIntoConstraints = false
-        volumeLabel.textColor = style.primaryTextColor
-        volumeLabel.font = .systemFont(ofSize: 12, weight: .regular)
-        volumeLabel.alignment = .left
-        volumeLabel.isBordered = false
-        volumeLabel.backgroundColor = .clear
-        volumeLabel.isEditable = false
-        volumeLabel.isSelectable = false
-        volumeLabel.lineBreakMode = .byClipping
-        volumeLabel.setContentHuggingPriority(.required, for: .horizontal)
-        volumeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        let volumeWidthConstraint = volumeLabel.widthAnchor.constraint(equalToConstant: 0)
-        volumeWidthConstraint.priority = .required
-        volumeWidthConstraint.isActive = true
-
-        textStack.addArrangedSubview(deviceLabel)
-        textStack.addArrangedSubview(volumeLabel)
-        contentStack.addArrangedSubview(textStack)
-
-        let blocksView = VolumeBlocksView(style: style)
-        let blocksWidthConstraint = blocksView.widthAnchor.constraint(
-            equalToConstant: blocksView.intrinsicContentSize.width)
-        blocksWidthConstraint.priority = .required
-        blocksWidthConstraint.isActive = true
-        contentStack.addArrangedSubview(blocksView)
-        blocksView.update(style: style, fillFraction: 0)
-
-        let spacingIconToDevice: CGFloat = 14
-        let spacingDeviceToBlocks: CGFloat = 20
-        contentStack.setCustomSpacing(spacingIconToDevice, after: iconContainer)
-        contentStack.setCustomSpacing(spacingDeviceToBlocks, after: textStack)
-
-        let screenFrame = screen.frame
-        let windowOrigin = CGPoint(
-            x: screenFrame.origin.x + (screenFrame.width - hudWidth) / 2,
-            y: screenFrame.origin.y + (screenFrame.height - hudHeight) / 2
-        )
-        window.setFrameOrigin(windowOrigin)
-        window.alphaValue = hudAlpha
-
-        return HUDWindowContext(
-            screenID: screenID,
-            window: window,
-            containerView: containerView,
-            contentStack: contentStack,
-            iconContainer: iconContainer,
-            iconView: iconView,
-            iconWidthConstraint: iconWidthConstraint,
-            iconHeightConstraint: iconHeightConstraint,
-            textStack: textStack,
-            deviceLabel: deviceLabel,
-            volumeLabel: volumeLabel,
-            volumeWidthConstraint: volumeWidthConstraint,
-            blocksView: blocksView,
-            blocksWidthConstraint: blocksWidthConstraint
-        )
-    }
-
-    // Configure the HUD windows.
-    private func syncHUDWindowsWithScreens() {
-        if !Thread.isMainThread {
-            DispatchQueue.main.sync {
-                self.syncHUDWindowsWithScreens()
-            }
-            return
-        }
-
-        var remaining = hudWindows
-        var updated: [HUDWindowContext] = []
-
-        for screen in NSScreen.screens {
-            guard let screenID = screenID(for: screen) else { continue }
-            if let index = remaining.firstIndex(where: { $0.screenID == screenID }) {
-                let context = remaining.remove(at: index)
-                updated.append(context)
-            } else {
-                let context = makeHUDWindow(for: screen, screenID: screenID)
-                updated.append(context)
-            }
-        }
-
-        for context in remaining {
-            context.window.orderOut(nil)
-        }
-
-        hudWindows = updated
-    }
-
-    // Fetch the default output device ID.
     @discardableResult
     private func updateDefaultOutputDevice() -> AudioDeviceID {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: 0
-        )
-
-        var deviceID: AudioDeviceID = 0
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
-        if status == noErr {
-            self.setDefaultOutputDeviceID(deviceID)
-            #if DEBUG
-                print("Updated default device ID: \(deviceID)")
-            #endif
-            return deviceID
-        } else {
-            self.setDefaultOutputDeviceID(0)
-            #if DEBUG
-                print("Error getting default output device: \(status)")
-            #endif
-            return 0
-        }
+        let deviceID = deviceManager.getDefaultOutputDevice()
+        setDefaultOutputDeviceID(deviceID)
+        return deviceID
     }
 
-    // Update available volume elements (prefer main, then left/right channels).
-    @discardableResult
-    private func updateVolumeElements(for deviceID: AudioDeviceID) -> Bool {
-        let candidates: [AudioObjectPropertyElement] = [
-            kAudioObjectPropertyElementMain,
-            1,
-            2,
-        ]
+    func getAudioDevices() {
+        let devices = deviceManager.getAllDevices()
 
-        var detected: [AudioObjectPropertyElement] = []
-
-        for element in candidates {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyVolumeScalar,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
-            )
-
-            if AudioObjectHasProperty(deviceID, &address) {
-                if element == kAudioObjectPropertyElementMain {
-                    setVolumeElements([element])
-                    return true
-                }
-                detected.append(element)
+        DispatchQueue.main.async {
+            self.audioDevices = devices
+            let existingID = self.getDefaultOutputDeviceID()
+            let resolvedID = existingID != 0 ? existingID : self.updateDefaultOutputDevice()
+            if resolvedID != 0, let currentDevice = devices.first(where: { $0.id == resolvedID }) {
+                self.currentDevice = currentDevice
             }
         }
-
-        if !detected.isEmpty {
-            setVolumeElements(detected)
-            return true
-        }
-
-        setVolumeElements([])
-        return false
     }
 
-    @discardableResult
-    private func updateMuteElements(for deviceID: AudioDeviceID) -> Bool {
-        let candidates: [AudioObjectPropertyElement] = [
-            kAudioObjectPropertyElementMain,
-            1,
-            2,
-        ]
+    // MARK: - Volume Control
 
-        var detected: [AudioObjectPropertyElement] = []
-
-        for element in candidates {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyMute,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
-            )
-
-            if AudioObjectHasProperty(deviceID, &address) {
-                // Verify we can actually read the mute value before considering it supported
-                var muted: UInt32 = 0
-                var size = UInt32(MemoryLayout<UInt32>.size)
-                let readStatus = AudioObjectGetPropertyData(
-                    deviceID, &address, 0, nil, &size, &muted)
-
-                if readStatus == noErr {
-                    if element == kAudioObjectPropertyElementMain {
-                        setMuteElements([element])
-                        return true
-                    }
-                    detected.append(element)
-                }
-            }
-        }
-
-        if !detected.isEmpty {
-            setMuteElements(detected)
-            return true
-        }
-
-        setMuteElements([])
-        return false
-    }
-
-    private func deviceSupportsMute(_ deviceID: AudioDeviceID) -> Bool {
-        return updateMuteElements(for: deviceID)
-    }
-
-    // Check whether the device supports volume control.
-    private func deviceSupportsVolumeControl(_ deviceID: AudioDeviceID) -> Bool {
-        return updateVolumeElements(for: deviceID)
-    }
-
-    // Read the current volume.
     func getCurrentVolume() -> Float32? {
         let deviceID = updateDefaultOutputDevice()
         guard deviceID != 0 else { return nil }
 
-        guard deviceSupportsVolumeControl(deviceID) else {
-            #if DEBUG
-                print("Device does not support volume control")
-            #endif
-            return nil
-        }
-
-        let elements = getVolumeElements()
+        let elements = deviceManager.detectVolumeElements(for: deviceID)
         guard !elements.isEmpty else { return nil }
 
-        var channelVolumes: [Float32] = []
-
-        for element in elements {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyVolumeScalar,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
-            )
-
-            var volume: Float32 = 0.0
-            var size = UInt32(MemoryLayout<Float32>.size)
-            let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &volume)
-
-            if status == noErr {
-                channelVolumes.append(volume)
-            } else {
-                #if DEBUG
-                    print("Error getting volume for element \(element): \(status)")
-                #endif
-            }
-        }
-
-        guard !channelVolumes.isEmpty else { return nil }
-
-        let total = channelVolumes.reduce(0, +)
-        return total / Float32(channelVolumes.count)
+        setVolumeElements(elements)
+        return deviceManager.getCurrentVolume(for: deviceID, elements: elements)
     }
 
-    // Update the current volume using a percentage in the range 0...100.
     func setVolume(percentage: Int) {
         let clamped = max(0, min(percentage, 100))
         let scalar = Float32(Double(clamped) / 100.0)
         setVolume(scalar: scalar)
     }
 
-    // Update the current volume using a 0...1 scalar.
     func setVolume(scalar: Float32) {
         let clampedScalar = max(0, min(scalar, 1))
 
-        guard let audioQueue else {
-            #if DEBUG
-                print("Audio queue unavailable when setting volume")
-            #endif
-            return
-        }
+        guard let audioQueue else { return }
 
         audioQueue.async { [weak self] in
             guard let self else { return }
@@ -508,38 +159,17 @@ class VolumeMonitor: ObservableObject {
             let deviceID = self.updateDefaultOutputDevice()
             guard deviceID != 0 else { return }
 
-            guard self.deviceSupportsVolumeControl(deviceID) else {
-                #if DEBUG
-                    print("Device does not support volume control")
-                #endif
-                return
-            }
-
             let elements = self.getVolumeElements()
             guard !elements.isEmpty else { return }
 
-            let value = clampedScalar
-            let size = UInt32(MemoryLayout<Float32>.size)
-
-            for element in elements {
-                var address = AudioObjectPropertyAddress(
-                    mSelector: kAudioDevicePropertyVolumeScalar,
-                    mScope: kAudioDevicePropertyScopeOutput,
-                    mElement: element
-                )
-
-                var mutableValue = value
-                let status = AudioObjectSetPropertyData(
-                    deviceID, &address, 0, nil, size, &mutableValue)
-                if status != noErr {
-                    #if DEBUG
-                        print("Error setting volume for element \(element): \(status)")
-                    #endif
-                }
-            }
+            _ = self.deviceManager.setVolume(clampedScalar, for: deviceID, elements: elements)
 
             if clampedScalar > 0 {
-                self.setMuteState(false, for: deviceID)
+                let muteElements = self.getMuteElements()
+                if !muteElements.isEmpty {
+                    _ = self.deviceManager.setMuteState(
+                        false, for: deviceID, elements: muteElements)
+                }
             }
 
             let uiScalar = CGFloat(clampedScalar)
@@ -551,108 +181,6 @@ class VolumeMonitor: ObservableObject {
                 }
             }
         }
-    }
-
-    private func setMuteState(_ muted: Bool, for deviceID: AudioDeviceID) {
-        guard deviceSupportsMute(deviceID) else { return }
-
-        let elements = getMuteElements()
-        guard !elements.isEmpty else { return }
-
-        let muteValue: UInt32 = muted ? 1 : 0
-        let size = UInt32(MemoryLayout<UInt32>.size)
-
-        for element in elements {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyMute,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
-            )
-            var mutableValue = muteValue
-            let status = AudioObjectSetPropertyData(
-                deviceID, &address, 0, nil, size, &mutableValue)
-            if status != noErr {
-                #if DEBUG
-                    print("Error setting mute for element \(element): \(status)")
-                #endif
-            }
-        }
-
-        DispatchQueue.main.async {
-            self.isDeviceMuted = muted
-            if muted {
-                self.volumePercentage = 0
-                self.lastVolumeScalar = 0
-            }
-        }
-    }
-
-    // Fetch audio devices.
-    func getAudioDevices() {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDevices,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: 0
-        )
-
-        var size: UInt32 = 0
-        var status = AudioObjectGetPropertyDataSize(
-            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size)
-        guard status == noErr else {
-            #if DEBUG
-                print("Error getting devices size: \(status)")
-            #endif
-            return
-        }
-
-        let deviceCount = Int(size) / MemoryLayout<AudioDeviceID>.size
-        var deviceIDs = [AudioDeviceID](repeating: 0, count: deviceCount)
-        status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceIDs)
-        guard status == noErr else {
-            #if DEBUG
-                print("Error getting devices: \(status)")
-            #endif
-            return
-        }
-
-        var devices: [AudioDevice] = []
-        for deviceID in deviceIDs {
-            if let name = getDeviceName(deviceID) {
-                devices.append(AudioDevice(id: deviceID, name: name))
-            }
-        }
-
-        DispatchQueue.main.async {
-            self.audioDevices = devices
-            // Update the current device reference.
-            let existingID = self.getDefaultOutputDeviceID()
-            let resolvedID = existingID != 0 ? existingID : self.updateDefaultOutputDevice()
-            if resolvedID != 0, let currentDevice = devices.first(where: { $0.id == resolvedID }) {
-                self.currentDevice = currentDevice
-            }
-        }
-    }
-
-    // Resolve the device name.
-    private func getDeviceName(_ deviceID: AudioDeviceID) -> String? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyDeviceNameCFString,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: 0
-        )
-
-        var unmanagedName: Unmanaged<CFString>?
-        var size = UInt32(MemoryLayout<Unmanaged<CFString>>.size)
-        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &unmanagedName)
-        guard status == noErr, let unmanaged = unmanagedName else {
-            #if DEBUG
-                print("Error getting device name for \(deviceID): \(status)")
-            #endif
-            return nil
-        }
-        let name = unmanaged.takeRetainedValue() as String
-        return name
     }
 
     @discardableResult
@@ -678,78 +206,46 @@ class VolumeMonitor: ObservableObject {
             resolvedDeviceID = effectiveID
         }
 
-        var muteElementsSnapshot = getMuteElements()
-        if muteElementsSnapshot.isEmpty && !deviceSupportsMute(resolvedDeviceID) {
+        let elements = deviceManager.detectMuteElements(for: resolvedDeviceID)
+        guard !elements.isEmpty else {
             isDeviceMuted = false
             return nil
         }
-        muteElementsSnapshot = getMuteElements()
 
-        var muteDetected = false
-        var readAnyMuteChannel = false
+        setMuteElements(elements)
 
-        for element in muteElementsSnapshot {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyMute,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
-            )
-
-            var muted: UInt32 = 0
-            var size = UInt32(MemoryLayout<UInt32>.size)
-            let status = AudioObjectGetPropertyData(
-                resolvedDeviceID, &address, 0, nil, &size, &muted)
-            if status == noErr {
-                readAnyMuteChannel = true
-                if muted != 0 {
-                    muteDetected = true
-                    break
-                }
-            } else {
-                #if DEBUG
-                    print("Error getting mute for element \(element): \(status)")
-                #endif
+        if let muted = deviceManager.getMuteState(for: resolvedDeviceID, elements: elements) {
+            isDeviceMuted = muted
+            if muted {
+                volumePercentage = 0
             }
+            return muted
         }
 
-        guard readAnyMuteChannel else {
-            #if DEBUG
-                print("No mute channels returned data")
-            #endif
-            isDeviceMuted = false
-            return nil
-        }
-
-        isDeviceMuted = muteDetected
-        if muteDetected {
-            volumePercentage = 0
-        }
-        return muteDetected
+        isDeviceMuted = false
+        return nil
     }
 
-    // Handle volume changes.
+    // MARK: - Event Handlers
+
     private func volumeChanged(address _: AudioObjectPropertyAddress) {
-        guard let volume = getCurrentVolume() else {
-            #if DEBUG
-                print("Failed to read volume after change")
-            #endif
-            return
-        }
+        guard let volume = getCurrentVolume() else { return }
 
         let clampedVolume = max(0, min(volume, 1))
         let percentage = Int(round(clampedVolume * 100))
+
         DispatchQueue.main.async {
             let previousScalar = self.lastVolumeScalar
             let currentScalar = CGFloat(clampedVolume)
             self.lastVolumeScalar = currentScalar
             self.volumePercentage = percentage
+
             let epsilon: CGFloat = 0.001
             var shouldShowHUD = false
+
             if let previousScalar {
-                // Ignore events that do not affect the actual volume (e.g., system notification noise).
                 shouldShowHUD = abs(previousScalar - currentScalar) > epsilon
                 if !shouldShowHUD {
-                    // At min/max volume keep responding to repeated key presses.
                     let isAtLowerBound = previousScalar <= epsilon && currentScalar <= epsilon
                     let isAtUpperBound =
                         previousScalar >= (1 - epsilon) && currentScalar >= (1 - epsilon)
@@ -760,15 +256,14 @@ class VolumeMonitor: ObservableObject {
             } else {
                 shouldShowHUD = true
             }
+
             if currentScalar > epsilon, self.isDeviceMuted {
                 self.isDeviceMuted = false
             }
+
             if shouldShowHUD {
                 self.showVolumeHUD(volumeScalar: currentScalar)
             }
-            #if DEBUG
-                print("Volume changed: \(percentage)%")
-            #endif
         }
     }
 
@@ -778,19 +273,17 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
-    // Handle default device changes.
     private func deviceChanged() {
         stopListening()
         updateDefaultOutputDevice()
         getAudioDevices()
         startListening()
 
-        // Refresh the current device immediately so the HUD reflects the new selection.
         let currentOutputID = getDefaultOutputDeviceID()
         if currentOutputID != 0 {
             if let current = audioDevices.first(where: { $0.id == currentOutputID }) {
                 currentDevice = current
-            } else if let name = getDeviceName(currentOutputID) {
+            } else if let name = deviceManager.getDeviceName(currentOutputID) {
                 currentDevice = AudioDevice(id: currentOutputID, name: name)
             } else {
                 currentDevice = nil
@@ -799,228 +292,54 @@ class VolumeMonitor: ObservableObject {
             currentDevice = nil
         }
 
-        // Only refresh mute state if the device supports volume (and potentially mute)
-        if currentOutputID != 0 && deviceSupportsVolumeControl(currentOutputID) {
+        if currentOutputID != 0 && deviceManager.supportsVolumeControl(currentOutputID) {
             _ = refreshMuteState()
         }
+
         if let volume = getCurrentVolume() {
             let clamped = max(0, min(volume, 1))
             let percentage = Int(round(clamped * 100))
             self.volumePercentage = percentage
             self.lastVolumeScalar = CGFloat(clamped)
             self.showVolumeHUD(volumeScalar: CGFloat(clamped))
-            #if DEBUG
-                print("Device switched, new volume: \(percentage)%")
-            #endif
         } else {
-            // Device does not support volume control, reset the UI and show HUD
             self.volumePercentage = 0
             self.lastVolumeScalar = 0
             self.showVolumeHUD(volumeScalar: 0, isUnsupported: true)
-            #if DEBUG
-                print("Device switched to unsupported device, showing HUD")
-            #endif
         }
     }
 
-    // Present the volume HUD.
+    // MARK: - HUD Display
+
     private func showVolumeHUD(volumeScalar: CGFloat, isUnsupported: Bool = false) {
-        let clampedScalar = max(0, min(volumeScalar, 1))
-        let epsilon: CGFloat = 0.001
-        let isMutedForDisplay = isDeviceMuted || clampedScalar <= epsilon
-        let displayedScalar = isMutedForDisplay ? 0 : clampedScalar
-        let totalBlocks = displayedScalar * 16.0
-        let quarterBlocks = (totalBlocks * 4).rounded() / 4
-        let formattedQuarterBlocks = formatVolumeCount(quarterBlocks)
-        let volumeString: String
-        if formattedQuarterBlocks.contains("/") {
-            let normalizedNumerator = formattedQuarterBlocks.replacingOccurrences(
-                of: " ", with: "+")
-            volumeString = normalizedNumerator
-        } else {
-            volumeString = formattedQuarterBlocks
-        }
-
-        // Pre-compute text width so the window can match the content.
-        let deviceName = currentDevice?.name ?? "Unknown Device"
-        let deviceNSString = NSString(string: deviceName + "  -")
-        let deviceFont = NSFont.systemFont(ofSize: 12)
-        let deviceTextSize = deviceNSString.size(withAttributes: [.font: deviceFont])
-        let statusString = isUnsupported ? "Not Supported" : volumeString
-        let statusNSString = NSString(string: statusString)
-        let statusFont = NSFont.systemFont(ofSize: 12)
-        let statusTextSize = statusNSString.size(withAttributes: [.font: statusFont])
-        let maxVolumeSampleString = "15+3/4"
-        let maxVolumeSampleWidth = NSString(string: maxVolumeSampleString).size(withAttributes: [
-            .font: statusFont
-        ]).width
-        let effectiveStatusTextWidth = max(statusTextSize.width, maxVolumeSampleWidth)
-        let gapBetweenDeviceAndCount: CGFloat = 8
-        let combinedWidth =
-            deviceTextSize.width + gapBetweenDeviceAndCount + effectiveStatusTextWidth
-        let marginX: CGFloat = 24
-        // Minimum 320 to keep text visible.
-        let dynamicHudWidth = max(320, combinedWidth + 2 * marginX)
-
-        syncHUDWindowsWithScreens()
-
-        let screens = NSScreen.screens
-        for (screen, context) in zip(screens, hudWindows) {
-            let hudWindow = context.window
-            // Check whether the window is already visible.
-            let isAlreadyVisible = hudWindow.isVisible && hudWindow.alphaValue > 0.1
-
-            let style = hudStyle(for: hudWindow.effectiveAppearance)
-
-            // Resize the window to fit the content.
-            let screenFrame = screen.frame
-            let newWindowFrame = NSRect(
-                x: screenFrame.origin.x + (screenFrame.width - dynamicHudWidth) / 2,
-                y: screenFrame.origin.y + (screenFrame.height - hudHeight) / 2,
-                width: dynamicHudWidth,
-                height: hudHeight
-            )
-            hudWindow.setFrame(newWindowFrame, display: true)
-
-            let containerView = context.containerView
-            containerView.frame = NSRect(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
-            containerView.layer?.backgroundColor = style.backgroundColor.cgColor
-            containerView.layer?.shadowColor = style.shadowColor.cgColor
-            containerView.layer?.shadowOpacity = 1.0
-
-            // Update the volume icon based on volume level or unsupported status.
-            let volumePercentage = Int(clampedScalar * 100)
-            var iconName: String
-            var iconSize: CGFloat
-
-            if isUnsupported {
-                iconName = "nosign"
-                iconSize = 30
-            } else if isMutedForDisplay {
-                iconName = "speaker.slash.fill"
-                iconSize = 32
-            } else if volumePercentage < 33 {
-                // Low volume
-                iconName = "speaker.wave.1.fill"
-                iconSize = 36
-            } else if volumePercentage < 66 {
-                // Medium volume
-                iconName = "speaker.wave.2.fill"
-                iconSize = 41
-            } else {
-                // High volume
-                iconName = "speaker.wave.3.fill"
-                iconSize = 47
-            }
-
-            if let speakerImage = NSImage(
-                systemSymbolName: iconName, accessibilityDescription: "Volume")
-            {
-                context.iconView.image = speakerImage
-            } else if let fallbackImage = NSImage(
-                named: NSImage.touchBarAudioOutputVolumeHighTemplateName)
-            {
-                context.iconView.image = fallbackImage
-            } else {
-                context.iconView.image = NSImage(size: NSSize(width: iconSize, height: iconSize))
-            }
-            context.iconView.contentTintColor = style.iconTintColor
-            context.iconWidthConstraint.constant = iconSize
-            context.iconHeightConstraint.constant = iconSize
-
-            context.deviceLabel.stringValue = deviceName + "  -"
-            context.deviceLabel.textColor = style.secondaryTextColor
-
-            context.volumeLabel.stringValue = statusString
-            context.volumeLabel.textColor = style.primaryTextColor
-            let widthPadding: CGFloat = 6
-            context.volumeWidthConstraint.constant = effectiveStatusTextWidth + widthPadding
-            context.textStack.spacing = gapBetweenDeviceAndCount
-
-            context.blocksView.update(style: style, fillFraction: displayedScalar)
-            if isUnsupported {
-                context.blocksView.isHidden = true
-                context.blocksWidthConstraint.constant = 0
-            } else {
-                context.blocksView.isHidden = false
-                context.blocksWidthConstraint.constant =
-                    context.blocksView.intrinsicContentSize.width
-            }
-
-            let spacingIconToDevice: CGFloat = isUnsupported ? 20 : 14
-            let spacingDeviceToBlocks: CGFloat = isUnsupported ? 0 : 20
-            context.contentStack.setCustomSpacing(spacingIconToDevice, after: context.iconContainer)
-            context.contentStack.setCustomSpacing(spacingDeviceToBlocks, after: context.textStack)
-
-            // Only run the fade-in animation if the window is not already visible.
-            if !isAlreadyVisible {
-                hudWindow.alphaValue = 0
-                hudWindow.orderFrontRegardless()
-                NSAnimationContext.runAnimationGroup(
-                    { context in
-                        context.duration = 0.2
-                        hudWindow.animator().alphaValue = self.hudAlpha
-                    }, completionHandler: nil)
-            } else {
-                hudWindow.orderFrontRegardless()
-                // If the window is already visible, keep the current opacity.
-                hudWindow.alphaValue = self.hudAlpha
-            }
-        }
-
-        // Cancel any pending hide task.
-        hideHUDWorkItem?.cancel()
-
-        // Schedule a new hide task.
-        let workItem = DispatchWorkItem {
-            for context in self.hudWindows {
-                let hudWindow = context.window
-                NSAnimationContext.runAnimationGroup(
-                    { context in
-                        context.duration = 0.2
-                        hudWindow.animator().alphaValue = 0
-                    },
-                    completionHandler: {
-                        hudWindow.orderOut(nil)
-                    })
-            }
-        }
-        hideHUDWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + hudDisplayDuration, execute: workItem)
+        hudManager.showHUD(
+            volumeScalar: volumeScalar,
+            deviceName: currentDevice?.name,
+            isMuted: isDeviceMuted,
+            isUnsupported: isUnsupported
+        )
     }
 
-    // Format fractional values like 0.25, 0.5, 0.75 into 1/4, 2/4, 3/4 markers.
-    private func formatVolumeCount(_ value: CGFloat) -> String {
-        let integerPart = Int(value)
-        let fractionalPart = value - CGFloat(integerPart)
-        let epsilon: CGFloat = 0.001
-
-        if fractionalPart < epsilon {
-            return "\(integerPart)"
-        }
-
-        if abs(fractionalPart - 1.0) < epsilon {
-            return "\(integerPart + 1)"
-        }
-
-        let fractionString: String
-        switch fractionalPart {
-        case (0.25 - epsilon)...(0.25 + epsilon):
-            fractionString = "1/4"
-        case (0.5 - epsilon)...(0.5 + epsilon):
-            fractionString = "2/4"
-        case (0.75 - epsilon)...(0.75 + epsilon):
-            fractionString = "3/4"
-        default:
-            fractionString = String(format: "%.2f", fractionalPart)
-        }
-
-        if integerPart == 0 {
-            return fractionString
+    private func showHUDForCurrentVolume() {
+        _ = refreshMuteState()
+        if let volume = getCurrentVolume() {
+            let clamped = max(0, min(volume, 1))
+            let scalar = CGFloat(clamped)
+            lastVolumeScalar = scalar
+            if isDeviceMuted {
+                volumePercentage = 0
+            } else {
+                volumePercentage = Int(round(clamped * 100))
+            }
+            showVolumeHUD(volumeScalar: scalar, isUnsupported: false)
+        } else if let lastScalar = lastVolumeScalar {
+            showVolumeHUD(volumeScalar: lastScalar, isUnsupported: true)
         } else {
-            return "\(integerPart) \(fractionString)"
+            showVolumeHUD(volumeScalar: 0, isUnsupported: true)
         }
     }
+
+    // MARK: - Key Monitoring
 
     private func startKeyMonitoring() {
         if globalSystemEventMonitor == nil {
@@ -1078,83 +397,18 @@ class VolumeMonitor: ObservableObject {
         lastHandledSystemEvent = signature
 
         switch keyCode & 0xFF {
-        case 0, 1, 7:  // NX_KEYTYPE_SOUND_UP, NX_KEYTYPE_SOUND_DOWN, NX_KEYTYPE_MUTE
+        case 0, 1, 7:
             showHUDForCurrentVolume()
         default:
             break
         }
     }
 
-    private func showHUDForCurrentVolume() {
-        _ = refreshMuteState()
-        if let volume = getCurrentVolume() {
-            let clamped = max(0, min(volume, 1))
-            let scalar = CGFloat(clamped)
-            lastVolumeScalar = scalar
-            if isDeviceMuted {
-                volumePercentage = 0
-            } else {
-                volumePercentage = Int(round(clamped * 100))
-            }
-            showVolumeHUD(volumeScalar: scalar, isUnsupported: false)
-        } else if let lastScalar = lastVolumeScalar {
-            showVolumeHUD(volumeScalar: lastScalar, isUnsupported: true)
-        } else {
-            showVolumeHUD(volumeScalar: 0, isUnsupported: true)
-        }
-    }
+    // MARK: - Listener Management
 
-    private func hudStyle(for appearance: NSAppearance) -> HUDStyle {
-        let bestMatch =
-            appearance.bestMatch(from: [
-                .darkAqua,
-                .vibrantDark,
-                .aqua,
-                .vibrantLight,
-            ]) ?? .aqua
-        let isDarkInterface = (bestMatch == .darkAqua || bestMatch == .vibrantDark)
-
-        let backgroundBase = resolveColor(NSColor.windowBackgroundColor, for: appearance)
-        let backgroundColor = backgroundBase.withAlphaComponent(isDarkInterface ? 0.92 : 0.97)
-        let shadowColor = NSColor.black.withAlphaComponent(isDarkInterface ? 0.6 : 0.25)
-        let iconTintColor = resolveColor(NSColor.labelColor, for: appearance)
-        let primaryTextColor = resolveColor(NSColor.labelColor, for: appearance)
-        let secondaryTextColor = resolveColor(NSColor.secondaryLabelColor, for: appearance)
-        let neutralFillBase = resolveColor(NSColor.systemGray, for: appearance)
-        let blockFillColor = neutralFillBase.withAlphaComponent(isDarkInterface ? 0.99 : 1.0)
-        let blockEmptyColor =
-            isDarkInterface
-            ? NSColor.white.withAlphaComponent(0.25)
-            : NSColor.black.withAlphaComponent(0.12)
-
-        return HUDStyle(
-            backgroundColor: backgroundColor,
-            shadowColor: shadowColor,
-            iconTintColor: iconTintColor,
-            primaryTextColor: primaryTextColor,
-            secondaryTextColor: secondaryTextColor,
-            blockFillColor: blockFillColor,
-            blockEmptyColor: blockEmptyColor
-        )
-    }
-
-    private func resolveColor(_ color: NSColor, for appearance: NSAppearance) -> NSColor {
-        var resolved = color
-        appearance.performAsCurrentDrawingAppearance {
-            resolved = color.usingColorSpace(.extendedSRGB) ?? color
-        }
-        return resolved
-    }
-
-    // Register listeners.
     func startListening() {
         let deviceID = updateDefaultOutputDevice()
-        guard deviceID != 0 else {
-            #if DEBUG
-                print("No valid output device")
-            #endif
-            return
-        }
+        guard deviceID != 0 else { return }
 
         if isListening {
             if getListeningDeviceID() == deviceID {
@@ -1166,40 +420,26 @@ class VolumeMonitor: ObservableObject {
         setRegisteredVolumeElements([])
         setRegisteredMuteElements([])
 
-        let supportsVolume = deviceSupportsVolumeControl(deviceID)
+        let volumeElements = deviceManager.detectVolumeElements(for: deviceID)
+        let supportsVolume = !volumeElements.isEmpty
 
         if !supportsVolume {
-            #if DEBUG
-                print(
-                    "Device does not support volume control, but will set device listener for switching"
-                )
-            #endif
-            // Clear mute elements for unsupported devices to prevent stale element errors
             setMuteElements([])
         }
 
         if supportsVolume {
-            _ = deviceSupportsMute(deviceID)
+            setVolumeElements(volumeElements)
+            let muteElements = deviceManager.detectMuteElements(for: deviceID)
+            setMuteElements(muteElements)
             _ = refreshMuteState(for: deviceID)
 
-            // Subscribe to volume changes.
             volumeListener = {
                 [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in
-                guard let self = self else {
-                    #if DEBUG
-                        print("VolumeMonitor deallocated in volume listener")
-                    #endif
-                    return
-                }
+                guard let self = self else { return }
                 self.volumeChanged(address: inAddresses.pointee)
             }
 
-            guard let audioQueue = audioQueue, let volumeListener = volumeListener else {
-                #if DEBUG
-                    print("Failed to initialize audio queue or volume listener")
-                #endif
-                return
-            }
+            guard let audioQueue = audioQueue, let volumeListener = volumeListener else { return }
 
             var listenerRegistered = false
             let volumeElementsSnapshot = getVolumeElements()
@@ -1214,20 +454,10 @@ class VolumeMonitor: ObservableObject {
                     deviceID, &volumeAddress, audioQueue, volumeListener)
                 if volumeStatus == noErr {
                     listenerRegistered = true
-                } else {
-                    #if DEBUG
-                        print(
-                            "Error adding volume listener for element \(element): \(volumeStatus)")
-                    #endif
                 }
             }
 
-            guard listenerRegistered else {
-                #if DEBUG
-                    print("Failed to register any volume listeners")
-                #endif
-                return
-            }
+            guard listenerRegistered else { return }
             setRegisteredVolumeElements(volumeElementsSnapshot)
 
             let muteElementsSnapshot = getMuteElements()
@@ -1235,12 +465,7 @@ class VolumeMonitor: ObservableObject {
                 muteListener = {
                     [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>)
                     in
-                    guard let self = self else {
-                        #if DEBUG
-                            print("VolumeMonitor deallocated in mute listener")
-                        #endif
-                        return
-                    }
+                    guard let self = self else { return }
                     self.muteChanged(address: inAddresses.pointee)
                 }
 
@@ -1253,32 +478,18 @@ class VolumeMonitor: ObservableObject {
                             mElement: element
                         )
 
-                        // Check if property exists and can be read
                         if AudioObjectHasProperty(deviceID, &muteAddress) {
                             var muted: UInt32 = 0
                             var size = UInt32(MemoryLayout<UInt32>.size)
                             let readStatus = AudioObjectGetPropertyData(
                                 deviceID, &muteAddress, 0, nil, &size, &muted)
 
-                            // Only register listener if we can actually read the mute value
                             if readStatus == noErr {
                                 let muteStatus = AudioObjectAddPropertyListenerBlock(
                                     deviceID, &muteAddress, audioQueue, muteListener)
-                                if muteStatus != noErr {
-                                    #if DEBUG
-                                        print(
-                                            "Error adding mute listener for element \(element): \(muteStatus)"
-                                        )
-                                    #endif
-                                } else {
+                                if muteStatus == noErr {
                                     validMuteElements.append(element)
                                 }
-                            } else {
-                                #if DEBUG
-                                    print(
-                                        "Cannot read mute for element \(element), skipping listener"
-                                    )
-                                #endif
                             }
                         }
                     }
@@ -1287,10 +498,8 @@ class VolumeMonitor: ObservableObject {
             }
         }
 
-        // Always start key monitoring, even for unsupported devices, so HUD shows when user presses volume keys
         startKeyMonitoring()
 
-        // Subscribe to default device changes.
         var deviceAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -1298,39 +507,24 @@ class VolumeMonitor: ObservableObject {
         )
 
         deviceListener = { [weak self] (_: UInt32, _: UnsafePointer<AudioObjectPropertyAddress>) in
-            guard let self = self else {
-                #if DEBUG
-                    print("VolumeMonitor deallocated in device listener")
-                #endif
-                return
-            }
+            guard let self = self else { return }
             DispatchQueue.main.async {
                 self.deviceChanged()
             }
         }
 
-        guard let audioQueue = audioQueue, let deviceListener = deviceListener else {
-            #if DEBUG
-                print("Failed to initialize audio queue or device listener")
-            #endif
-            return
-        }
+        guard let audioQueue = audioQueue, let deviceListener = deviceListener else { return }
 
         let deviceStatus = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
         if deviceStatus != noErr {
-            #if DEBUG
-                print("Error adding device listener: \(deviceStatus)")
-            #endif
             return
         }
 
-        // Mark that we are listening even if the current device doesn't support volume control
         setListeningDeviceID(deviceID)
         isListening = true
     }
 
-    // Stop listening.
     func stopListening() {
         stopKeyMonitoring()
         guard let audioQueue = audioQueue else {
@@ -1394,8 +588,5 @@ class VolumeMonitor: ObservableObject {
         setRegisteredVolumeElements([])
         setRegisteredMuteElements([])
         isListening = false
-        #if DEBUG
-            print("Stopped listening")
-        #endif
     }
 }

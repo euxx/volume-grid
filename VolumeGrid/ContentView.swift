@@ -51,9 +51,53 @@ class VolumeMonitor: ObservableObject {
     private var listeningDeviceID: AudioDeviceID?
     private var volumeListener: AudioObjectPropertyListenerBlock?
     private var deviceListener: AudioObjectPropertyListenerBlock?
-    private struct HUDWindowContext {
+    private final class HUDWindowContext {
         let screenID: CGDirectDisplayID
         let window: NSWindow
+        let containerView: NSView
+        let contentStack: NSStackView
+        let iconContainer: NSView
+        let iconView: NSImageView
+        let iconWidthConstraint: NSLayoutConstraint
+        let iconHeightConstraint: NSLayoutConstraint
+        let textStack: NSStackView
+        let deviceLabel: NSTextField
+        let volumeLabel: NSTextField
+        let volumeWidthConstraint: NSLayoutConstraint
+        let blocksView: VolumeBlocksView
+        let blocksWidthConstraint: NSLayoutConstraint
+
+        init(
+            screenID: CGDirectDisplayID,
+            window: NSWindow,
+            containerView: NSView,
+            contentStack: NSStackView,
+            iconContainer: NSView,
+            iconView: NSImageView,
+            iconWidthConstraint: NSLayoutConstraint,
+            iconHeightConstraint: NSLayoutConstraint,
+            textStack: NSStackView,
+            deviceLabel: NSTextField,
+            volumeLabel: NSTextField,
+            volumeWidthConstraint: NSLayoutConstraint,
+            blocksView: VolumeBlocksView,
+            blocksWidthConstraint: NSLayoutConstraint
+        ) {
+            self.screenID = screenID
+            self.window = window
+            self.containerView = containerView
+            self.contentStack = contentStack
+            self.iconContainer = iconContainer
+            self.iconView = iconView
+            self.iconWidthConstraint = iconWidthConstraint
+            self.iconHeightConstraint = iconHeightConstraint
+            self.textStack = textStack
+            self.deviceLabel = deviceLabel
+            self.volumeLabel = volumeLabel
+            self.volumeWidthConstraint = volumeWidthConstraint
+            self.blocksView = blocksView
+            self.blocksWidthConstraint = blocksWidthConstraint
+        }
     }
 
     private var hudWindows: [HUDWindowContext] = []
@@ -144,6 +188,104 @@ class VolumeMonitor: ObservableObject {
         let blockEmptyColor: NSColor
     }
 
+    private final class VolumeBlocksView: NSView {
+        private let blockCount = 16
+        private let blockWidth: CGFloat = 14
+        private let blockHeight: CGFloat = 6
+        private let blockSpacing: CGFloat = 2
+        private let cornerRadius: CGFloat = 0.5
+        private var style: HUDStyle
+        private var blockLayers: [CALayer] = []
+        private var fillLayers: [CALayer] = []
+
+        private var totalWidth: CGFloat {
+            CGFloat(blockCount) * blockWidth + CGFloat(blockCount - 1) * blockSpacing
+        }
+
+        init(style: HUDStyle) {
+            self.style = style
+            super.init(frame: NSRect(x: 0, y: 0, width: 0, height: 0))
+            translatesAutoresizingMaskIntoConstraints = false
+            wantsLayer = true
+            layer = CALayer()
+            layer?.backgroundColor = NSColor.clear.cgColor
+            createBlockLayers()
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            nil
+        }
+
+        override var intrinsicContentSize: NSSize {
+            NSSize(width: totalWidth, height: blockHeight)
+        }
+
+        private func createBlockLayers() {
+            blockLayers.removeAll()
+            fillLayers.removeAll()
+
+            let containerLayer = CALayer()
+            containerLayer.frame = CGRect(
+                x: 0, y: 0, width: totalWidth, height: blockHeight)
+            containerLayer.backgroundColor = NSColor.clear.cgColor
+            layer?.addSublayer(containerLayer)
+
+            for index in 0..<blockCount {
+                let blockLayer = CALayer()
+                blockLayer.frame = CGRect(
+                    x: CGFloat(index) * (blockWidth + blockSpacing),
+                    y: 0,
+                    width: blockWidth,
+                    height: blockHeight
+                )
+                blockLayer.cornerRadius = cornerRadius
+                blockLayer.backgroundColor = style.blockEmptyColor.cgColor
+
+                let fillLayer = CALayer()
+                fillLayer.cornerRadius = cornerRadius
+                fillLayer.backgroundColor = style.blockFillColor.cgColor
+                fillLayer.frame = CGRect(x: 0, y: 0, width: 0, height: blockHeight)
+
+                blockLayer.addSublayer(fillLayer)
+                containerLayer.addSublayer(blockLayer)
+                blockLayers.append(blockLayer)
+                fillLayers.append(fillLayer)
+            }
+        }
+
+        func update(style: HUDStyle, fillFraction: CGFloat) {
+            self.style = style
+            for blockLayer in blockLayers {
+                blockLayer.backgroundColor = style.blockEmptyColor.cgColor
+            }
+            for fillLayer in fillLayers {
+                fillLayer.backgroundColor = style.blockFillColor.cgColor
+            }
+
+            let clampedFraction = max(0, min(1, fillFraction))
+            let totalBlocks = clampedFraction * CGFloat(blockCount)
+
+            for (index, fillLayer) in fillLayers.enumerated() {
+                var blockFill = totalBlocks - CGFloat(index)
+                blockFill = max(0, min(1, blockFill))
+                blockFill = (blockFill * 4).rounded() / 4
+                if blockFill <= 0 {
+                    fillLayer.isHidden = true
+                    fillLayer.frame = CGRect(x: 0, y: 0, width: 0, height: blockHeight)
+                } else {
+                    fillLayer.isHidden = false
+                    fillLayer.frame = CGRect(
+                        x: 0,
+                        y: 0,
+                        width: blockWidth * blockFill,
+                        height: blockHeight
+                    )
+                }
+            }
+        }
+    }
+
     private func resolveColor(_ color: NSColor, for appearance: NSAppearance) -> NSColor {
         var resolved = color
         appearance.performAsCurrentDrawingAppearance {
@@ -220,52 +362,6 @@ class VolumeMonitor: ObservableObject {
         #endif
     }
 
-    // Build the grid of volume blocks.
-    private func createVolumeBlocksView(fillFraction: CGFloat, style: HUDStyle) -> NSView {
-        let blockCount = 16
-        let blockWidth: CGFloat = 14  // Slightly wider blocks.
-        let blockHeight: CGFloat = 6  // Slightly shorter, more slender blocks.
-        let blockSpacing: CGFloat = 2  // Reduced spacing.
-
-        let totalWidth = CGFloat(blockCount) * blockWidth + CGFloat(blockCount - 1) * blockSpacing
-        let containerView = NSView(
-            frame: NSRect(x: 0, y: 0, width: totalWidth, height: blockHeight))
-
-        let clampedFraction = max(0, min(1, fillFraction))
-        let totalBlocks = clampedFraction * CGFloat(blockCount)
-
-        for i in 0..<blockCount {
-            let block = NSView(
-                frame: NSRect(
-                    x: CGFloat(i) * (blockWidth + blockSpacing),
-                    y: 0,
-                    width: blockWidth,
-                    height: blockHeight
-                ))
-
-            block.wantsLayer = true
-            block.layer?.cornerRadius = 0.5  // Smaller corner radius for a refined look.
-            block.layer?.backgroundColor = style.blockEmptyColor.cgColor
-
-            var blockFill = totalBlocks - CGFloat(i)
-            blockFill = max(0, min(1, blockFill))
-            blockFill = (blockFill * 4).rounded() / 4  // Support quarter-block increments.
-
-            if blockFill > 0 {
-                let fillLayer = CALayer()
-                fillLayer.backgroundColor = style.blockFillColor.cgColor
-                fillLayer.cornerRadius = 0.5
-                fillLayer.frame = CGRect(
-                    x: 0, y: 0, width: blockWidth * blockFill, height: blockHeight)
-                block.layer?.addSublayer(fillLayer)
-            }
-
-            containerView.addSubview(block)
-        }
-
-        return containerView
-    }
-
     private func screenID(for screen: NSScreen) -> CGDirectDisplayID? {
         if let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
             as? NSNumber
@@ -275,7 +371,9 @@ class VolumeMonitor: ObservableObject {
         return nil
     }
 
-    private func makeHUDWindow(for screen: NSScreen) -> NSWindow {
+    private func makeHUDWindow(for screen: NSScreen, screenID: CGDirectDisplayID)
+        -> HUDWindowContext
+    {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight),
             styleMask: [.borderless],
@@ -305,6 +403,110 @@ class VolumeMonitor: ObservableObject {
         containerView.layer?.shadowRadius = 8
         window.contentView = containerView
 
+        let contentStack = NSStackView()
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        contentStack.orientation = .vertical
+        contentStack.alignment = .centerX
+        contentStack.spacing = 0
+        containerView.addSubview(contentStack)
+
+        let marginX: CGFloat = 24
+        let minVerticalPadding: CGFloat = 14
+        NSLayoutConstraint.activate([
+            contentStack.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+            contentStack.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
+            contentStack.leadingAnchor.constraint(
+                greaterThanOrEqualTo: containerView.leadingAnchor, constant: marginX),
+            contentStack.trailingAnchor.constraint(
+                lessThanOrEqualTo: containerView.trailingAnchor, constant: -marginX),
+        ])
+        let topConstraint = contentStack.topAnchor.constraint(
+            greaterThanOrEqualTo: containerView.topAnchor, constant: minVerticalPadding)
+        topConstraint.priority = .defaultHigh
+        topConstraint.isActive = true
+        let bottomConstraint = contentStack.bottomAnchor.constraint(
+            lessThanOrEqualTo: containerView.bottomAnchor, constant: -minVerticalPadding)
+        bottomConstraint.priority = .defaultHigh
+        bottomConstraint.isActive = true
+
+        let iconContainerSize: CGFloat = 40
+        let iconContainer = NSView()
+        iconContainer.translatesAutoresizingMaskIntoConstraints = false
+
+        let iconView = NSImageView()
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        iconView.contentTintColor = style.iconTintColor
+        iconContainer.addSubview(iconView)
+
+        let iconWidthConstraint = iconView.widthAnchor.constraint(
+            equalToConstant: iconContainerSize)
+        let iconHeightConstraint = iconView.heightAnchor.constraint(
+            equalToConstant: iconContainerSize)
+        iconWidthConstraint.isActive = true
+        iconHeightConstraint.isActive = true
+
+        NSLayoutConstraint.activate([
+            iconView.centerXAnchor.constraint(equalTo: iconContainer.centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: iconContainer.centerYAnchor),
+            iconContainer.widthAnchor.constraint(equalToConstant: iconContainerSize),
+            iconContainer.heightAnchor.constraint(equalToConstant: iconContainerSize),
+        ])
+
+        contentStack.addArrangedSubview(iconContainer)
+
+        let textStack = NSStackView()
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        textStack.orientation = .horizontal
+        textStack.alignment = .centerY
+        textStack.spacing = 8
+
+        let deviceLabel = NSTextField(labelWithString: "")
+        deviceLabel.translatesAutoresizingMaskIntoConstraints = false
+        deviceLabel.textColor = style.secondaryTextColor
+        deviceLabel.font = .systemFont(ofSize: 12, weight: .regular)
+        deviceLabel.alignment = .left
+        deviceLabel.isBordered = false
+        deviceLabel.backgroundColor = .clear
+        deviceLabel.isEditable = false
+        deviceLabel.isSelectable = false
+        deviceLabel.lineBreakMode = .byTruncatingTail
+        deviceLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        deviceLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+
+        let volumeLabel = NSTextField(labelWithString: "")
+        volumeLabel.translatesAutoresizingMaskIntoConstraints = false
+        volumeLabel.textColor = style.primaryTextColor
+        volumeLabel.font = .systemFont(ofSize: 12, weight: .regular)
+        volumeLabel.alignment = .left
+        volumeLabel.isBordered = false
+        volumeLabel.backgroundColor = .clear
+        volumeLabel.isEditable = false
+        volumeLabel.isSelectable = false
+        volumeLabel.lineBreakMode = .byClipping
+        volumeLabel.setContentHuggingPriority(.required, for: .horizontal)
+        volumeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let volumeWidthConstraint = volumeLabel.widthAnchor.constraint(equalToConstant: 0)
+        volumeWidthConstraint.priority = .required
+        volumeWidthConstraint.isActive = true
+
+        textStack.addArrangedSubview(deviceLabel)
+        textStack.addArrangedSubview(volumeLabel)
+        contentStack.addArrangedSubview(textStack)
+
+        let blocksView = VolumeBlocksView(style: style)
+        let blocksWidthConstraint = blocksView.widthAnchor.constraint(
+            equalToConstant: blocksView.intrinsicContentSize.width)
+        blocksWidthConstraint.priority = .required
+        blocksWidthConstraint.isActive = true
+        contentStack.addArrangedSubview(blocksView)
+        blocksView.update(style: style, fillFraction: 0)
+
+        let spacingIconToDevice: CGFloat = 14
+        let spacingDeviceToBlocks: CGFloat = 20
+        contentStack.setCustomSpacing(spacingIconToDevice, after: iconContainer)
+        contentStack.setCustomSpacing(spacingDeviceToBlocks, after: textStack)
+
         let screenFrame = screen.frame
         let windowOrigin = CGPoint(
             x: screenFrame.origin.x + (screenFrame.width - hudWidth) / 2,
@@ -313,7 +515,22 @@ class VolumeMonitor: ObservableObject {
         window.setFrameOrigin(windowOrigin)
         window.alphaValue = hudAlpha
 
-        return window
+        return HUDWindowContext(
+            screenID: screenID,
+            window: window,
+            containerView: containerView,
+            contentStack: contentStack,
+            iconContainer: iconContainer,
+            iconView: iconView,
+            iconWidthConstraint: iconWidthConstraint,
+            iconHeightConstraint: iconHeightConstraint,
+            textStack: textStack,
+            deviceLabel: deviceLabel,
+            volumeLabel: volumeLabel,
+            volumeWidthConstraint: volumeWidthConstraint,
+            blocksView: blocksView,
+            blocksWidthConstraint: blocksWidthConstraint
+        )
     }
 
     // Configure the HUD windows.
@@ -334,8 +551,8 @@ class VolumeMonitor: ObservableObject {
                 let context = remaining.remove(at: index)
                 updated.append(context)
             } else {
-                let window = makeHUDWindow(for: screen)
-                updated.append(HUDWindowContext(screenID: screenID, window: window))
+                let context = makeHUDWindow(for: screen, screenID: screenID)
+                updated.append(context)
             }
         }
 
@@ -903,25 +1120,13 @@ class VolumeMonitor: ObservableObject {
             )
             hudWindow.setFrame(newWindowFrame, display: true)
 
-            guard let containerView = hudWindow.contentView else { continue }
-
-            // Remove any previous subviews.
-            for subview in containerView.subviews {
-                subview.removeFromSuperview()
-            }
-
-            // Resize the container.
+            let containerView = context.containerView
             containerView.frame = NSRect(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
             containerView.layer?.backgroundColor = style.backgroundColor.cgColor
             containerView.layer?.shadowColor = style.shadowColor.cgColor
             containerView.layer?.shadowOpacity = 1.0
 
-            // Create the icon container.
-            let iconContainerSize: CGFloat = 40
-            let iconContainer = NSView()
-            iconContainer.translatesAutoresizingMaskIntoConstraints = false
-
-            // Create the volume icon based on volume level or unsupported status.
+            // Update the volume icon based on volume level or unsupported status.
             let volumePercentage = Int(clampedScalar * 100)
             var iconName: String
             var iconSize: CGFloat
@@ -946,127 +1151,46 @@ class VolumeMonitor: ObservableObject {
                 iconSize = 47
             }
 
-            let speakerImageView = NSImageView()
             if let speakerImage = NSImage(
                 systemSymbolName: iconName, accessibilityDescription: "Volume")
             {
-                speakerImageView.image = speakerImage
+                context.iconView.image = speakerImage
             } else if let fallbackImage = NSImage(
                 named: NSImage.touchBarAudioOutputVolumeHighTemplateName)
             {
-                speakerImageView.image = fallbackImage
+                context.iconView.image = fallbackImage
             } else {
-                speakerImageView.image = NSImage(size: NSSize(width: iconSize, height: iconSize))
+                context.iconView.image = NSImage(size: NSSize(width: iconSize, height: iconSize))
             }
-            // Keep the icon centered in its container at its native size.
-            speakerImageView.imageScaling = .scaleProportionallyUpOrDown
-            speakerImageView.contentTintColor = style.iconTintColor
+            context.iconView.contentTintColor = style.iconTintColor
+            context.iconWidthConstraint.constant = iconSize
+            context.iconHeightConstraint.constant = iconSize
 
-            speakerImageView.translatesAutoresizingMaskIntoConstraints = false
-            // Add the icon to the container.
-            iconContainer.addSubview(speakerImageView)
-            NSLayoutConstraint.activate([
-                speakerImageView.centerXAnchor.constraint(equalTo: iconContainer.centerXAnchor),
-                speakerImageView.centerYAnchor.constraint(equalTo: iconContainer.centerYAnchor),
-                speakerImageView.widthAnchor.constraint(equalToConstant: iconSize),
-                speakerImageView.heightAnchor.constraint(equalToConstant: iconSize),
-            ])
+            context.deviceLabel.stringValue = deviceName + "  -"
+            context.deviceLabel.textColor = style.secondaryTextColor
 
-            // Create the grid of volume blocks.
-            let blocksView = createVolumeBlocksView(fillFraction: displayedScalar, style: style)
-            let blocksSize = blocksView.frame.size
-            blocksView.translatesAutoresizingMaskIntoConstraints = false
-
-            // Create the device name label.
-            let deviceLabel = NSTextField(labelWithString: deviceName + "  -")
-            deviceLabel.translatesAutoresizingMaskIntoConstraints = false
-            deviceLabel.textColor = style.secondaryTextColor
-            deviceLabel.font = .systemFont(ofSize: 12, weight: .regular)
-            deviceLabel.alignment = .left
-            deviceLabel.isBordered = false
-            deviceLabel.backgroundColor = .clear
-            deviceLabel.isEditable = false
-            deviceLabel.isSelectable = false
-            deviceLabel.lineBreakMode = .byTruncatingTail
-            deviceLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
-            deviceLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
-
-            // Create the volume count label.
-            let volumeText = NSTextField(labelWithString: statusString)
-            volumeText.translatesAutoresizingMaskIntoConstraints = false
-            volumeText.textColor = style.primaryTextColor
-            volumeText.font = .systemFont(ofSize: 12, weight: .regular)
-            volumeText.alignment = .left
-            volumeText.isBordered = false
-            volumeText.backgroundColor = .clear
-            volumeText.isEditable = false
-            volumeText.isSelectable = false
-            volumeText.lineBreakMode = .byClipping
-            volumeText.setContentHuggingPriority(.required, for: .horizontal)
-            volumeText.setContentCompressionResistancePriority(.required, for: .horizontal)
+            context.volumeLabel.stringValue = statusString
+            context.volumeLabel.textColor = style.primaryTextColor
             let widthPadding: CGFloat = 6
-            let volumeWidthConstraint = volumeText.widthAnchor.constraint(
-                equalToConstant: effectiveStatusTextWidth + widthPadding)
-            volumeWidthConstraint.priority = .required
-            volumeWidthConstraint.isActive = true
+            context.volumeWidthConstraint.constant = effectiveStatusTextWidth + widthPadding
+            context.textStack.spacing = gapBetweenDeviceAndCount
 
-            // Use a stack view to keep everything centered and evenly spaced.
-            let contentStack = NSStackView()
-            contentStack.translatesAutoresizingMaskIntoConstraints = false
-            contentStack.orientation = .vertical
-            contentStack.alignment = .centerX
-            contentStack.spacing = 0
-
-            containerView.addSubview(contentStack)
-
-            let minVerticalPadding: CGFloat = 14
-            NSLayoutConstraint.activate([
-                contentStack.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
-                contentStack.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-                contentStack.leadingAnchor.constraint(
-                    greaterThanOrEqualTo: containerView.leadingAnchor, constant: marginX),
-                contentStack.trailingAnchor.constraint(
-                    lessThanOrEqualTo: containerView.trailingAnchor, constant: -marginX),
-            ])
-
-            let topConstraint = contentStack.topAnchor.constraint(
-                greaterThanOrEqualTo: containerView.topAnchor, constant: minVerticalPadding)
-            topConstraint.priority = .defaultHigh
-            topConstraint.isActive = true
-
-            let bottomConstraint = contentStack.bottomAnchor.constraint(
-                lessThanOrEqualTo: containerView.bottomAnchor, constant: -minVerticalPadding)
-            bottomConstraint.priority = .defaultHigh
-            bottomConstraint.isActive = true
-
-            contentStack.addArrangedSubview(iconContainer)
-            NSLayoutConstraint.activate([
-                iconContainer.widthAnchor.constraint(equalToConstant: iconContainerSize),
-                iconContainer.heightAnchor.constraint(equalToConstant: iconContainerSize),
-            ])
-
-            let textStack = NSStackView()
-            textStack.translatesAutoresizingMaskIntoConstraints = false
-            textStack.orientation = .horizontal
-            textStack.alignment = .centerY
-            textStack.spacing = gapBetweenDeviceAndCount
-            textStack.addArrangedSubview(deviceLabel)
-            textStack.addArrangedSubview(volumeText)
-            contentStack.addArrangedSubview(textStack)
+            context.blocksView.update(style: style, fillFraction: displayedScalar)
+            if isUnsupported {
+                context.blocksView.isHidden = true
+                context.blocksWidthConstraint.constant = 0
+            } else {
+                context.blocksView.isHidden = false
+                context.blocksWidthConstraint.constant =
+                    context.blocksView.intrinsicContentSize.width
+            }
 
             let spacingIconToDevice: CGFloat = isUnsupported ? 20 : 14
-            let spacingDeviceToBlocks: CGFloat = 20
-            contentStack.setCustomSpacing(spacingIconToDevice, after: iconContainer)
-            contentStack.setCustomSpacing(spacingDeviceToBlocks, after: textStack)
+            let spacingDeviceToBlocks: CGFloat = isUnsupported ? 0 : 20
+            context.contentStack.setCustomSpacing(spacingIconToDevice, after: context.iconContainer)
+            context.contentStack.setCustomSpacing(spacingDeviceToBlocks, after: context.textStack)
 
-            // Only add blocks view if the device is supported
-            if !isUnsupported {
-                contentStack.addArrangedSubview(blocksView)
-                NSLayoutConstraint.activate([
-                    blocksView.widthAnchor.constraint(equalToConstant: blocksSize.width),
-                    blocksView.heightAnchor.constraint(equalToConstant: blocksSize.height),
-                ])
-            }
+            containerView.layoutSubtreeIfNeeded()
 
             // Only run the fade-in animation if the window is not already visible.
             if !isAlreadyVisible {

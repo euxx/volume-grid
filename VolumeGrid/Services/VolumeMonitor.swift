@@ -7,6 +7,7 @@ class VolumeMonitor: ObservableObject {
     @Published var volumePercentage: Int = 0
     @Published var audioDevices: [AudioDevice] = []
     @Published var currentDevice: AudioDevice?
+    @Published var isCurrentDeviceVolumeSupported: Bool = false
 
     private let deviceManager = AudioDeviceManager()
     private let state = VolumeStateStore()
@@ -22,6 +23,8 @@ class VolumeMonitor: ObservableObject {
         audioQueue = DispatchQueue(label: "com.volumegrid.audio", qos: .userInitiated)
 
         let deviceID = updateDefaultOutputDevice()
+        isCurrentDeviceVolumeSupported =
+            deviceID != 0 && deviceManager.supportsVolumeControl(deviceID)
         if deviceID != 0 {
             if let volume = getCurrentVolume() {
                 volumePercentage = Int(volume * 100)
@@ -225,6 +228,8 @@ class VolumeMonitor: ObservableObject {
         } else {
             currentDevice = nil
         }
+        updateVolumeSupportState(
+            currentOutputID != 0 && deviceManager.supportsVolumeControl(currentOutputID))
 
         if currentOutputID != 0 && deviceManager.supportsVolumeControl(currentOutputID) {
             _ = refreshMuteState()
@@ -272,7 +277,10 @@ class VolumeMonitor: ObservableObject {
 
     func startListening() {
         let deviceID = updateDefaultOutputDevice()
-        guard deviceID != 0 else { return }
+        guard deviceID != 0 else {
+            updateVolumeSupportState(false)
+            return
+        }
 
         if state.isListeningActive() {
             if state.listeningDeviceIDValue() == deviceID {
@@ -286,8 +294,10 @@ class VolumeMonitor: ObservableObject {
 
         let volumeElements = deviceManager.detectVolumeElements(for: deviceID)
         let supportsVolume = !volumeElements.isEmpty
+        updateVolumeSupportState(supportsVolume)
 
         if !supportsVolume {
+            state.updateVolumeElements([])
             state.updateMuteElements([])
         }
 
@@ -363,7 +373,13 @@ class VolumeMonitor: ObservableObject {
         }
 
         systemEventMonitor.start { [weak self] in
-            self?.showHUDForCurrentVolume()
+            guard let self else { return }
+            if self.isCurrentDeviceVolumeSupported {
+                self.showHUDForCurrentVolume()
+            } else {
+                let fallbackScalar = self.state.lastVolumeScalarSnapshot() ?? 0
+                self.showVolumeHUD(volumeScalar: fallbackScalar, isUnsupported: true)
+            }
         }
 
         var deviceAddress = AudioObjectPropertyAddress(
@@ -473,6 +489,29 @@ class VolumeMonitor: ObservableObject {
         } else {
             DispatchQueue.main.async { [weak self] in
                 self?.hudEventSubject.send(context)
+            }
+        }
+    }
+
+    private func updateVolumeSupportState(_ isSupported: Bool) {
+        if Thread.isMainThread {
+            isCurrentDeviceVolumeSupported = isSupported
+            if !isSupported {
+                state.updateLastVolumeScalar(0)
+                if volumePercentage != 0 {
+                    volumePercentage = 0
+                }
+            }
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.isCurrentDeviceVolumeSupported = isSupported
+                if !isSupported {
+                    self.state.updateLastVolumeScalar(0)
+                    if self.volumePercentage != 0 {
+                        self.volumePercentage = 0
+                    }
+                }
             }
         }
     }

@@ -16,6 +16,8 @@ final class StatusBarController {
     private var subscriptions = Set<AnyCancellable>()
     private var latestVolume: Int = 0
     private var latestDeviceName: String = "Unknown Device"
+    private var volumeChangeHandler: ((CGFloat) -> Void)?
+    private var isVolumeControlAvailable = false
 
     init(volumeMonitor: VolumeMonitor, launchAtLoginController: LaunchAtLoginController) {
         self.volumeMonitor = volumeMonitor
@@ -48,17 +50,20 @@ final class StatusBarController {
 
     private func setupMenu() {
         let initialVolume = volumeMonitor.volumePercentage
-        let formattedVolume = VolumeFormatter.formattedVolumeString(for: initialVolume)
         let initialDevice = volumeMonitor.currentDevice?.name ?? "Unknown Device"
+        isVolumeControlAvailable = volumeMonitor.isCurrentDeviceVolumeSupported
+        volumeChangeHandler = { [weak self] ratio in
+            guard let monitor = self?.volumeMonitor else { return }
+            monitor.setVolume(scalar: Float32(ratio))
+        }
+        let formattedVolume = formattedVolumeText(for: initialVolume)
 
         volumeMenuView.update(
             percentage: initialVolume,
             formattedVolume: formattedVolume,
             deviceName: initialDevice
         )
-        volumeMenuView.setVolumeChangeHandler { [weak volumeMonitor] ratio in
-            volumeMonitor?.setVolume(scalar: Float32(ratio))
-        }
+        applyVolumeInteractionState(isVolumeControlAvailable)
 
         volumeMenuItem.view = volumeMenuView
         volumeMenuItem.isEnabled = true
@@ -101,6 +106,14 @@ final class StatusBarController {
             .sink { [weak self] device in
                 self?.latestDeviceName = device?.name ?? "Unknown Device"
                 self?.refreshVolumeMenu()
+            }
+            .store(in: &subscriptions)
+
+        volumeMonitor.$isCurrentDeviceVolumeSupported
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isSupported in
+                self?.updateVolumeInteraction(isSupported: isSupported)
             }
             .store(in: &subscriptions)
     }
@@ -171,13 +184,32 @@ final class StatusBarController {
     // MARK: - Helpers
 
     private func refreshVolumeMenu() {
-        let formatted = VolumeFormatter.formattedVolumeString(for: latestVolume)
+        let formatted = formattedVolumeText(for: latestVolume)
         volumeMenuView.update(
             percentage: latestVolume,
             formattedVolume: formatted,
             deviceName: latestDeviceName
         )
         menu.itemChanged(volumeMenuItem)
+    }
+
+    private func updateVolumeInteraction(isSupported: Bool) {
+        isVolumeControlAvailable = isSupported
+        applyVolumeInteractionState(isSupported)
+        refreshVolumeMenu()
+    }
+
+    private func applyVolumeInteractionState(_ isSupported: Bool) {
+        if isSupported {
+            volumeMenuView.setVolumeChangeHandler(volumeChangeHandler)
+        } else {
+            volumeMenuView.setVolumeChangeHandler(nil)
+        }
+    }
+
+    private func formattedVolumeText(for percentage: Int) -> String {
+        guard isVolumeControlAvailable else { return "Not Supported" }
+        return VolumeFormatter.formattedVolumeString(for: percentage)
     }
 
     private func showError(_ message: String) {

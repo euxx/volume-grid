@@ -192,14 +192,10 @@ class HUDManager {
             contentStack: contentStack,
             iconContainer: iconContainer,
             iconView: iconView,
-            iconWidthConstraint: iconWidthConstraint,
-            iconHeightConstraint: iconHeightConstraint,
             textStack: textStack,
             deviceLabel: deviceLabel,
             volumeLabel: volumeLabel,
-            volumeWidthConstraint: volumeWidthConstraint,
-            blocksView: blocksView,
-            blocksWidthConstraint: blocksWidthConstraint
+            blocksView: blocksView
         )
     }
 
@@ -308,8 +304,17 @@ class HUDManager {
                 context.iconView.image = NSImage(size: NSSize(width: icon.size, height: icon.size))
             }
             context.iconView.contentTintColor = style.iconTintColor
-            context.iconWidthConstraint.constant = icon.size
-            context.iconHeightConstraint.constant = icon.size
+
+            // Update icon size via constraints
+            for constraint in context.iconView.constraints {
+                if constraint.firstAttribute == .width || constraint.secondAttribute == .width {
+                    constraint.constant = icon.size
+                } else if constraint.firstAttribute == .height
+                    || constraint.secondAttribute == .height
+                {
+                    constraint.constant = icon.size
+                }
+            }
 
             context.deviceLabel.stringValue = deviceName + "  -"
             context.deviceLabel.textColor = style.secondaryTextColor
@@ -317,17 +322,31 @@ class HUDManager {
             context.volumeLabel.stringValue = statusString
             context.volumeLabel.textColor = style.primaryTextColor
             let widthPadding: CGFloat = 6
-            context.volumeWidthConstraint.constant = effectiveStatusTextWidth + widthPadding
+            for constraint in context.volumeLabel.constraints {
+                if constraint.firstAttribute == .width || constraint.secondAttribute == .width {
+                    constraint.constant = effectiveStatusTextWidth + widthPadding
+                    break
+                }
+            }
             context.textStack.spacing = gapBetweenDeviceAndCount
 
             context.blocksView.update(style: style, fillFraction: displayedScalar)
             if isUnsupported {
                 context.blocksView.isHidden = true
-                context.blocksWidthConstraint.constant = 0
+                for constraint in context.blocksView.constraints {
+                    if constraint.firstAttribute == .width || constraint.secondAttribute == .width {
+                        constraint.constant = 0
+                        break
+                    }
+                }
             } else {
                 context.blocksView.isHidden = false
-                context.blocksWidthConstraint.constant =
-                    context.blocksView.intrinsicContentSize.width
+                for constraint in context.blocksView.constraints {
+                    if constraint.firstAttribute == .width || constraint.secondAttribute == .width {
+                        constraint.constant = context.blocksView.intrinsicContentSize.width
+                        break
+                    }
+                }
             }
 
             let spacingIconToDevice: CGFloat = isUnsupported ? 20 : 14

@@ -2,6 +2,14 @@ import AudioToolbox
 import Cocoa
 import Combine
 
+// HUD event data
+struct HUDEvent {
+    let volumeScalar: CGFloat
+    let deviceName: String?
+    let isMuted: Bool
+    let isUnsupported: Bool
+}
+
 // VolumeMonitor class - coordinates volume monitoring and HUD display
 class VolumeMonitor: ObservableObject {
     @Published var volumePercentage: Int = 0
@@ -12,7 +20,7 @@ class VolumeMonitor: ObservableObject {
     private let deviceManager = AudioDeviceManager()
     private let state = VolumeStateStore()
     private let systemEventMonitor = SystemEventMonitor()
-    private let hudEventSubject = PassthroughSubject<VolumeHUDContext, Never>()
+    private let hudEventSubject = PassthroughSubject<HUDEvent, Never>()
 
     private var volumeListener: AudioObjectPropertyListenerBlock?
     private var deviceListener: AudioObjectPropertyListenerBlock?
@@ -40,7 +48,7 @@ class VolumeMonitor: ObservableObject {
         stopListening()
     }
 
-    var hudEvents: AnyPublisher<VolumeHUDContext, Never> {
+    var hudEvents: AnyPublisher<HUDEvent, Never> {
         hudEventSubject.eraseToAnyPublisher()
     }
 
@@ -477,7 +485,7 @@ class VolumeMonitor: ObservableObject {
     // MARK: - HUD Event Broadcasting
 
     private func emitHUDEvent(volumeScalar: CGFloat, isUnsupported: Bool) {
-        let context = VolumeHUDContext(
+        let event = HUDEvent(
             volumeScalar: volumeScalar,
             deviceName: currentDevice?.name,
             isMuted: state.deviceMuted(),
@@ -485,10 +493,10 @@ class VolumeMonitor: ObservableObject {
         )
 
         if Thread.isMainThread {
-            hudEventSubject.send(context)
+            hudEventSubject.send(event)
         } else {
             DispatchQueue.main.async { [weak self] in
-                self?.hudEventSubject.send(context)
+                self?.hudEventSubject.send(event)
             }
         }
     }

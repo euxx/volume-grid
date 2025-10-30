@@ -3,35 +3,27 @@ import Foundation
 
 // Manages audio device detection and property queries
 class AudioDeviceManager {
-    // Fetch the default output device ID.
-    @discardableResult
-    func getDefaultOutputDevice() -> AudioDeviceID {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: 0
-        )
+    // MARK: - Helper Methods
 
-        var deviceID: AudioDeviceID = 0
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
-        if status == noErr {
-            #if DEBUG
-                print("Got default device ID: \(deviceID)")
-            #endif
-            return deviceID
-        } else {
-            #if DEBUG
-                print("Error getting default output device: \(status)")
-            #endif
-            return 0
-        }
+    /// Creates an AudioObjectPropertyAddress with common defaults
+    private func makePropertyAddress(
+        selector: AudioObjectPropertySelector,
+        scope: AudioObjectPropertyScope = kAudioDevicePropertyScopeOutput,
+        element: AudioObjectPropertyElement = kAudioObjectPropertyElementMain
+    ) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: scope,
+            mElement: element
+        )
     }
 
-    // Update available volume elements (prefer main, then left/right channels).
-    @discardableResult
-    func detectVolumeElements(for deviceID: AudioDeviceID) -> [AudioObjectPropertyElement] {
+    /// Detects available elements for a given property selector
+    private func detectElements(
+        for deviceID: AudioDeviceID,
+        selector: AudioObjectPropertySelector,
+        verifyReadable: Bool = false
+    ) -> [AudioObjectPropertyElement] {
         let candidates: [AudioObjectPropertyElement] = [
             kAudioObjectPropertyElementMain,
             1,
@@ -41,13 +33,18 @@ class AudioDeviceManager {
         var detected: [AudioObjectPropertyElement] = []
 
         for element in candidates {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyVolumeScalar,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
-            )
+            var address = makePropertyAddress(selector: selector, element: element)
 
             if AudioObjectHasProperty(deviceID, &address) {
+                if verifyReadable {
+                    // Verify we can actually read the value
+                    var value: UInt32 = 0
+                    var size = UInt32(MemoryLayout<UInt32>.size)
+                    let readStatus = AudioObjectGetPropertyData(
+                        deviceID, &address, 0, nil, &size, &value)
+                    guard readStatus == noErr else { continue }
+                }
+
                 if element == kAudioObjectPropertyElementMain {
                     return [element]
                 }
@@ -58,40 +55,50 @@ class AudioDeviceManager {
         return detected
     }
 
+    #if DEBUG
+        /// Logs debug messages
+        private func log(_ message: String) {
+            print("[AudioDeviceManager] \(message)")
+        }
+    #endif
+
+    // MARK: - Public Methods
+
+    // Fetch the default output device ID.
+    @discardableResult
+    func getDefaultOutputDevice() -> AudioDeviceID {
+        var address = makePropertyAddress(
+            selector: kAudioHardwarePropertyDefaultOutputDevice,
+            scope: kAudioObjectPropertyScopeGlobal,
+            element: 0
+        )
+
+        var deviceID: AudioDeviceID = 0
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
+        if status == noErr {
+            #if DEBUG
+                log("Got default device ID: \(deviceID)")
+            #endif
+            return deviceID
+        } else {
+            #if DEBUG
+                log("Error getting default output device: \(status)")
+            #endif
+            return 0
+        }
+    }
+
+    // Update available volume elements (prefer main, then left/right channels).
+    @discardableResult
+    func detectVolumeElements(for deviceID: AudioDeviceID) -> [AudioObjectPropertyElement] {
+        detectElements(for: deviceID, selector: kAudioDevicePropertyVolumeScalar)
+    }
+
     @discardableResult
     func detectMuteElements(for deviceID: AudioDeviceID) -> [AudioObjectPropertyElement] {
-        let candidates: [AudioObjectPropertyElement] = [
-            kAudioObjectPropertyElementMain,
-            1,
-            2,
-        ]
-
-        var detected: [AudioObjectPropertyElement] = []
-
-        for element in candidates {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyMute,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
-            )
-
-            if AudioObjectHasProperty(deviceID, &address) {
-                // Verify we can actually read the mute value before considering it supported
-                var muted: UInt32 = 0
-                var size = UInt32(MemoryLayout<UInt32>.size)
-                let readStatus = AudioObjectGetPropertyData(
-                    deviceID, &address, 0, nil, &size, &muted)
-
-                if readStatus == noErr {
-                    if element == kAudioObjectPropertyElementMain {
-                        return [element]
-                    }
-                    detected.append(element)
-                }
-            }
-        }
-
-        return detected
+        detectElements(for: deviceID, selector: kAudioDevicePropertyMute, verifyReadable: true)
     }
 
     // Check whether the device supports volume control.
@@ -112,10 +119,9 @@ class AudioDeviceManager {
         var channelVolumes: [Float32] = []
 
         for element in elements {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyVolumeScalar,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
+            var address = makePropertyAddress(
+                selector: kAudioDevicePropertyVolumeScalar,
+                element: element
             )
 
             var volume: Float32 = 0.0
@@ -126,7 +132,7 @@ class AudioDeviceManager {
                 channelVolumes.append(volume)
             } else {
                 #if DEBUG
-                    print("Error getting volume for element \(element): \(status)")
+                    log("Error getting volume for element \(element): \(status)")
                 #endif
             }
         }
@@ -148,10 +154,9 @@ class AudioDeviceManager {
         var success = false
 
         for element in elements {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyVolumeScalar,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
+            var address = makePropertyAddress(
+                selector: kAudioDevicePropertyVolumeScalar,
+                element: element
             )
 
             var mutableValue = value
@@ -161,7 +166,7 @@ class AudioDeviceManager {
                 success = true
             } else {
                 #if DEBUG
-                    print("Error setting volume for element \(element): \(status)")
+                    log("Error setting volume for element \(element): \(status)")
                 #endif
             }
         }
@@ -180,10 +185,9 @@ class AudioDeviceManager {
         var success = false
 
         for element in elements {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyMute,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
+            var address = makePropertyAddress(
+                selector: kAudioDevicePropertyMute,
+                element: element
             )
             var mutableValue = muteValue
             let status = AudioObjectSetPropertyData(
@@ -192,7 +196,7 @@ class AudioDeviceManager {
                 success = true
             } else {
                 #if DEBUG
-                    print("Error setting mute for element \(element): \(status)")
+                    log("Error setting mute for element \(element): \(status)")
                 #endif
             }
         }
@@ -209,10 +213,9 @@ class AudioDeviceManager {
         var readAnyChannel = false
 
         for element in elements {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyMute,
-                mScope: kAudioDevicePropertyScopeOutput,
-                mElement: element
+            var address = makePropertyAddress(
+                selector: kAudioDevicePropertyMute,
+                element: element
             )
 
             var muted: UInt32 = 0
@@ -234,10 +237,10 @@ class AudioDeviceManager {
 
     // Fetch all audio devices
     func getAllDevices() -> [AudioDevice] {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDevices,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: 0
+        var address = makePropertyAddress(
+            selector: kAudioHardwarePropertyDevices,
+            scope: kAudioObjectPropertyScopeGlobal,
+            element: 0
         )
 
         var size: UInt32 = 0
@@ -245,7 +248,7 @@ class AudioDeviceManager {
             AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size)
         guard status == noErr else {
             #if DEBUG
-                print("Error getting devices size: \(status)")
+                log("Error getting devices size: \(status)")
             #endif
             return []
         }
@@ -256,7 +259,7 @@ class AudioDeviceManager {
             AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceIDs)
         guard status == noErr else {
             #if DEBUG
-                print("Error getting devices: \(status)")
+                log("Error getting devices: \(status)")
             #endif
             return []
         }
@@ -273,10 +276,10 @@ class AudioDeviceManager {
 
     // Resolve the device name.
     func getDeviceName(_ deviceID: AudioDeviceID) -> String? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyDeviceNameCFString,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: 0
+        var address = makePropertyAddress(
+            selector: kAudioDevicePropertyDeviceNameCFString,
+            scope: kAudioObjectPropertyScopeGlobal,
+            element: 0
         )
 
         var unmanagedName: Unmanaged<CFString>?
@@ -284,7 +287,7 @@ class AudioDeviceManager {
         let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &unmanagedName)
         guard status == noErr, let unmanaged = unmanagedName else {
             #if DEBUG
-                print("Error getting device name for \(deviceID): \(status)")
+                log("Error getting device name for \(deviceID): \(status)")
             #endif
             return nil
         }

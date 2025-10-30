@@ -3,7 +3,7 @@ import SwiftUI
 
 // Manages HUD window display and animation
 class HUDManager {
-    private var hudWindows: [HUDWindowContext] = []
+    private var hudWindows: [CGDirectDisplayID: HUDWindowContext] = [:]
     private var hideHUDWorkItem: DispatchWorkItem?
     private var screenChangeObserver: NSObjectProtocol?
 
@@ -212,20 +212,19 @@ class HUDManager {
         }
 
         var remaining = hudWindows
-        var updated: [HUDWindowContext] = []
+        var updated: [CGDirectDisplayID: HUDWindowContext] = [:]
 
         for screen in NSScreen.screens {
             guard let screenID = screenID(for: screen) else { continue }
-            if let index = remaining.firstIndex(where: { $0.screenID == screenID }) {
-                let context = remaining.remove(at: index)
-                updated.append(context)
+            if let existing = remaining.removeValue(forKey: screenID) {
+                updated[screenID] = existing
             } else {
                 let context = makeHUDWindow(for: screen, screenID: screenID)
-                updated.append(context)
+                updated[screenID] = context
             }
         }
 
-        for context in remaining {
+        for (_, context) in remaining {
             context.window.orderOut(nil)
         }
 
@@ -239,27 +238,19 @@ class HUDManager {
         let epsilon: CGFloat = 0.001
         let isMutedForDisplay = isMuted || clampedScalar <= epsilon
         let displayedScalar = isMutedForDisplay ? 0 : clampedScalar
-        let totalBlocks = displayedScalar * 16.0
-        let quarterBlocks = (totalBlocks * 4).rounded() / 4
-        let formattedQuarterBlocks = formatVolumeCount(quarterBlocks)
-        let volumeString: String
-        if formattedQuarterBlocks.contains("/") {
-            let normalizedNumerator = formattedQuarterBlocks.replacingOccurrences(
-                of: " ", with: "+")
-            volumeString = normalizedNumerator
-        } else {
-            volumeString = formattedQuarterBlocks
-        }
 
         let deviceName = deviceName ?? "Unknown Device"
         let deviceNSString = NSString(string: deviceName + "  -")
         let deviceFont = NSFont.systemFont(ofSize: 12)
         let deviceTextSize = deviceNSString.size(withAttributes: [.font: deviceFont])
-        let statusString = isUnsupported ? "Not Supported" : volumeString
+        let statusString =
+            isUnsupported
+            ? "Not Supported"
+            : VolumeFormatter.formattedVolumeString(forScalar: displayedScalar)
         let statusNSString = NSString(string: statusString)
         let statusFont = NSFont.systemFont(ofSize: 12)
         let statusTextSize = statusNSString.size(withAttributes: [.font: statusFont])
-        let maxVolumeSampleString = "15+3/4"
+        let maxVolumeSampleString = VolumeFormatter.formatVolumeCount(quarterBlocks: 15.75)
         let maxVolumeSampleWidth = NSString(string: maxVolumeSampleString).size(withAttributes: [
             .font: statusFont
         ]).width
@@ -272,8 +263,12 @@ class HUDManager {
 
         syncHUDWindowsWithScreens()
 
-        let screens = NSScreen.screens
-        for (screen, context) in zip(screens, hudWindows) {
+        for screen in NSScreen.screens {
+            guard
+                let screenID = screenID(for: screen),
+                let context = hudWindows[screenID]
+            else { continue }
+
             let hudWindow = context.window
             let isAlreadyVisible = hudWindow.isVisible && hudWindow.alphaValue > 0.1
 
@@ -371,7 +366,7 @@ class HUDManager {
         hideHUDWorkItem?.cancel()
 
         let workItem = DispatchWorkItem {
-            for context in self.hudWindows {
+            for (_, context) in self.hudWindows {
                 let hudWindow = context.window
                 NSAnimationContext.runAnimationGroup(
                     { context in
@@ -385,38 +380,6 @@ class HUDManager {
         }
         hideHUDWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + hudDisplayDuration, execute: workItem)
-    }
-
-    private func formatVolumeCount(_ value: CGFloat) -> String {
-        let integerPart = Int(value)
-        let fractionalPart = value - CGFloat(integerPart)
-        let epsilon: CGFloat = 0.001
-
-        if fractionalPart < epsilon {
-            return "\(integerPart)"
-        }
-
-        if abs(fractionalPart - 1.0) < epsilon {
-            return "\(integerPart + 1)"
-        }
-
-        let fractionString: String
-        switch fractionalPart {
-        case (0.25 - epsilon)...(0.25 + epsilon):
-            fractionString = "1/4"
-        case (0.5 - epsilon)...(0.5 + epsilon):
-            fractionString = "2/4"
-        case (0.75 - epsilon)...(0.75 + epsilon):
-            fractionString = "3/4"
-        default:
-            fractionString = String(format: "%.2f", fractionalPart)
-        }
-
-        if integerPart == 0 {
-            return fractionString
-        } else {
-            return "\(integerPart) \(fractionString)"
-        }
     }
 
     private func hudStyle(for appearance: NSAppearance) -> HUDStyle {

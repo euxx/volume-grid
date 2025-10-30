@@ -134,32 +134,12 @@ final class StatusBarVolumeView: NSView {
 
     func update(percentage: Int) {
         let clamped = max(0, min(percentage, 100))
-
-        var iconName: String
-        var iconSize: CGFloat = 20
-
-        if clamped == 0 {
-            // Muted - smaller icon
-            iconName = "speaker.slash"
-            iconSize = 15
-        } else if clamped < 33 {
-            // Low volume
-            iconName = "speaker.wave.1"
-            iconSize = 17
-        } else if clamped < 66 {
-            // Medium volume
-            iconName = "speaker.wave.2"
-            iconSize = 19
-        } else {
-            // High volume
-            iconName = "speaker.wave.3"
-            iconSize = 21
-        }
+        let icon = VolumeIconHelper.icon(for: clamped)
 
         iconView.image = NSImage(
-            systemSymbolName: iconName, accessibilityDescription: "Volume")
-        iconWidthConstraint?.constant = iconSize
-        iconHeightConstraint?.constant = iconSize
+            systemSymbolName: icon.symbolName, accessibilityDescription: "Volume")
+        iconWidthConstraint?.constant = icon.size
+        iconHeightConstraint?.constant = icon.size
         progressWidthConstraint?.constant = CGFloat(clamped) / 100.0 * progressWidth
     }
 }
@@ -238,30 +218,10 @@ final class VolumeMenuItemView: NSView {
 
     func update(percentage: Int, formattedVolume: String, deviceName: String) {
         let clamped = max(0, min(percentage, 100))
+        let icon = VolumeIconHelper.icon(for: clamped)
 
-        // Determine icon based on volume level
-        var iconName: String
-        var iconSize: CGFloat = 20
-        if clamped == 0 {
-            // Muted
-            iconName = "speaker.slash"
-            iconSize = 15
-        } else if clamped < 33 {
-            // Low volume
-            iconName = "speaker.wave.1"
-            iconSize = 17
-        } else if clamped < 66 {
-            // Medium volume
-            iconName = "speaker.wave.2"
-            iconSize = 19
-        } else {
-            // High volume
-            iconName = "speaker.wave.3"
-            iconSize = 21
-        }
-
-        let config = NSImage.SymbolConfiguration(pointSize: iconSize, weight: .regular)
-        let image = NSImage(systemSymbolName: iconName, accessibilityDescription: "Volume")
+        let config = NSImage.SymbolConfiguration(pointSize: icon.size, weight: .regular)
+        let image = NSImage(systemSymbolName: icon.symbolName, accessibilityDescription: "Volume")
         iconView.image = image?.withSymbolConfiguration(config)
         label.stringValue = "\(deviceName) - \(formattedVolume)"
         progressView.progress = CGFloat(clamped) / 100.0

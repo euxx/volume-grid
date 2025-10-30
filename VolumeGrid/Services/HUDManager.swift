@@ -290,28 +290,14 @@ class HUDManager {
             containerView.layer?.shadowOpacity = 1.0
 
             let volumePercentage = Int(clampedScalar * 100)
-            var iconName: String
-            var iconSize: CGFloat
-
-            if isUnsupported {
-                iconName = "nosign"
-                iconSize = 30
-            } else if isMutedForDisplay {
-                iconName = "speaker.slash.fill"
-                iconSize = 32
-            } else if volumePercentage < 33 {
-                iconName = "speaker.wave.1.fill"
-                iconSize = 36
-            } else if volumePercentage < 66 {
-                iconName = "speaker.wave.2.fill"
-                iconSize = 41
-            } else {
-                iconName = "speaker.wave.3.fill"
-                iconSize = 47
-            }
+            let icon = VolumeIconHelper.hudIcon(
+                for: volumePercentage,
+                isMuted: isMutedForDisplay,
+                isUnsupported: isUnsupported
+            )
 
             if let speakerImage = NSImage(
-                systemSymbolName: iconName, accessibilityDescription: "Volume")
+                systemSymbolName: icon.symbolName, accessibilityDescription: "Volume")
             {
                 context.iconView.image = speakerImage
             } else if let fallbackImage = NSImage(
@@ -319,11 +305,11 @@ class HUDManager {
             {
                 context.iconView.image = fallbackImage
             } else {
-                context.iconView.image = NSImage(size: NSSize(width: iconSize, height: iconSize))
+                context.iconView.image = NSImage(size: NSSize(width: icon.size, height: icon.size))
             }
             context.iconView.contentTintColor = style.iconTintColor
-            context.iconWidthConstraint.constant = iconSize
-            context.iconHeightConstraint.constant = iconSize
+            context.iconWidthConstraint.constant = icon.size
+            context.iconHeightConstraint.constant = icon.size
 
             context.deviceLabel.stringValue = deviceName + "  -"
             context.deviceLabel.textColor = style.secondaryTextColor

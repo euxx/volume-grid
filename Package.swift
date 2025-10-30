@@ -6,12 +6,12 @@ let package = Package(
     name: "VolumeGrid",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "VolumeGrid", targets: ["VolumeGrid"]),
+        .executable(name: "VolumeGrid", targets: ["VolumeGrid"])
     ],
     targets: [
         .executableTarget(
             name: "VolumeGrid",
             path: "VolumeGrid"
-        ),
+        )
     ]
 )

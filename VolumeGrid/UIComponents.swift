@@ -299,7 +299,6 @@ final class VolumeMenuItemView: NSView {
 
     private func updateVolume(with event: NSEvent) {
         guard let handler = onVolumeChange else { return }
-        layoutSubtreeIfNeeded()
 
         let pointInProgress = progressView.convert(event.locationInWindow, from: nil)
         let bounds = progressView.bounds

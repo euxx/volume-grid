@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import ServiceManagement
 import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -13,6 +12,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarVolumeView: StatusBarVolumeView?
     private var volumeMenuContentView: VolumeMenuItemView?
     private var launchAtLoginMenuItem: NSMenuItem?
+    private let launchAtLoginController = LaunchAtLoginController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Treat the app as an accessory so it stays out of the Dock.
@@ -61,7 +61,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let volumeView = VolumeMenuItemView()
         volumeView.update(
             percentage: initialVolume,
-            formattedVolume: formattedVolumeString(for: initialVolume),
+            formattedVolume: VolumeFormatter.formattedVolumeString(for: initialVolume),
             deviceName: initialDevice
         )
         volumeView.setVolumeChangeHandler { [weak self] ratio in
@@ -81,7 +81,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let launchAtLoginItem = NSMenuItem(
             title: "Start at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launchAtLoginItem.target = self
-        launchAtLoginItem.state = isLaunchAtLoginEnabled() ? .on : .off
+        launchAtLoginItem.state = launchAtLoginController.isEnabled() ? .on : .off
         menu.addItem(launchAtLoginItem)
         launchAtLoginMenuItem = launchAtLoginItem
 
@@ -116,7 +116,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 if let volumeItem = self.volumeMenuItem,
                     let menuView = self.volumeMenuContentView
                 {
-                    let formatted = self.formattedVolumeString(for: volume)
+                    let formatted = VolumeFormatter.formattedVolumeString(for: volume)
                     let deviceName = self.volumeMonitor?.currentDevice?.name ?? "Unknown Device"
                     DispatchQueue.main.async {
                         menuView.update(
@@ -138,7 +138,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 else { return }
                 let name = device?.name ?? "Unknown Device"
                 let volume = self.volumeMonitor?.volumePercentage ?? 0
-                let formatted = self.formattedVolumeString(for: volume)
+                let formatted = VolumeFormatter.formattedVolumeString(for: volume)
                 menuView.update(
                     percentage: volume,
                     formattedVolume: formatted,
@@ -192,190 +192,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         alert.runModal()
     }
 
-    // Convert the block count into a readable string (simplified to only show the current volume).
-    private func formatVolumeString(quarterBlocks: CGFloat) -> String {
-        let integerPart = Int(quarterBlocks)
-        let fractionalPart = quarterBlocks - CGFloat(integerPart)
-        let epsilon: CGFloat = 0.001
-
-        var fractionString = ""
-        if fractionalPart >= epsilon && abs(fractionalPart - 1.0) >= epsilon {
-            switch fractionalPart {
-            case (0.25 - epsilon)...(0.25 + epsilon):
-                fractionString = "1/4"
-            case (0.5 - epsilon)...(0.5 + epsilon):
-                fractionString = "2/4"
-            case (0.75 - epsilon)...(0.75 + epsilon):
-                fractionString = "3/4"
-            default:
-                fractionString = String(format: "%.2f", fractionalPart)
-            }
-        }
-
-        if fractionString.isEmpty {
-            return "\(integerPart)"
-        } else if integerPart == 0 {
-            return "\(fractionString)"
-        } else {
-            return "\(integerPart)+\(fractionString)"
-        }
-    }
-
-    private func formattedVolumeString(for percentage: Int) -> String {
-        let clamped = max(0, min(percentage, 100))
-        let volumeScalar = CGFloat(clamped) / 100.0
-        let totalBlocks = volumeScalar * 16.0
-        let quarterBlocks = (totalBlocks * 4).rounded() / 4
-        return formatVolumeString(quarterBlocks: quarterBlocks)
-    }
-
     @objc private func toggleLaunchAtLogin() {
-        let enabled = isLaunchAtLoginEnabled()
-        if enabled {
-            disableLaunchAtLogin()
-        } else {
-            enableLaunchAtLogin()
-        }
-        // Refresh the menu state.
-        launchAtLoginMenuItem?.state = isLaunchAtLoginEnabled() ? .on : .off
-    }
+        let targetState = !launchAtLoginController.isEnabled()
+        launchAtLoginMenuItem?.isEnabled = false
 
-    private func isLaunchAtLoginEnabled() -> Bool {
-        if #available(macOS 13.0, *) {
-            return SMAppService.mainApp.status == .enabled
-        } else {
-            // Fallback for older macOS versions: check plist
-            let launchAgentsPath = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/LaunchAgents")
-            let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
-            return FileManager.default.fileExists(atPath: plistPath.path)
-        }
-    }
-
-    private func enableLaunchAtLogin() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        launchAtLoginController.setEnabled(targetState) { [weak self] result in
             guard let self else { return }
+            defer { self.launchAtLoginMenuItem?.isEnabled = true }
 
-            if #available(macOS 13.0, *) {
-                do {
-                    try SMAppService.mainApp.register()
-                    DispatchQueue.main.async {
-                        self.launchAtLoginMenuItem?.state = .on
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        self.showError(
-                            "Failed to enable launch at login: \(error.localizedDescription)")
-                    }
-                }
-            } else {
-                // Fallback to plist-based approach for older macOS
-                self.enableLaunchAtLoginLegacy()
-            }
-        }
-    }
-
-    private func disableLaunchAtLogin() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-
-            if #available(macOS 13.0, *) {
-                do {
-                    try SMAppService.mainApp.unregister()
-                    DispatchQueue.main.async {
-                        self.launchAtLoginMenuItem?.state = .off
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        self.showError(
-                            "Failed to disable launch at login: \(error.localizedDescription)")
-                    }
-                }
-            } else {
-                // Fallback to plist-based approach for older macOS
-                self.disableLaunchAtLoginLegacy()
-            }
-        }
-    }
-
-    private func enableLaunchAtLoginLegacy() {
-        let launchAgentsPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents")
-
-        // Ensure the directory exists.
-        do {
-            try FileManager.default.createDirectory(
-                at: launchAgentsPath, withIntermediateDirectories: true)
-        } catch {
-            DispatchQueue.main.async {
-                self.showError(
-                    "Failed to create LaunchAgents directory: \(error.localizedDescription)")
-            }
-            return
-        }
-
-        let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
-        let appPath = Bundle.main.bundlePath
-
-        let plistContent = """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-            <dict>
-                <key>Label</key>
-                <string>eux.volumegrid</string>
-                <key>ProgramArguments</key>
-                <array>
-                    <string>/usr/bin/open</string>
-                    <string>\(appPath)</string>
-                </array>
-                <key>RunAtLoad</key>
-                <true/>
-            </dict>
-            </plist>
-            """
-
-        do {
-            try plistContent.write(to: plistPath, atomically: true, encoding: .utf8)
-            // Load the Launch Agent.
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-            process.arguments = ["load", plistPath.path]
-            try process.run()
-            process.waitUntilExit()
-
-            DispatchQueue.main.async {
-                self.launchAtLoginMenuItem?.state = .on
-            }
-        } catch {
-            DispatchQueue.main.async {
-                self.showError("Failed to enable launch at login: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    private func disableLaunchAtLoginLegacy() {
-        let launchAgentsPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents")
-        let plistPath = launchAgentsPath.appendingPathComponent("eux.volumegrid.plist")
-
-        do {
-            // Unload the Launch Agent.
-            let unloadProcess = Process()
-            unloadProcess.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-            unloadProcess.arguments = ["unload", plistPath.path]
-            try unloadProcess.run()
-            unloadProcess.waitUntilExit()
-
-            // Remove the plist file.
-            try FileManager.default.removeItem(at: plistPath)
-
-            DispatchQueue.main.async {
-                self.launchAtLoginMenuItem?.state = .off
-            }
-        } catch {
-            DispatchQueue.main.async {
-                self.showError("Failed to disable launch at login: \(error.localizedDescription)")
+            switch result {
+            case .success(let enabled):
+                self.launchAtLoginMenuItem?.state = enabled ? .on : .off
+            case .failure(let error):
+                self.launchAtLoginMenuItem?.state =
+                    self.launchAtLoginController.isEnabled() ? .on : .off
+                self.showError(error.localizedDescription)
             }
         }
     }

@@ -1190,8 +1190,6 @@ class VolumeMonitor: ObservableObject {
             context.contentStack.setCustomSpacing(spacingIconToDevice, after: context.iconContainer)
             context.contentStack.setCustomSpacing(spacingDeviceToBlocks, after: context.textStack)
 
-            containerView.layoutSubtreeIfNeeded()
-
             // Only run the fade-in animation if the window is not already visible.
             if !isAlreadyVisible {
                 hudWindow.alphaValue = 0

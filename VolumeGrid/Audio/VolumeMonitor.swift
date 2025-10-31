@@ -1,6 +1,7 @@
 import AudioToolbox
 import Cocoa
-import Combine
+@preconcurrency import Combine
+@preconcurrency import os.lock
 
 // HUD event data
 struct HUDEvent {
@@ -11,130 +12,165 @@ struct HUDEvent {
 }
 
 /// Thread-safe store for the mutable audio state VolumeMonitor needs to access off the main thread.
-private final class VolumeStateStore {
-    private let lock = NSLock()
+private final class VolumeStateStore: @unchecked Sendable {
+    private let lock = OSAllocatedUnfairLock()
 
-    private var defaultOutputDeviceID: AudioDeviceID = 0
-    private var listeningDeviceID: AudioDeviceID?
-    private var volumeElements: [AudioObjectPropertyElement] = []
-    private var muteElements: [AudioObjectPropertyElement] = []
-    private var registeredVolumeElements: [AudioObjectPropertyElement] = []
-    private var registeredMuteElements: [AudioObjectPropertyElement] = []
-    private var lastVolumeScalar: CGFloat?
-    private var isDeviceMuted = false
-    private var isListening = false
+    private nonisolated(unsafe) var defaultOutputDeviceID: AudioDeviceID = 0
+    private nonisolated(unsafe) var listeningDeviceID: AudioDeviceID?
+    private nonisolated(unsafe) var volumeElements: [AudioObjectPropertyElement] = []
+    private nonisolated(unsafe) var muteElements: [AudioObjectPropertyElement] = []
+    private nonisolated(unsafe) var registeredVolumeElements: [AudioObjectPropertyElement] = []
+    private nonisolated(unsafe) var registeredMuteElements: [AudioObjectPropertyElement] = []
+    private nonisolated(unsafe) var lastVolumeScalar: CGFloat?
+    private nonisolated(unsafe) var isDeviceMuted = false
+    private nonisolated(unsafe) var isListening = false
+
+    nonisolated init() {}
 
     // MARK: - Device IDs
 
-    func updateDefaultOutputDeviceID(_ id: AudioDeviceID) {
-        withLock { defaultOutputDeviceID = id }
+    nonisolated func updateDefaultOutputDeviceID(_ id: AudioDeviceID) {
+        lock.lock()
+        defaultOutputDeviceID = id
+        lock.unlock()
     }
 
-    func defaultOutputDeviceIDValue() -> AudioDeviceID {
-        withLock { defaultOutputDeviceID }
+    nonisolated func defaultOutputDeviceIDValue() -> AudioDeviceID {
+        lock.lock()
+        defer { lock.unlock() }
+        return defaultOutputDeviceID
     }
 
-    func updateListeningDeviceID(_ id: AudioDeviceID?) {
-        withLock { listeningDeviceID = id }
+    nonisolated func updateListeningDeviceID(_ id: AudioDeviceID?) {
+        lock.lock()
+        listeningDeviceID = id
+        lock.unlock()
     }
 
-    func listeningDeviceIDValue() -> AudioDeviceID? {
-        withLock { listeningDeviceID }
+    nonisolated func listeningDeviceIDValue() -> AudioDeviceID? {
+        lock.lock()
+        defer { lock.unlock() }
+        return listeningDeviceID
     }
 
     // MARK: - Volume Elements
 
-    func updateVolumeElements(_ elements: [AudioObjectPropertyElement]) {
-        withLock { volumeElements = elements }
+    nonisolated func updateVolumeElements(_ elements: [AudioObjectPropertyElement]) {
+        lock.lock()
+        volumeElements = elements
+        lock.unlock()
     }
 
-    func volumeElementsSnapshot() -> [AudioObjectPropertyElement] {
-        withLock { volumeElements }
+    nonisolated func volumeElementsSnapshot() -> [AudioObjectPropertyElement] {
+        lock.lock()
+        defer { lock.unlock() }
+        return volumeElements
     }
 
-    func updateMuteElements(_ elements: [AudioObjectPropertyElement]) {
-        withLock { muteElements = elements }
+    nonisolated func updateMuteElements(_ elements: [AudioObjectPropertyElement]) {
+        lock.lock()
+        muteElements = elements
+        lock.unlock()
     }
 
-    func muteElementsSnapshot() -> [AudioObjectPropertyElement] {
-        withLock { muteElements }
+    nonisolated func muteElementsSnapshot() -> [AudioObjectPropertyElement] {
+        lock.lock()
+        defer { lock.unlock() }
+        return muteElements
     }
 
-    func updateRegisteredVolumeElements(_ elements: [AudioObjectPropertyElement]) {
-        withLock { registeredVolumeElements = elements }
+    nonisolated func updateRegisteredVolumeElements(_ elements: [AudioObjectPropertyElement]) {
+        lock.lock()
+        registeredVolumeElements = elements
+        lock.unlock()
     }
 
-    func registeredVolumeElementsSnapshot() -> [AudioObjectPropertyElement] {
-        withLock { registeredVolumeElements }
+    nonisolated func registeredVolumeElementsSnapshot() -> [AudioObjectPropertyElement] {
+        lock.lock()
+        defer { lock.unlock() }
+        return registeredVolumeElements
     }
 
-    func updateRegisteredMuteElements(_ elements: [AudioObjectPropertyElement]) {
-        withLock { registeredMuteElements = elements }
+    nonisolated func updateRegisteredMuteElements(_ elements: [AudioObjectPropertyElement]) {
+        lock.lock()
+        registeredMuteElements = elements
+        lock.unlock()
     }
 
-    func registeredMuteElementsSnapshot() -> [AudioObjectPropertyElement] {
-        withLock { registeredMuteElements }
+    nonisolated func registeredMuteElementsSnapshot() -> [AudioObjectPropertyElement] {
+        lock.lock()
+        defer { lock.unlock() }
+        return registeredMuteElements
     }
 
     // MARK: - Volume Muted State
 
-    func setDeviceMuted(_ muted: Bool) {
-        withLock { isDeviceMuted = muted }
+    nonisolated func setDeviceMuted(_ muted: Bool) {
+        lock.lock()
+        isDeviceMuted = muted
+        lock.unlock()
     }
 
-    func deviceMuted() -> Bool {
-        withLock { isDeviceMuted }
+    nonisolated func deviceMuted() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isDeviceMuted
     }
 
     // MARK: - Volume Scalar
 
-    func updateLastVolumeScalar(_ scalar: CGFloat?) {
-        withLock { lastVolumeScalar = scalar }
+    nonisolated func updateLastVolumeScalar(_ scalar: CGFloat?) {
+        lock.lock()
+        lastVolumeScalar = scalar
+        lock.unlock()
     }
 
-    func lastVolumeScalarSnapshot() -> CGFloat? {
-        withLock { lastVolumeScalar }
+    nonisolated func lastVolumeScalarSnapshot() -> CGFloat? {
+        lock.lock()
+        defer { lock.unlock() }
+        return lastVolumeScalar
     }
 
     // MARK: - Listening flag
 
-    func setListeningActive(_ active: Bool) {
-        withLock { isListening = active }
+    nonisolated func setListeningActive(_ active: Bool) {
+        lock.lock()
+        isListening = active
+        lock.unlock()
     }
 
-    func isListeningActive() -> Bool {
-        withLock { isListening }
-    }
-
-    // MARK: - Helpers
-
-    private func withLock<T>(_ body: () -> T) -> T {
+    nonisolated func isListeningActive() -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        return body()
+        return isListening
     }
 }
 
 // VolumeMonitor class - coordinates volume monitoring and HUD display
+@MainActor
 class VolumeMonitor: ObservableObject {
     @Published var volumePercentage: Int = 0
     @Published var audioDevices: [AudioDevice] = []
     @Published var currentDevice: AudioDevice?
     @Published var isCurrentDeviceVolumeSupported: Bool = false
 
-    private let deviceManager = AudioDeviceManager()
-    private let state = VolumeStateStore()
-    private let systemEventMonitor = SystemEventMonitor()
-    private let hudEventSubject = PassthroughSubject<HUDEvent, Never>()
+    private nonisolated let deviceManager = AudioDeviceManager()
+    private nonisolated let state = VolumeStateStore()
+    private nonisolated let systemEventMonitor: SystemEventMonitor = {
+        SystemEventMonitor()
+    }()
+    private nonisolated let hudEventSubject: PassthroughSubject<HUDEvent, Never> = {
+        PassthroughSubject<HUDEvent, Never>()
+    }()
 
     private var volumeListener: AudioObjectPropertyListenerBlock?
     private var deviceListener: AudioObjectPropertyListenerBlock?
     private var muteListener: AudioObjectPropertyListenerBlock?
-    private var audioQueue: DispatchQueue?
+    private nonisolated let audioQueue: DispatchQueue? = {
+        DispatchQueue(label: "com.volumegrid.audio", qos: .userInitiated)
+    }()
 
     init() {
-        audioQueue = DispatchQueue(label: "com.volumegrid.audio", qos: .userInitiated)
-
         let deviceID = updateDefaultOutputDevice()
         isCurrentDeviceVolumeSupported =
             deviceID != 0 && deviceManager.supportsVolumeControl(deviceID)
@@ -149,18 +185,20 @@ class VolumeMonitor: ObservableObject {
         getAudioDevices()
     }
 
-    deinit {
-        stopListening()
+    nonisolated deinit {
+        Task { @MainActor [weak self] in
+            self?.stopListening()
+        }
     }
 
-    var hudEvents: AnyPublisher<HUDEvent, Never> {
+    nonisolated var hudEvents: AnyPublisher<HUDEvent, Never> {
         hudEventSubject.eraseToAnyPublisher()
     }
 
     // MARK: - Device Management
 
     @discardableResult
-    private func updateDefaultOutputDevice() -> AudioDeviceID {
+    nonisolated private func updateDefaultOutputDevice() -> AudioDeviceID {
         let deviceID = deviceManager.getDefaultOutputDevice()
         state.updateDefaultOutputDeviceID(deviceID)
         return deviceID
@@ -181,7 +219,7 @@ class VolumeMonitor: ObservableObject {
 
     // MARK: - Volume Control
 
-    func getCurrentVolume() -> Float32? {
+    nonisolated func getCurrentVolume() -> Float32? {
         let deviceID = updateDefaultOutputDevice()
         guard deviceID != 0 else { return nil }
 

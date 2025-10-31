@@ -1,4 +1,5 @@
 import Cocoa
+import Combine
 import SwiftUI
 
 struct HUDStyle {
@@ -55,7 +56,7 @@ final class HUDWindowContext {
 class HUDManager {
     private var hudWindows: [CGDirectDisplayID: HUDWindowContext] = [:]
     private var hideHUDWorkItem: DispatchWorkItem?
-    private var screenChangeObserver: NSObjectProtocol?
+    private var screenChangeCancellable: AnyCancellable?
 
     // HUD constants.
     private let hudWidth: CGFloat = 320
@@ -65,21 +66,17 @@ class HUDManager {
 
     init() {
         syncHUDWindowsWithScreens()
-        screenChangeObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.syncHUDWindowsWithScreens()
-        }
+        screenChangeCancellable = NotificationCenter.default
+            .publisher(for: NSApplication.didChangeScreenParametersNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.syncHUDWindowsWithScreens()
+            }
     }
 
     deinit {
         hideHUDWorkItem?.cancel()
-        if let observer = screenChangeObserver {
-            NotificationCenter.default.removeObserver(observer)
-            screenChangeObserver = nil
-        }
+        screenChangeCancellable?.cancel()
     }
 
     private func updateConstraint(

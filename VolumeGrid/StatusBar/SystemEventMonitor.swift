@@ -1,12 +1,15 @@
 import Cocoa
 
 /// Dedicated handler for listening to system-defined events (e.g. global volume keys).
-final class SystemEventMonitor {
+final class SystemEventMonitor: @unchecked Sendable {
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var lastSignature: (timestamp: TimeInterval, data: Int)?
 
-    func start(handler: @escaping () -> Void) {
+    nonisolated init() {}
+
+    @MainActor
+    func start(handler: @escaping @MainActor () -> Void) {
         stop()
 
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .systemDefined) {
@@ -21,6 +24,7 @@ final class SystemEventMonitor {
         }
     }
 
+    @MainActor
     func stop() {
         if let monitor = globalMonitor {
             NSEvent.removeMonitor(monitor)
@@ -33,7 +37,8 @@ final class SystemEventMonitor {
         lastSignature = nil
     }
 
-    private func process(event: NSEvent, handler: @escaping () -> Void) {
+    @MainActor
+    private func process(event: NSEvent, handler: @escaping @MainActor () -> Void) {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { [weak self] in
                 self?.process(event: event, handler: handler)

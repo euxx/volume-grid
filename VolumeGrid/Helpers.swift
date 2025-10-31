@@ -61,11 +61,13 @@ enum VolumeIconHelper {
     ///   - percentage: Volume percentage (0-100)
     ///   - isMuted: Whether the device is muted
     ///   - isUnsupported: Whether volume control is unsupported for this device
+    ///   - forHUD: Whether to use larger sizes for HUD display
     /// - Returns: A VolumeIcon with the appropriate symbol name and size
     static func icon(
         for percentage: Int,
         isMuted: Bool = false,
-        isUnsupported: Bool = false
+        isUnsupported: Bool = false,
+        forHUD: Bool = false
     ) -> VolumeIcon {
         let clamped = max(0, min(percentage, 100))
 
@@ -74,41 +76,30 @@ enum VolumeIconHelper {
         }
 
         if isMuted || clamped == 0 {
-            return VolumeIcon(symbolName: "speaker.slash", size: 15)
+            let size: CGFloat = forHUD ? 32 : 15
+            let symbolName = forHUD ? "speaker.slash.fill" : "speaker.slash"
+            return VolumeIcon(symbolName: symbolName, size: size)
         } else if clamped < 33 {
-            return VolumeIcon(symbolName: "speaker.wave.1", size: 17)
+            let size: CGFloat = forHUD ? 36 : 17
+            let symbolName = forHUD ? "speaker.wave.1.fill" : "speaker.wave.1"
+            return VolumeIcon(symbolName: symbolName, size: size)
         } else if clamped < 66 {
-            return VolumeIcon(symbolName: "speaker.wave.2", size: 19)
+            let size: CGFloat = forHUD ? 41 : 19
+            let symbolName = forHUD ? "speaker.wave.2.fill" : "speaker.wave.2"
+            return VolumeIcon(symbolName: symbolName, size: size)
         } else {
-            return VolumeIcon(symbolName: "speaker.wave.3", size: 21)
+            let size: CGFloat = forHUD ? 47 : 21
+            let symbolName = forHUD ? "speaker.wave.3.fill" : "speaker.wave.3"
+            return VolumeIcon(symbolName: symbolName, size: size)
         }
     }
 
-    /// Returns the appropriate speaker icon for HUD display with larger sizes.
-    /// - Parameters:
-    ///   - percentage: Volume percentage (0-100)
-    ///   - isMuted: Whether the device is muted
-    ///   - isUnsupported: Whether volume control is unsupported for this device
-    /// - Returns: A VolumeIcon with the appropriate symbol name and size for HUD display
+    /// Convenience method for HUD display with larger sizes.
     static func hudIcon(
         for percentage: Int,
         isMuted: Bool = false,
         isUnsupported: Bool = false
     ) -> VolumeIcon {
-        let clamped = max(0, min(percentage, 100))
-
-        if isUnsupported {
-            return VolumeIcon(symbolName: "nosign", size: 30)
-        }
-
-        if isMuted || clamped == 0 {
-            return VolumeIcon(symbolName: "speaker.slash.fill", size: 32)
-        } else if clamped < 33 {
-            return VolumeIcon(symbolName: "speaker.wave.1.fill", size: 36)
-        } else if clamped < 66 {
-            return VolumeIcon(symbolName: "speaker.wave.2.fill", size: 41)
-        } else {
-            return VolumeIcon(symbolName: "speaker.wave.3.fill", size: 47)
-        }
+        icon(for: percentage, isMuted: isMuted, isUnsupported: isUnsupported, forHUD: true)
     }
 }

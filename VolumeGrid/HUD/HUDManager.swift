@@ -58,7 +58,6 @@ class HUDManager {
     private var hideHUDWorkItem: DispatchWorkItem?
     private var screenChangeCancellable: AnyCancellable?
 
-    // HUD constants.
     private let hudWidth: CGFloat = 320
     private let hudHeight: CGFloat = 160
     private let hudAlpha: CGFloat = 0.97

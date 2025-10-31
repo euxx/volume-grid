@@ -1,17 +1,15 @@
 import AudioToolbox
 import Foundation
 
-// Audio device model.
+/// Audio device model.
 struct AudioDevice: Identifiable, Hashable, Sendable {
     let id: AudioDeviceID
     let name: String
 }
 
-// Manages audio device detection and property queries
+/// Manages audio device detection and property queries.
 final class AudioDeviceManager: @unchecked Sendable {
     nonisolated init() {}
-
-    // MARK: - Helper Methods
 
     /// Creates an AudioObjectPropertyAddress with common defaults
     nonisolated private func makePropertyAddress(
@@ -70,8 +68,6 @@ final class AudioDeviceManager: @unchecked Sendable {
         }
     #endif
 
-    // MARK: - Public Methods
-
     // Fetch the default output device ID.
     @discardableResult
     nonisolated func getDefaultOutputDevice() -> AudioDeviceID {
@@ -98,7 +94,6 @@ final class AudioDeviceManager: @unchecked Sendable {
         }
     }
 
-    // Update available volume elements (prefer main, then left/right channels).
     @discardableResult
     nonisolated func detectVolumeElements(for deviceID: AudioDeviceID)
         -> [AudioObjectPropertyElement]
@@ -112,7 +107,6 @@ final class AudioDeviceManager: @unchecked Sendable {
         detectElements(for: deviceID, selector: kAudioDevicePropertyMute, verifyReadable: true)
     }
 
-    // Check whether the device supports volume control.
     nonisolated func supportsVolumeControl(_ deviceID: AudioDeviceID) -> Bool {
         return !detectVolumeElements(for: deviceID).isEmpty
     }
@@ -121,7 +115,6 @@ final class AudioDeviceManager: @unchecked Sendable {
         return !detectMuteElements(for: deviceID).isEmpty
     }
 
-    // Get the current volume for a device
     nonisolated func getCurrentVolume(
         for deviceID: AudioDeviceID, elements: [AudioObjectPropertyElement]
     )
@@ -156,7 +149,6 @@ final class AudioDeviceManager: @unchecked Sendable {
         return total / Float32(channelVolumes.count)
     }
 
-    // Set volume for a device
     nonisolated func setVolume(
         _ scalar: Float32, for deviceID: AudioDeviceID, elements: [AudioObjectPropertyElement]
     ) -> Bool {
@@ -187,7 +179,6 @@ final class AudioDeviceManager: @unchecked Sendable {
         return success
     }
 
-    // Set mute state for a device
     nonisolated func setMuteState(
         _ muted: Bool, for deviceID: AudioDeviceID, elements: [AudioObjectPropertyElement]
     ) -> Bool {
@@ -217,7 +208,6 @@ final class AudioDeviceManager: @unchecked Sendable {
         return success
     }
 
-    // Get mute state for a device
     nonisolated func getMuteState(
         for deviceID: AudioDeviceID, elements: [AudioObjectPropertyElement]
     ) -> Bool? {
@@ -249,7 +239,6 @@ final class AudioDeviceManager: @unchecked Sendable {
         return muteDetected
     }
 
-    // Fetch all audio devices
     nonisolated func getAllDevices() -> [AudioDevice] {
         var address = makePropertyAddress(
             selector: kAudioHardwarePropertyDevices,
@@ -288,7 +277,6 @@ final class AudioDeviceManager: @unchecked Sendable {
         return devices
     }
 
-    // Resolve the device name.
     nonisolated func getDeviceName(_ deviceID: AudioDeviceID) -> String? {
         var address = makePropertyAddress(
             selector: kAudioDevicePropertyDeviceNameCFString,

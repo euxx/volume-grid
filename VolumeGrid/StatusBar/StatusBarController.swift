@@ -71,13 +71,11 @@ final class StatusBarController {
         menu.minimumWidth = max(menu.minimumWidth, volumeMenuView.intrinsicContentSize.width)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(launchAtLoginMenuItem)
-
         menu.addItem(NSMenuItem.separator())
 
         let aboutItem = NSMenuItem(title: "About", action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
         menu.addItem(aboutItem)
-
         menu.addItem(NSMenuItem.separator())
 
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")

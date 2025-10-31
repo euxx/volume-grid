@@ -41,8 +41,6 @@ final class LaunchAtLoginController {
         }
     }
 
-    // MARK: - Modern SMAppService API
-
     private func enable() -> Result<Bool, LaunchAtLoginError> {
         do {
             try SMAppService.mainApp.register()

@@ -5,7 +5,6 @@ import Foundation
 // MARK: - Numeric Extensions
 
 extension Comparable {
-    /// Clamps a value between a minimum and maximum.
     func clamped(to range: ClosedRange<Self>) -> Self {
         return min(max(self, range.lowerBound), range.upperBound)
     }
@@ -13,7 +12,6 @@ extension Comparable {
 
 // MARK: - Volume Formatting
 
-/// Shared helper that normalizes how the app formats volume values.
 enum VolumeFormatter {
     private static let blocksCount: CGFloat = 16.0
     private static let quarterStep: CGFloat = 0.25
@@ -37,43 +35,32 @@ enum VolumeFormatter {
         if fractionalPart < epsilon {
             return "\(integerPart)"
         }
-
-        if abs(fractionalPart - 1.0) < epsilon {
+        if fractionalPart > 1.0 - epsilon {
             return "\(integerPart + 1)"
         }
 
-        let fractionMap: [(range: ClosedRange<CGFloat>, string: String)] = [
-            ((quarterStep - epsilon)...(quarterStep + epsilon), "1/4"),
-            ((0.5 - epsilon)...(0.5 + epsilon), "2/4"),
-            ((0.75 - epsilon)...(0.75 + epsilon), "3/4"),
-        ]
-
-        let fractionString =
-            fractionMap.first { $0.range.contains(fractionalPart) }?.string
-            ?? String(format: "%.2f", fractionalPart)
-
-        if integerPart == 0 {
-            return fractionString
-        } else {
-            return "\(integerPart)+\(fractionString)"
+        let fractionString: String
+        switch fractionalPart {
+        case (quarterStep - epsilon)...(quarterStep + epsilon):
+            fractionString = "1/4"
+        case (0.5 - epsilon)...(0.5 + epsilon):
+            fractionString = "2/4"
+        case (0.75 - epsilon)...(0.75 + epsilon):
+            fractionString = "3/4"
+        default:
+            fractionString = String(format: "%.2f", fractionalPart)
         }
+
+        return integerPart == 0 ? fractionString : "\(integerPart)+\(fractionString)"
     }
 }
 
-/// Shared helper that maps volume percentage to appropriate speaker icon and size.
 enum VolumeIconHelper {
     struct VolumeIcon {
         let symbolName: String
         let size: CGFloat
     }
 
-    /// Returns the appropriate speaker icon based on volume state.
-    /// - Parameters:
-    ///   - percentage: Volume percentage (0-100)
-    ///   - isMuted: Whether the device is muted
-    ///   - isUnsupported: Whether volume control is unsupported for this device
-    ///   - forHUD: Whether to use larger sizes for HUD display
-    /// - Returns: A VolumeIcon with the appropriate symbol name and size
     static func icon(
         for percentage: Int,
         isMuted: Bool = false,
@@ -105,7 +92,6 @@ enum VolumeIconHelper {
         }
     }
 
-    /// Convenience method for HUD display with larger sizes.
     static func hudIcon(
         for percentage: Int,
         isMuted: Bool = false,

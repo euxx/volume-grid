@@ -137,9 +137,7 @@ final class AudioDeviceManager: @unchecked Sendable {
     {
         guard !elements.isEmpty else { return nil }
 
-        var channelVolumes: [Float32] = []
-
-        for element in elements {
+        let channelVolumes = elements.compactMap { element -> Float32? in
             var address = makePropertyAddress(
                 selector: kAudioDevicePropertyVolumeScalar,
                 element: element
@@ -150,18 +148,17 @@ final class AudioDeviceManager: @unchecked Sendable {
             let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &volume)
 
             if status == noErr {
-                channelVolumes.append(volume)
+                return volume
             } else {
                 #if DEBUG
                     log("Error getting volume for element \(element): \(status)")
                 #endif
+                return nil
             }
         }
 
         guard !channelVolumes.isEmpty else { return nil }
-
-        let total = channelVolumes.reduce(0, +)
-        return total / Float32(channelVolumes.count)
+        return channelVolumes.reduce(0, +) / Float32(channelVolumes.count)
     }
 
     nonisolated func setVolume(
@@ -170,7 +167,6 @@ final class AudioDeviceManager: @unchecked Sendable {
         guard !elements.isEmpty else { return false }
 
         let value = max(0, min(scalar, 1))
-        let size = UInt32(MemoryLayout<Float32>.size)
         var success = false
 
         for element in elements {
@@ -181,7 +177,7 @@ final class AudioDeviceManager: @unchecked Sendable {
 
             var mutableValue = value
             let status = AudioObjectSetPropertyData(
-                deviceID, &address, 0, nil, size, &mutableValue)
+                deviceID, &address, 0, nil, UInt32(MemoryLayout<Float32>.size), &mutableValue)
             if status == noErr {
                 success = true
             } else {
@@ -200,7 +196,6 @@ final class AudioDeviceManager: @unchecked Sendable {
         guard !elements.isEmpty else { return false }
 
         let muteValue: UInt32 = muted ? 1 : 0
-        let size = UInt32(MemoryLayout<UInt32>.size)
         var success = false
 
         for element in elements {
@@ -210,7 +205,7 @@ final class AudioDeviceManager: @unchecked Sendable {
             )
             var mutableValue = muteValue
             let status = AudioObjectSetPropertyData(
-                deviceID, &address, 0, nil, size, &mutableValue)
+                deviceID, &address, 0, nil, UInt32(MemoryLayout<UInt32>.size), &mutableValue)
             if status == noErr {
                 success = true
             } else {

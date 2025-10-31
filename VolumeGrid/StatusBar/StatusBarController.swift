@@ -1,7 +1,6 @@
 import AppKit
 import Combine
 
-/// Coordinates the status bar item, menu content, and user actions.
 final class StatusBarController {
     private let volumeMonitor: VolumeMonitor
     private let launchAtLoginController: LaunchAtLoginController
@@ -127,10 +126,9 @@ final class StatusBarController {
             Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "VolumeGrid"
         let version =
             Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "Unknown Version"
+            ?? "Unknown"
         let build =
-            Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-            ?? "Unknown Build"
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
 
         let alert = NSAlert()
         alert.messageText = appName
@@ -168,15 +166,14 @@ final class StatusBarController {
             guard let self else { return }
             defer { self.launchAtLoginMenuItem.isEnabled = true }
 
-            let newState: NSControl.StateValue
             switch result {
             case .success(let enabled):
-                newState = enabled ? .on : .off
+                self.launchAtLoginMenuItem.state = enabled ? .on : .off
             case .failure(let error):
-                newState = self.launchAtLoginController.isEnabled() ? .on : .off
+                self.launchAtLoginMenuItem.state =
+                    self.launchAtLoginController.isEnabled() ? .on : .off
                 self.showError(error.localizedDescription)
             }
-            self.launchAtLoginMenuItem.state = newState
         }
     }
 
@@ -224,7 +221,6 @@ final class StatusBarController {
 
 // MARK: - Status Bar UI Components
 
-/// Simple linear progress view that draws a rounded track and fill using AppKit drawing.
 private final class LinearProgressView: NSView {
     var trackColor: NSColor = NSColor.controlBackgroundColor.withAlphaComponent(0.6) {
         didSet { needsDisplay = true }
@@ -285,7 +281,6 @@ private final class LinearProgressView: NSView {
     }
 }
 
-/// Compact status bar view that shows the current volume with an icon and a progress bar.
 final class StatusBarVolumeView: NSView {
     private let iconView = NSImageView()
     private let progressBackgroundView = NSView()
@@ -364,7 +359,6 @@ final class StatusBarVolumeView: NSView {
     }
 }
 
-/// Custom view used inside the menu item to display the volume value and a linear indicator.
 final class VolumeMenuItemView: NSView {
     private let iconView = NSImageView()
     private let label = NSTextField(labelWithString: "")

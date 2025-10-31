@@ -10,7 +10,6 @@ struct HUDEvent {
     let isUnsupported: Bool
 }
 
-/// Thread-safe store for mutable audio state accessed off the main thread.
 private final class VolumeStateStore: @unchecked Sendable {
     private let lock = OSAllocatedUnfairLock()
 
@@ -145,7 +144,6 @@ private final class VolumeStateStore: @unchecked Sendable {
     }
 }
 
-// VolumeMonitor class - coordinates volume monitoring and HUD display
 @MainActor
 class VolumeMonitor: ObservableObject {
     @Published var volumePercentage: Int = 0
@@ -312,26 +310,21 @@ class VolumeMonitor: ObservableObject {
 
         let clampedVolume = volume.clamped(to: 0...1)
         let percentage = Int(round(clampedVolume * 100))
+        let currentScalar = CGFloat(clampedVolume)
+        let previousScalar = state.lastVolumeScalarSnapshot()
+        let epsilon: CGFloat = 0.001
 
         DispatchQueue.main.async {
-            let previousScalar = self.state.lastVolumeScalarSnapshot()
-            let currentScalar = CGFloat(clampedVolume)
             self.state.updateLastVolumeScalar(currentScalar)
             self.volumePercentage = percentage
 
-            let epsilon: CGFloat = 0.001
-            var shouldShowHUD = false
-
+            let shouldShowHUD: Bool
             if let previousScalar {
-                shouldShowHUD = abs(previousScalar - currentScalar) > epsilon
-                if !shouldShowHUD {
-                    let isAtLowerBound = previousScalar <= epsilon && currentScalar <= epsilon
-                    let isAtUpperBound =
-                        previousScalar >= (1 - epsilon) && currentScalar >= (1 - epsilon)
-                    if isAtLowerBound || isAtUpperBound {
-                        shouldShowHUD = true
-                    }
-                }
+                let delta = abs(previousScalar - currentScalar)
+                let isAtBoundary =
+                    (currentScalar <= epsilon && previousScalar <= epsilon)
+                    || (currentScalar >= (1 - epsilon) && previousScalar >= (1 - epsilon))
+                shouldShowHUD = delta > epsilon || isAtBoundary
             } else {
                 shouldShowHUD = true
             }

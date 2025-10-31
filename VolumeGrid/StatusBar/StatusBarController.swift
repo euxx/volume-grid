@@ -32,8 +32,10 @@ final class StatusBarController {
         launchAtLoginMenuItem.state = launchAtLoginController.isEnabled() ? .on : .off
 
         setupStatusBarButton()
-        setupMenu()
-        bindVolumeUpdates()
+        Task { @MainActor in
+            self.setupMenu()
+            self.bindVolumeUpdates()
+        }
     }
 
     // MARK: - Setup
@@ -47,6 +49,7 @@ final class StatusBarController {
         ])
     }
 
+    @MainActor
     private func setupMenu() {
         let initialVolume = volumeMonitor.volumePercentage
         let initialDevice = volumeMonitor.currentDevice?.name ?? "Unknown Device"

@@ -155,14 +155,6 @@ class VolumeMonitor: ObservableObject {
 
     // MARK: - Helper Methods
 
-    private func clamp(_ value: Float32) -> Float32 {
-        max(0, min(value, 1))
-    }
-
-    private func clamp(_ value: CGFloat) -> CGFloat {
-        max(0, min(value, 1))
-    }
-
     private nonisolated func resolveDeviceID() -> AudioDeviceID {
         let currentID = state.defaultOutputDeviceIDValue()
         return currentID != 0 ? currentID : updateDefaultOutputDevice()
@@ -244,13 +236,13 @@ class VolumeMonitor: ObservableObject {
     }
 
     func setVolume(percentage: Int) {
-        let clamped = max(0, min(percentage, 100))
+        let clamped = percentage.clamped(to: 0...100)
         let scalar = Float32(Double(clamped) / 100.0)
         setVolume(scalar: scalar)
     }
 
     func setVolume(scalar: Float32) {
-        let clampedScalar = clamp(scalar)
+        let clampedScalar = scalar.clamped(to: 0...1)
 
         guard let audioQueue else { return }
 
@@ -284,23 +276,8 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
-    private func ensureMainThread<T>(_ work: @escaping () -> T) -> T {
-        if Thread.isMainThread {
-            return work()
-        } else {
-            return DispatchQueue.main.sync { work() }
-        }
-    }
-
     @discardableResult
     private func refreshMuteState(for deviceID: AudioDeviceID? = nil) -> Bool? {
-        ensureMainThread {
-            self.refreshMuteStateOnMainThread(for: deviceID)
-        }
-    }
-
-    private func refreshMuteStateOnMainThread(for deviceID: AudioDeviceID? = nil) -> Bool? {
-
         let resolvedDeviceID = deviceID ?? resolveDeviceID()
 
         guard resolvedDeviceID != 0 else {
@@ -333,7 +310,7 @@ class VolumeMonitor: ObservableObject {
     private func volumeChanged(address _: AudioObjectPropertyAddress) {
         guard let volume = getCurrentVolume() else { return }
 
-        let clampedVolume = clamp(volume)
+        let clampedVolume = volume.clamped(to: 0...1)
         let percentage = Int(round(clampedVolume * 100))
 
         DispatchQueue.main.async {
@@ -370,7 +347,9 @@ class VolumeMonitor: ObservableObject {
     }
 
     private func muteChanged(address _: AudioObjectPropertyAddress) {
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            _ = self.refreshMuteState()
             self.showHUDForCurrentVolume()
         }
     }
@@ -401,7 +380,7 @@ class VolumeMonitor: ObservableObject {
         }
 
         if let volume = getCurrentVolume() {
-            let clamped = clamp(volume)
+            let clamped = volume.clamped(to: 0...1)
             let percentage = Int(round(clamped * 100))
             self.volumePercentage = percentage
             self.state.updateLastVolumeScalar(CGFloat(clamped))
@@ -422,7 +401,7 @@ class VolumeMonitor: ObservableObject {
     private func showHUDForCurrentVolume() {
         _ = refreshMuteState()
         if let volume = getCurrentVolume() {
-            let clamped = clamp(volume)
+            let clamped = volume.clamped(to: 0...1)
             let scalar = CGFloat(clamped)
             state.updateLastVolumeScalar(scalar)
             if state.deviceMuted() {

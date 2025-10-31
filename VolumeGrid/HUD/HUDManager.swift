@@ -27,6 +27,12 @@ final class HUDWindowContext {
     let volumeLabel: NSTextField
     let blocksView: VolumeBlocksView
 
+    // Store constraint references for efficient updates
+    let iconWidthConstraint: NSLayoutConstraint
+    let iconHeightConstraint: NSLayoutConstraint
+    let volumeLabelWidthConstraint: NSLayoutConstraint
+    let blocksWidthConstraint: NSLayoutConstraint
+
     init(
         screenID: CGDirectDisplayID,
         window: NSWindow,
@@ -37,7 +43,11 @@ final class HUDWindowContext {
         textStack: NSStackView,
         deviceLabel: NSTextField,
         volumeLabel: NSTextField,
-        blocksView: VolumeBlocksView
+        blocksView: VolumeBlocksView,
+        iconWidthConstraint: NSLayoutConstraint,
+        iconHeightConstraint: NSLayoutConstraint,
+        volumeLabelWidthConstraint: NSLayoutConstraint,
+        blocksWidthConstraint: NSLayoutConstraint
     ) {
         self.screenID = screenID
         self.window = window
@@ -49,6 +59,10 @@ final class HUDWindowContext {
         self.deviceLabel = deviceLabel
         self.volumeLabel = volumeLabel
         self.blocksView = blocksView
+        self.iconWidthConstraint = iconWidthConstraint
+        self.iconHeightConstraint = iconHeightConstraint
+        self.volumeLabelWidthConstraint = volumeLabelWidthConstraint
+        self.blocksWidthConstraint = blocksWidthConstraint
     }
 }
 
@@ -76,19 +90,6 @@ class HUDManager {
     deinit {
         hideHUDWorkItem?.cancel()
         screenChangeCancellable?.cancel()
-    }
-
-    private func updateConstraint(
-        for view: NSView,
-        attribute: NSLayoutConstraint.Attribute,
-        constant: CGFloat
-    ) {
-        for constraint in view.constraints
-        where constraint.firstAttribute == attribute
-            || constraint.secondAttribute == attribute
-        {
-            constraint.constant = constant
-        }
     }
 
     private func screenID(for screen: NSScreen) -> CGDirectDisplayID? {
@@ -250,7 +251,11 @@ class HUDManager {
             textStack: textStack,
             deviceLabel: deviceLabel,
             volumeLabel: volumeLabel,
-            blocksView: blocksView
+            blocksView: blocksView,
+            iconWidthConstraint: iconWidthConstraint,
+            iconHeightConstraint: iconHeightConstraint,
+            volumeLabelWidthConstraint: volumeWidthConstraint,
+            blocksWidthConstraint: blocksWidthConstraint
         )
     }
 
@@ -309,7 +314,7 @@ class HUDManager {
     func showHUD(
         volumeScalar: CGFloat, deviceName: String?, isMuted: Bool, isUnsupported: Bool = false
     ) {
-        let clampedScalar = max(0, min(volumeScalar, 1))
+        let clampedScalar = volumeScalar.clamped(to: 0...1)
         let epsilon: CGFloat = 0.001
         let isMutedForDisplay = isMuted || clampedScalar <= epsilon
         let displayedScalar = isMutedForDisplay ? 0 : clampedScalar
@@ -374,9 +379,9 @@ class HUDManager {
             }
             context.iconView.contentTintColor = style.iconTintColor
 
-            // Update icon size via constraints
-            updateConstraint(for: context.iconView, attribute: .width, constant: icon.size)
-            updateConstraint(for: context.iconView, attribute: .height, constant: icon.size)
+            // Update icon size via stored constraints
+            context.iconWidthConstraint.constant = icon.size
+            context.iconHeightConstraint.constant = icon.size
 
             context.deviceLabel.stringValue = deviceName + "  -"
             context.deviceLabel.textColor = style.secondaryTextColor
@@ -384,15 +389,13 @@ class HUDManager {
             context.volumeLabel.stringValue = statusString
             context.volumeLabel.textColor = style.primaryTextColor
             let widthPadding: CGFloat = 6
-            updateConstraint(
-                for: context.volumeLabel, attribute: .width,
-                constant: effectiveStatusTextWidth + widthPadding)
+            context.volumeLabelWidthConstraint.constant = effectiveStatusTextWidth + widthPadding
             context.textStack.spacing = gapBetweenDeviceAndCount
 
             context.blocksView.update(style: style, fillFraction: displayedScalar)
             context.blocksView.isHidden = isUnsupported
             let blocksWidth = isUnsupported ? 0 : context.blocksView.intrinsicContentSize.width
-            updateConstraint(for: context.blocksView, attribute: .width, constant: blocksWidth)
+            context.blocksWidthConstraint.constant = blocksWidth
 
             let spacingIconToDevice: CGFloat = isUnsupported ? 20 : 14
             let spacingDeviceToBlocks: CGFloat = isUnsupported ? 0 : 20

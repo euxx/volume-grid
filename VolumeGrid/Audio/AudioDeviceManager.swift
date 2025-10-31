@@ -9,6 +9,25 @@ struct AudioDevice: Identifiable, Hashable, Sendable {
 
 /// Manages audio device detection and property queries.
 final class AudioDeviceManager: @unchecked Sendable {
+    // Pre-defined addresses for common operations
+    private nonisolated let defaultOutputDeviceAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: 0
+    )
+
+    private nonisolated let devicesAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDevices,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: 0
+    )
+
+    private nonisolated let deviceNameAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioDevicePropertyDeviceNameCFString,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: 0
+    )
+
     nonisolated init() {}
 
     /// Creates an AudioObjectPropertyAddress with common defaults
@@ -71,11 +90,7 @@ final class AudioDeviceManager: @unchecked Sendable {
     // Fetch the default output device ID.
     @discardableResult
     nonisolated func getDefaultOutputDevice() -> AudioDeviceID {
-        var address = makePropertyAddress(
-            selector: kAudioHardwarePropertyDefaultOutputDevice,
-            scope: kAudioObjectPropertyScopeGlobal,
-            element: 0
-        )
+        var address = defaultOutputDeviceAddress
 
         var deviceID: AudioDeviceID = 0
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
@@ -240,11 +255,7 @@ final class AudioDeviceManager: @unchecked Sendable {
     }
 
     nonisolated func getAllDevices() -> [AudioDevice] {
-        var address = makePropertyAddress(
-            selector: kAudioHardwarePropertyDevices,
-            scope: kAudioObjectPropertyScopeGlobal,
-            element: 0
-        )
+        var address = devicesAddress
 
         var size: UInt32 = 0
         var status = AudioObjectGetPropertyDataSize(
@@ -278,11 +289,7 @@ final class AudioDeviceManager: @unchecked Sendable {
     }
 
     nonisolated func getDeviceName(_ deviceID: AudioDeviceID) -> String? {
-        var address = makePropertyAddress(
-            selector: kAudioDevicePropertyDeviceNameCFString,
-            scope: kAudioObjectPropertyScopeGlobal,
-            element: 0
-        )
+        var address = deviceNameAddress
 
         var unmanagedName: Unmanaged<CFString>?
         var size = UInt32(MemoryLayout<Unmanaged<CFString>>.size)

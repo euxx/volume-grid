@@ -2,6 +2,17 @@ import AppKit
 import CoreGraphics
 import Foundation
 
+// MARK: - Numeric Extensions
+
+extension Comparable {
+    /// Clamps a value between a minimum and maximum.
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        return min(max(self, range.lowerBound), range.upperBound)
+    }
+}
+
+// MARK: - Volume Formatting
+
 /// Shared helper that normalizes how the app formats volume values.
 enum VolumeFormatter {
     private static let blocksCount: CGFloat = 16.0

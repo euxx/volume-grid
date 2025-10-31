@@ -10,7 +10,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var hudSubscription: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Treat the app as an accessory so it stays out of the Dock.
         NSApplication.shared.setActivationPolicy(.accessory)
 
         // Subscribe to HUD events directly
@@ -44,7 +43,6 @@ struct VolumeGridApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // Remove the WindowGroup so the app runs in the background.
         Settings {
             EmptyView()
         }

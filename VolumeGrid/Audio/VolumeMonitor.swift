@@ -3,7 +3,6 @@ import Cocoa
 @preconcurrency import Combine
 @preconcurrency import os.lock
 
-// HUD event data
 struct HUDEvent {
     let volumeScalar: CGFloat
     let deviceName: String?
@@ -11,7 +10,7 @@ struct HUDEvent {
     let isUnsupported: Bool
 }
 
-/// Thread-safe store for the mutable audio state VolumeMonitor needs to access off the main thread.
+/// Thread-safe store for mutable audio state accessed off the main thread.
 private final class VolumeStateStore: @unchecked Sendable {
     private let lock = OSAllocatedUnfairLock()
 
@@ -220,7 +219,7 @@ class VolumeMonitor: ObservableObject {
     // MARK: - Volume Control
 
     nonisolated func getCurrentVolume() -> Float32? {
-        let deviceID = updateDefaultOutputDevice()
+        let deviceID = state.defaultOutputDeviceIDValue()
         guard deviceID != 0 else { return nil }
 
         let elements = deviceManager.detectVolumeElements(for: deviceID)
@@ -244,7 +243,7 @@ class VolumeMonitor: ObservableObject {
         audioQueue.async { [weak self] in
             guard let self else { return }
 
-            let deviceID = self.updateDefaultOutputDevice()
+            let deviceID = self.state.defaultOutputDeviceIDValue()
             guard deviceID != 0 else { return }
 
             let elements = self.state.volumeElementsSnapshot()

@@ -261,7 +261,7 @@ class HUDManager {
 
     private func syncHUDWindowsWithScreens() {
         if !Thread.isMainThread {
-            DispatchQueue.main.sync {
+            DispatchQueue.main.async {
                 self.syncHUDWindowsWithScreens()
             }
             return
@@ -282,6 +282,7 @@ class HUDManager {
 
         for (_, context) in remaining {
             context.window.orderOut(nil)
+            context.window.contentView = nil
         }
 
         hudWindows = updated
@@ -417,7 +418,8 @@ class HUDManager {
 
         hideHUDWorkItem?.cancel()
 
-        let workItem = DispatchWorkItem {
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
             for (_, context) in self.hudWindows {
                 let hudWindow = context.window
                 NSAnimationContext.runAnimationGroup(

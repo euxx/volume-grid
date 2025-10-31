@@ -8,8 +8,8 @@ struct AudioDevice: Identifiable, Hashable, Sendable {
 }
 
 /// Manages audio device detection and property queries.
-final class AudioDeviceManager: @unchecked Sendable {
-    // Pre-defined addresses for common operations
+/// All methods are nonisolated and thread-safe as they only interact with CoreAudio APIs.
+final class AudioDeviceManager: Sendable {
     private nonisolated let defaultOutputDeviceAddress = AudioObjectPropertyAddress(
         mSelector: kAudioHardwarePropertyDefaultOutputDevice,
         mScope: kAudioObjectPropertyScopeGlobal,
@@ -62,7 +62,6 @@ final class AudioDeviceManager: @unchecked Sendable {
 
             if AudioObjectHasProperty(deviceID, &address) {
                 if verifyReadable {
-                    // Verify we can actually read the value
                     var value: UInt32 = 0
                     var size = UInt32(MemoryLayout<UInt32>.size)
                     let readStatus = AudioObjectGetPropertyData(
@@ -81,13 +80,11 @@ final class AudioDeviceManager: @unchecked Sendable {
     }
 
     #if DEBUG
-        /// Logs debug messages
         nonisolated private func log(_ message: String) {
             print("[AudioDeviceManager] \(message)")
         }
     #endif
 
-    // Fetch the default output device ID.
     @discardableResult
     nonisolated func getDefaultOutputDevice() -> AudioDeviceID {
         var address = defaultOutputDeviceAddress

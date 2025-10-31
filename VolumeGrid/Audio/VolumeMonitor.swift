@@ -160,19 +160,59 @@ class VolumeMonitor: ObservableObject {
 
     private nonisolated let deviceManager = AudioDeviceManager()
     private nonisolated let state = VolumeStateStore()
-    private nonisolated let systemEventMonitor: SystemEventMonitor = {
-        SystemEventMonitor()
-    }()
+    private let systemEventMonitor = SystemEventMonitor()
     private nonisolated let hudEventSubject: PassthroughSubject<HUDEvent, Never> = {
         PassthroughSubject<HUDEvent, Never>()
     }()
+    private var volumeChangeDebouncer: DispatchWorkItem?
 
-    private var volumeListener: AudioObjectPropertyListenerBlock?
-    private var deviceListener: AudioObjectPropertyListenerBlock?
-    private var muteListener: AudioObjectPropertyListenerBlock?
-    private nonisolated let audioQueue: DispatchQueue? = {
-        DispatchQueue(label: "com.volumegrid.audio", qos: .userInitiated)
-    }()
+    private let listenerLock = NSLock()
+    private nonisolated(unsafe) var _volumeListener: AudioObjectPropertyListenerBlock?
+    private nonisolated(unsafe) var _deviceListener: AudioObjectPropertyListenerBlock?
+    private nonisolated(unsafe) var _muteListener: AudioObjectPropertyListenerBlock?
+
+    nonisolated private var volumeListener: AudioObjectPropertyListenerBlock? {
+        get {
+            listenerLock.lock()
+            defer { listenerLock.unlock() }
+            return _volumeListener
+        }
+        set {
+            listenerLock.lock()
+            defer { listenerLock.unlock() }
+            _volumeListener = newValue
+        }
+    }
+
+    nonisolated private var deviceListener: AudioObjectPropertyListenerBlock? {
+        get {
+            listenerLock.lock()
+            defer { listenerLock.unlock() }
+            return _deviceListener
+        }
+        set {
+            listenerLock.lock()
+            defer { listenerLock.unlock() }
+            _deviceListener = newValue
+        }
+    }
+
+    nonisolated private var muteListener: AudioObjectPropertyListenerBlock? {
+        get {
+            listenerLock.lock()
+            defer { listenerLock.unlock() }
+            return _muteListener
+        }
+        set {
+            listenerLock.lock()
+            defer { listenerLock.unlock() }
+            _muteListener = newValue
+        }
+    }
+
+    private nonisolated let audioQueue: DispatchQueue = DispatchQueue(
+        label: "com.volumegrid.audio", qos: .userInitiated
+    )
 
     init() {
         let deviceID = updateDefaultOutputDevice()
@@ -189,9 +229,12 @@ class VolumeMonitor: ObservableObject {
         getAudioDevices()
     }
 
-    nonisolated deinit {
-        Task { @MainActor [weak self] in
-            self?.stopListening()
+    deinit {
+        volumeChangeDebouncer?.cancel()
+        if Thread.isMainThread {
+            nonisolatedStopListening()
+        } else {
+            assertionFailure("VolumeMonitor should be deallocated on main thread")
         }
     }
 
@@ -241,8 +284,6 @@ class VolumeMonitor: ObservableObject {
 
     func setVolume(scalar: Float32) {
         let clampedScalar = scalar.clamped(to: 0...1)
-
-        guard let audioQueue else { return }
 
         audioQueue.async { [weak self] in
             guard let self else { return }
@@ -314,27 +355,33 @@ class VolumeMonitor: ObservableObject {
         let previousScalar = state.lastVolumeScalarSnapshot()
         let epsilon: CGFloat = 0.001
 
-        DispatchQueue.main.async {
+        let shouldShowHUD: Bool
+        if let previousScalar {
+            let delta = abs(previousScalar - currentScalar)
+            let isAtBoundary =
+                (currentScalar <= epsilon && previousScalar <= epsilon)
+                || (currentScalar >= (1 - epsilon) && previousScalar >= (1 - epsilon))
+            shouldShowHUD = delta > epsilon || isAtBoundary
+        } else {
+            shouldShowHUD = true
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
             self.state.updateLastVolumeScalar(currentScalar)
             self.volumePercentage = percentage
-
-            let shouldShowHUD: Bool
-            if let previousScalar {
-                let delta = abs(previousScalar - currentScalar)
-                let isAtBoundary =
-                    (currentScalar <= epsilon && previousScalar <= epsilon)
-                    || (currentScalar >= (1 - epsilon) && previousScalar >= (1 - epsilon))
-                shouldShowHUD = delta > epsilon || isAtBoundary
-            } else {
-                shouldShowHUD = true
-            }
 
             if currentScalar > epsilon, self.state.deviceMuted() {
                 self.state.setDeviceMuted(false)
             }
 
             if shouldShowHUD {
-                self.showVolumeHUD(volumeScalar: currentScalar)
+                self.volumeChangeDebouncer?.cancel()
+                let debouncer = DispatchWorkItem { [weak self] in
+                    self?.showVolumeHUD(volumeScalar: currentScalar)
+                }
+                self.volumeChangeDebouncer = debouncer
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: debouncer)
             }
         }
     }
@@ -450,7 +497,7 @@ class VolumeMonitor: ObservableObject {
                 self.volumeChanged(address: inAddresses.pointee)
             }
 
-            guard let audioQueue = audioQueue, let volumeListener = volumeListener else { return }
+            guard let volumeListener = volumeListener else { return }
 
             var listenerRegistered = false
             let volumeElementsSnapshot = state.volumeElementsSnapshot()
@@ -532,7 +579,7 @@ class VolumeMonitor: ObservableObject {
             }
         }
 
-        guard let audioQueue = audioQueue, let deviceListener = deviceListener else { return }
+        guard let deviceListener = deviceListener else { return }
 
         let deviceStatus = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
@@ -544,18 +591,13 @@ class VolumeMonitor: ObservableObject {
         state.setListeningActive(true)
     }
 
-    func stopListening() {
-        systemEventMonitor.stop()
+    private nonisolated func nonisolatedStopListening() {
+        // Must be called from main thread
+        // SystemEventMonitor.stop() requires main thread
+        assert(Thread.isMainThread, "nonisolatedStopListening must be called from main thread")
 
-        guard let audioQueue = audioQueue else {
-            volumeListener = nil
-            deviceListener = nil
-            muteListener = nil
-            state.updateListeningDeviceID(nil)
-            state.updateRegisteredVolumeElements([])
-            state.updateRegisteredMuteElements([])
-            state.setListeningActive(false)
-            return
+        MainActor.assumeIsolated {
+            systemEventMonitor.stop()
         }
 
         var deviceAddress = AudioObjectPropertyAddress(
@@ -608,6 +650,10 @@ class VolumeMonitor: ObservableObject {
         state.updateRegisteredVolumeElements([])
         state.updateRegisteredMuteElements([])
         state.setListeningActive(false)
+    }
+
+    func stopListening() {
+        nonisolatedStopListening()
     }
 
     // MARK: - HUD Event Broadcasting

@@ -82,6 +82,19 @@ class HUDManager {
         }
     }
 
+    private func updateConstraint(
+        for view: NSView,
+        attribute: NSLayoutConstraint.Attribute,
+        constant: CGFloat
+    ) {
+        for constraint in view.constraints
+        where constraint.firstAttribute == attribute
+            || constraint.secondAttribute == attribute
+        {
+            constraint.constant = constant
+        }
+    }
+
     private func screenID(for screen: NSScreen) -> CGDirectDisplayID? {
         if let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
             as? NSNumber
@@ -356,15 +369,8 @@ class HUDManager {
             context.iconView.contentTintColor = style.iconTintColor
 
             // Update icon size via constraints
-            for constraint in context.iconView.constraints {
-                if constraint.firstAttribute == .width || constraint.secondAttribute == .width {
-                    constraint.constant = icon.size
-                } else if constraint.firstAttribute == .height
-                    || constraint.secondAttribute == .height
-                {
-                    constraint.constant = icon.size
-                }
-            }
+            updateConstraint(for: context.iconView, attribute: .width, constant: icon.size)
+            updateConstraint(for: context.iconView, attribute: .height, constant: icon.size)
 
             context.deviceLabel.stringValue = deviceName + "  -"
             context.deviceLabel.textColor = style.secondaryTextColor
@@ -372,32 +378,15 @@ class HUDManager {
             context.volumeLabel.stringValue = statusString
             context.volumeLabel.textColor = style.primaryTextColor
             let widthPadding: CGFloat = 6
-            for constraint in context.volumeLabel.constraints {
-                if constraint.firstAttribute == .width || constraint.secondAttribute == .width {
-                    constraint.constant = effectiveStatusTextWidth + widthPadding
-                    break
-                }
-            }
+            updateConstraint(
+                for: context.volumeLabel, attribute: .width,
+                constant: effectiveStatusTextWidth + widthPadding)
             context.textStack.spacing = gapBetweenDeviceAndCount
 
             context.blocksView.update(style: style, fillFraction: displayedScalar)
-            if isUnsupported {
-                context.blocksView.isHidden = true
-                for constraint in context.blocksView.constraints {
-                    if constraint.firstAttribute == .width || constraint.secondAttribute == .width {
-                        constraint.constant = 0
-                        break
-                    }
-                }
-            } else {
-                context.blocksView.isHidden = false
-                for constraint in context.blocksView.constraints {
-                    if constraint.firstAttribute == .width || constraint.secondAttribute == .width {
-                        constraint.constant = context.blocksView.intrinsicContentSize.width
-                        break
-                    }
-                }
-            }
+            context.blocksView.isHidden = isUnsupported
+            let blocksWidth = isUnsupported ? 0 : context.blocksView.intrinsicContentSize.width
+            updateConstraint(for: context.blocksView, attribute: .width, constant: blocksWidth)
 
             let spacingIconToDevice: CGFloat = isUnsupported ? 20 : 14
             let spacingDeviceToBlocks: CGFloat = isUnsupported ? 0 : 20
@@ -439,13 +428,9 @@ class HUDManager {
 
     private func hudStyle(for appearance: NSAppearance) -> HUDStyle {
         let bestMatch =
-            appearance.bestMatch(from: [
-                .darkAqua,
-                .vibrantDark,
-                .aqua,
-                .vibrantLight,
-            ]) ?? .aqua
-        let isDarkInterface = (bestMatch == .darkAqua || bestMatch == .vibrantDark)
+            appearance.bestMatch(from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
+            ?? .aqua
+        let isDarkInterface = [.darkAqua, .vibrantDark].contains(bestMatch)
 
         let backgroundBase = resolveColor(NSColor.windowBackgroundColor, for: appearance)
         let backgroundColor = backgroundBase.withAlphaComponent(isDarkInterface ? 0.92 : 0.97)

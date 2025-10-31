@@ -17,7 +17,7 @@ final class LaunchAtLoginController {
     private let queue = DispatchQueue(label: "com.volumegrid.launchAtLogin", qos: .userInitiated)
 
     func isEnabled() -> Bool {
-        return SMAppService.mainApp.status == .enabled
+        SMAppService.mainApp.status == .enabled
     }
 
     func setEnabled(

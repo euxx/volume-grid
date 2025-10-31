@@ -200,8 +200,8 @@ final class StatusBarController {
     }
 
     private func formattedVolumeText(for percentage: Int) -> String {
-        guard isVolumeControlAvailable else { return "Not Supported" }
-        return VolumeFormatter.formattedVolumeString(for: percentage)
+        isVolumeControlAvailable
+            ? VolumeFormatter.formattedVolumeString(for: percentage) : "Not Supported"
     }
 
     private func showError(_ message: String) {
@@ -245,7 +245,7 @@ private final class LinearProgressView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
-        nil
+        fatalError("init(coder:) has not been implemented")
     }
 
     override var isOpaque: Bool { false }
@@ -365,7 +365,7 @@ final class VolumeMenuItemView: NSView {
     private var isDragging = false
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 280, height: 56)
+        .init(width: 280, height: 56)
     }
 
     override init(frame frameRect: NSRect) {

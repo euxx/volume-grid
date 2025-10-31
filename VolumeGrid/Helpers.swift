@@ -6,7 +6,7 @@ let volumeEpsilon: CGFloat = 0.001
 
 extension Comparable {
     func clamped(to range: ClosedRange<Self>) -> Self {
-        return min(max(self, range.lowerBound), range.upperBound)
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }
 
@@ -37,13 +37,14 @@ enum VolumeFormatter {
         }
 
         let fractionString: String
-        if abs(fractionalPart - quarterStep) <= volumeEpsilon {
+        switch fractionalPart {
+        case let f where abs(f - quarterStep) <= volumeEpsilon:
             fractionString = "1/4"
-        } else if abs(fractionalPart - 0.5) <= volumeEpsilon {
+        case let f where abs(f - 0.5) <= volumeEpsilon:
             fractionString = "2/4"
-        } else if abs(fractionalPart - 0.75) <= volumeEpsilon {
+        case let f where abs(f - 0.75) <= volumeEpsilon:
             fractionString = "3/4"
-        } else {
+        default:
             fractionString = String(format: "%.2f", fractionalPart)
         }
 
@@ -73,15 +74,18 @@ enum VolumeIconHelper {
             let size: CGFloat = forHUD ? 32 : 15
             let symbolName = forHUD ? "speaker.slash.fill" : "speaker.slash"
             return VolumeIcon(symbolName: symbolName, size: size)
-        } else if clamped < 33 {
+        }
+
+        switch clamped {
+        case 0..<33:
             let size: CGFloat = forHUD ? 36 : 17
             let symbolName = forHUD ? "speaker.wave.1.fill" : "speaker.wave.1"
             return VolumeIcon(symbolName: symbolName, size: size)
-        } else if clamped < 66 {
+        case 33..<66:
             let size: CGFloat = forHUD ? 41 : 19
             let symbolName = forHUD ? "speaker.wave.2.fill" : "speaker.wave.2"
             return VolumeIcon(symbolName: symbolName, size: size)
-        } else {
+        default:
             let size: CGFloat = forHUD ? 47 : 21
             let symbolName = forHUD ? "speaker.wave.3.fill" : "speaker.wave.3"
             return VolumeIcon(symbolName: symbolName, size: size)

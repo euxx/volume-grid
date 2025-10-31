@@ -16,7 +16,7 @@ final class VolumeBlocksView: NSView {
 
     init(style: HUDStyle) {
         self.style = style
-        super.init(frame: NSRect(x: 0, y: 0, width: 0, height: 0))
+        super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         layer = CALayer()
@@ -26,11 +26,11 @@ final class VolumeBlocksView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
-        nil
+        fatalError("init(coder:) has not been implemented")
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: totalWidth, height: blockHeight)
+        .init(width: totalWidth, height: blockHeight)
     }
 
     private func createBlockLayers() {
@@ -38,14 +38,14 @@ final class VolumeBlocksView: NSView {
         fillLayers.removeAll()
 
         let containerLayer = CALayer()
-        containerLayer.frame = CGRect(
+        containerLayer.frame = .init(
             x: 0, y: 0, width: totalWidth, height: blockHeight)
         containerLayer.backgroundColor = NSColor.clear.cgColor
         layer?.addSublayer(containerLayer)
 
         for index in 0..<blockCount {
             let blockLayer = CALayer()
-            blockLayer.frame = CGRect(
+            blockLayer.frame = .init(
                 x: CGFloat(index) * (blockWidth + blockSpacing),
                 y: 0,
                 width: blockWidth,
@@ -57,7 +57,7 @@ final class VolumeBlocksView: NSView {
             let fillLayer = CALayer()
             fillLayer.cornerRadius = cornerRadius
             fillLayer.backgroundColor = style.blockFillColor.cgColor
-            fillLayer.frame = CGRect(x: 0, y: 0, width: 0, height: blockHeight)
+            fillLayer.frame = .init(x: 0, y: 0, width: 0, height: blockHeight)
 
             blockLayer.addSublayer(fillLayer)
             containerLayer.addSublayer(blockLayer)
@@ -68,12 +68,8 @@ final class VolumeBlocksView: NSView {
 
     func update(style: HUDStyle, fillFraction: CGFloat) {
         self.style = style
-        for blockLayer in blockLayers {
-            blockLayer.backgroundColor = style.blockEmptyColor.cgColor
-        }
-        for fillLayer in fillLayers {
-            fillLayer.backgroundColor = style.blockFillColor.cgColor
-        }
+        blockLayers.forEach { $0.backgroundColor = style.blockEmptyColor.cgColor }
+        fillLayers.forEach { $0.backgroundColor = style.blockFillColor.cgColor }
 
         let clampedFraction = max(0, min(1, fillFraction))
         let totalBlocks = clampedFraction * CGFloat(blockCount)
@@ -84,10 +80,10 @@ final class VolumeBlocksView: NSView {
             blockFill = (blockFill * 4).rounded() / 4
             if blockFill <= 0 {
                 fillLayer.isHidden = true
-                fillLayer.frame = CGRect(x: 0, y: 0, width: 0, height: blockHeight)
+                fillLayer.frame = .init(x: 0, y: 0, width: 0, height: blockHeight)
             } else {
                 fillLayer.isHidden = false
-                fillLayer.frame = CGRect(
+                fillLayer.frame = .init(
                     x: 0,
                     y: 0,
                     width: blockWidth * blockFill,

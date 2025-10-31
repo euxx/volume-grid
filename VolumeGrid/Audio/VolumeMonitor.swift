@@ -181,11 +181,11 @@ class VolumeMonitor: ObservableObject {
         ThreadSafeProperty<AudioObjectPropertyListenerBlock?> =
             ThreadSafeProperty(nil)
 
-    private nonisolated func makePropertyAddress(
+    nonisolated private func makePropertyAddress(
         _ selector: AudioObjectPropertySelector,
         element: AudioObjectPropertyElement = kAudioObjectPropertyElementMain
     ) -> AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(
+        .init(
             mSelector: selector,
             mScope: kAudioDevicePropertyScopeOutput,
             mElement: element
@@ -553,8 +553,6 @@ class VolumeMonitor: ObservableObject {
     }
 
     private nonisolated func nonisolatedStopListening() {
-        // Must be called from main thread
-        // SystemEventMonitor.stop() requires main thread
         assert(Thread.isMainThread, "nonisolatedStopListening must be called from main thread")
 
         MainActor.assumeIsolated {

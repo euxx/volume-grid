@@ -24,15 +24,18 @@ final class SystemEventMonitor {
     }
 
     func stop() {
+        defer {
+            globalMonitor = nil
+            localMonitor = nil
+            lastEventData = nil
+        }
+
         if let monitor = globalMonitor {
             NSEvent.removeMonitor(monitor)
         }
         if let monitor = localMonitor {
             NSEvent.removeMonitor(monitor)
         }
-        globalMonitor = nil
-        localMonitor = nil
-        lastEventData = nil
     }
 
     private func process(event: NSEvent, handler: @escaping @MainActor () -> Void) {

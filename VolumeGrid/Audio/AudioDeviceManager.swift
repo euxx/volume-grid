@@ -32,7 +32,7 @@ final class AudioDeviceManager: Sendable {
         scope: AudioObjectPropertyScope = kAudioDevicePropertyScopeOutput,
         element: AudioObjectPropertyElement = kAudioObjectPropertyElementMain
     ) -> AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: element)
+        .init(mSelector: selector, mScope: scope, mElement: element)
     }
 
     nonisolated private func detectElements(
@@ -90,11 +90,11 @@ final class AudioDeviceManager: Sendable {
     }
 
     nonisolated func supportsVolumeControl(_ deviceID: AudioDeviceID) -> Bool {
-        return !detectVolumeElements(for: deviceID).isEmpty
+        !detectVolumeElements(for: deviceID).isEmpty
     }
 
     nonisolated func supportsMute(_ deviceID: AudioDeviceID) -> Bool {
-        return !detectMuteElements(for: deviceID).isEmpty
+        !detectMuteElements(for: deviceID).isEmpty
     }
 
     nonisolated func getCurrentVolume(

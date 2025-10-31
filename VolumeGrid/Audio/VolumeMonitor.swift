@@ -367,7 +367,7 @@ class VolumeMonitor: ObservableObject {
         }
 
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+            guard let self else { return }
             self.state.updateLastVolumeScalar(currentScalar)
             self.volumePercentage = percentage
 
@@ -440,21 +440,21 @@ class VolumeMonitor: ObservableObject {
 
     private func showHUDForCurrentVolume() {
         _ = refreshMuteState()
+        let scalar: CGFloat
+        let isUnsupported: Bool
+
         if let volume = getCurrentVolume() {
             let clamped = volume.clamped(to: 0...1)
-            let scalar = CGFloat(clamped)
+            scalar = CGFloat(clamped)
             state.updateLastVolumeScalar(scalar)
-            if state.deviceMuted() {
-                volumePercentage = 0
-            } else {
-                volumePercentage = Int(round(clamped * 100))
-            }
-            showVolumeHUD(volumeScalar: scalar, isUnsupported: false)
-        } else if let lastScalar = state.lastVolumeScalarSnapshot() {
-            showVolumeHUD(volumeScalar: lastScalar, isUnsupported: true)
+            volumePercentage = state.deviceMuted() ? 0 : Int(round(clamped * 100))
+            isUnsupported = false
         } else {
-            showVolumeHUD(volumeScalar: 0, isUnsupported: true)
+            scalar = state.lastVolumeScalarSnapshot() ?? 0
+            isUnsupported = true
         }
+
+        showVolumeHUD(volumeScalar: scalar, isUnsupported: isUnsupported)
     }
 
     // MARK: - Listener Management

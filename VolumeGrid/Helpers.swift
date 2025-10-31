@@ -2,6 +2,10 @@ import AppKit
 import CoreGraphics
 import Foundation
 
+// MARK: - Constants
+
+let volumeEpsilon: CGFloat = 0.001
+
 // MARK: - Numeric Extensions
 
 extension Comparable {
@@ -15,7 +19,6 @@ extension Comparable {
 enum VolumeFormatter {
     private static let blocksCount: CGFloat = 16.0
     private static let quarterStep: CGFloat = 0.25
-    private static let epsilon: CGFloat = 0.001
 
     static func formattedVolumeString(for percentage: Int) -> String {
         let clamped = max(0, min(percentage, 100))
@@ -32,20 +35,20 @@ enum VolumeFormatter {
         let integerPart = Int(value)
         let fractionalPart = value - CGFloat(integerPart)
 
-        if fractionalPart < epsilon {
+        if fractionalPart < volumeEpsilon {
             return "\(integerPart)"
         }
-        if fractionalPart > 1.0 - epsilon {
+        if fractionalPart > 1.0 - volumeEpsilon {
             return "\(integerPart + 1)"
         }
 
         let fractionString: String
         switch fractionalPart {
-        case (quarterStep - epsilon)...(quarterStep + epsilon):
+        case (quarterStep - volumeEpsilon)...(quarterStep + volumeEpsilon):
             fractionString = "1/4"
-        case (0.5 - epsilon)...(0.5 + epsilon):
+        case (0.5 - volumeEpsilon)...(0.5 + volumeEpsilon):
             fractionString = "2/4"
-        case (0.75 - epsilon)...(0.75 + epsilon):
+        case (0.75 - volumeEpsilon)...(0.75 + volumeEpsilon):
             fractionString = "3/4"
         default:
             fractionString = String(format: "%.2f", fractionalPart)

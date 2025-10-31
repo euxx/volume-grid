@@ -12,12 +12,10 @@ struct HUDStyle {
     let blockEmptyColor: NSColor
 }
 
-/// Stores references to HUD window components that need dynamic updates
 final class HUDWindowContext {
     let screenID: CGDirectDisplayID
     let window: NSWindow
 
-    // Store only components that need runtime updates
     let containerView: NSView
     let contentStack: NSStackView
     let iconContainer: NSView
@@ -27,7 +25,6 @@ final class HUDWindowContext {
     let volumeLabel: NSTextField
     let blocksView: VolumeBlocksView
 
-    // Store constraint references for efficient updates
     let iconWidthConstraint: NSLayoutConstraint
     let iconHeightConstraint: NSLayoutConstraint
     let volumeLabelWidthConstraint: NSLayoutConstraint
@@ -66,16 +63,21 @@ final class HUDWindowContext {
     }
 }
 
-// Manages HUD window display and animation
 class HUDManager {
-    private var hudWindows: [CGDirectDisplayID: HUDWindowContext] = [:]
-    private var hideHUDWorkItem: DispatchWorkItem?
-    private var screenChangeCancellable: AnyCancellable?
-
+    // MARK: - Constants
     private let hudWidth: CGFloat = 320
     private let hudHeight: CGFloat = 160
     private let hudAlpha: CGFloat = 0.97
     private let hudDisplayDuration: TimeInterval = 2.0
+    private let hudCornerRadius: CGFloat = 12
+    private let marginX: CGFloat = 24
+    private let minVerticalPadding: CGFloat = 14
+    private let animationDuration: TimeInterval = 0.2
+
+    // MARK: - Properties
+    private var hudWindows: [CGDirectDisplayID: HUDWindowContext] = [:]
+    private var hideHUDWorkItem: DispatchWorkItem?
+    private var screenChangeCancellable: AnyCancellable?
 
     init() {
         syncHUDWindowsWithScreens()
@@ -121,7 +123,7 @@ class HUDManager {
         containerView.wantsLayer = true
         let style = hudStyle(for: window.effectiveAppearance)
         containerView.layer?.backgroundColor = style.backgroundColor.cgColor
-        containerView.layer?.cornerRadius = 12
+        containerView.layer?.cornerRadius = hudCornerRadius
         containerView.layer?.masksToBounds = true
         containerView.layer?.shadowColor = style.shadowColor.cgColor
         containerView.layer?.shadowOpacity = 1.0
@@ -136,8 +138,6 @@ class HUDManager {
         contentStack.spacing = 0
         containerView.addSubview(contentStack)
 
-        let marginX: CGFloat = 24
-        let minVerticalPadding: CGFloat = 14
         NSLayoutConstraint.activate([
             contentStack.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
             contentStack.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
@@ -379,7 +379,6 @@ class HUDManager {
             }
             context.iconView.contentTintColor = style.iconTintColor
 
-            // Update icon size via stored constraints
             context.iconWidthConstraint.constant = icon.size
             context.iconHeightConstraint.constant = icon.size
 
@@ -407,7 +406,7 @@ class HUDManager {
                 hudWindow.orderFrontRegardless()
                 NSAnimationContext.runAnimationGroup(
                     { context in
-                        context.duration = 0.2
+                        context.duration = self.animationDuration
                         hudWindow.animator().alphaValue = self.hudAlpha
                     }, completionHandler: nil)
             } else {
@@ -423,7 +422,7 @@ class HUDManager {
                 let hudWindow = context.window
                 NSAnimationContext.runAnimationGroup(
                     { context in
-                        context.duration = 0.2
+                        context.duration = self.animationDuration
                         hudWindow.animator().alphaValue = 0
                     },
                     completionHandler: {

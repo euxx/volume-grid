@@ -290,9 +290,9 @@ final class StatusBarVolumeView: NSView {
     private let iconView = NSImageView()
     private let progressBackgroundView = NSView()
     private let progressView = NSView()
-    private var progressWidthConstraint: NSLayoutConstraint?
-    private var iconWidthConstraint: NSLayoutConstraint?
-    private var iconHeightConstraint: NSLayoutConstraint?
+    private var progressWidthConstraint: NSLayoutConstraint!
+    private var iconWidthConstraint: NSLayoutConstraint!
+    private var iconHeightConstraint: NSLayoutConstraint!
 
     private let progressWidth: CGFloat = 20.0
 
@@ -308,8 +308,6 @@ final class StatusBarVolumeView: NSView {
     }
 
     private func setupSubviews() {
-        wantsLayer = false
-
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.imageScaling = .scaleProportionallyUpOrDown
         iconView.contentTintColor = NSColor.controlTextColor
@@ -330,12 +328,8 @@ final class StatusBarVolumeView: NSView {
         addSubview(progressView)
 
         progressWidthConstraint = progressView.widthAnchor.constraint(equalToConstant: 0)
-        progressWidthConstraint?.isActive = true
-
         iconWidthConstraint = iconView.widthAnchor.constraint(equalToConstant: 20)
         iconHeightConstraint = iconView.heightAnchor.constraint(equalToConstant: 20)
-        iconWidthConstraint?.isActive = true
-        iconHeightConstraint?.isActive = true
 
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: 24),
@@ -343,6 +337,8 @@ final class StatusBarVolumeView: NSView {
 
             iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconWidthConstraint,
+            iconHeightConstraint,
 
             progressBackgroundView.centerXAnchor.constraint(equalTo: centerXAnchor),
             progressBackgroundView.widthAnchor.constraint(equalToConstant: progressWidth),
@@ -352,18 +348,19 @@ final class StatusBarVolumeView: NSView {
             progressView.leadingAnchor.constraint(equalTo: progressBackgroundView.leadingAnchor),
             progressView.bottomAnchor.constraint(equalTo: progressBackgroundView.bottomAnchor),
             progressView.topAnchor.constraint(equalTo: progressBackgroundView.topAnchor),
+            progressWidthConstraint,
         ])
     }
 
     func update(percentage: Int) {
-        let clamped = max(0, min(percentage, 100))
+        let clamped = percentage.clamped(to: 0...100)
         let icon = VolumeIconHelper.icon(for: clamped)
 
         iconView.image = NSImage(
             systemSymbolName: icon.symbolName, accessibilityDescription: "Volume")
-        iconWidthConstraint?.constant = icon.size
-        iconHeightConstraint?.constant = icon.size
-        progressWidthConstraint?.constant = CGFloat(clamped) / 100.0 * progressWidth
+        iconWidthConstraint.constant = icon.size
+        iconHeightConstraint.constant = icon.size
+        progressWidthConstraint.constant = CGFloat(clamped) / 100.0 * progressWidth
     }
 }
 
@@ -440,7 +437,7 @@ final class VolumeMenuItemView: NSView {
     }
 
     func update(percentage: Int, formattedVolume: String, deviceName: String) {
-        let clamped = max(0, min(percentage, 100))
+        let clamped = percentage.clamped(to: 0...100)
         let icon = VolumeIconHelper.icon(for: clamped)
 
         let config = NSImage.SymbolConfiguration(pointSize: icon.size, weight: .regular)

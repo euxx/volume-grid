@@ -93,7 +93,7 @@ class HUDManager {
         -> HUDWindowContext
     {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight),
+            contentRect: .init(x: 0, y: 0, width: hudWidth, height: hudHeight),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -109,7 +109,7 @@ class HUDManager {
         window.ignoresMouseEvents = true
 
         let containerView = NSView(
-            frame: NSRect(x: 0, y: 0, width: hudWidth, height: hudHeight))
+            frame: .init(x: 0, y: 0, width: hudWidth, height: hudHeight))
         containerView.wantsLayer = true
         let style = hudStyle(for: window.effectiveAppearance)
         containerView.layer?.backgroundColor = style.backgroundColor.cgColor
@@ -117,7 +117,7 @@ class HUDManager {
         containerView.layer?.masksToBounds = true
         containerView.layer?.shadowColor = style.shadowColor.cgColor
         containerView.layer?.shadowOpacity = 1.0
-        containerView.layer?.shadowOffset = CGSize(width: 0, height: 2)
+        containerView.layer?.shadowOffset = .init(width: 0, height: 2)
         containerView.layer?.shadowRadius = 8
         window.contentView = containerView
 
@@ -225,8 +225,8 @@ class HUDManager {
 
         let screenFrame = screen.frame
         let windowOrigin = CGPoint(
-            x: screenFrame.origin.x + (screenFrame.width - hudWidth) / 2,
-            y: screenFrame.origin.y + (screenFrame.height - hudHeight) / 2
+            x: screenFrame.midX - hudWidth / 2,
+            y: screenFrame.midY - hudHeight / 2
         )
         window.setFrameOrigin(windowOrigin)
         window.alphaValue = hudAlpha
@@ -347,15 +347,15 @@ class HUDManager {
 
             let screenFrame = screen.frame
             let newWindowFrame = NSRect(
-                x: screenFrame.origin.x + (screenFrame.width - dynamicHudWidth) / 2,
-                y: screenFrame.origin.y + (screenFrame.height - hudHeight) / 2,
+                x: screenFrame.midX - dynamicHudWidth / 2,
+                y: screenFrame.midY - hudHeight / 2,
                 width: dynamicHudWidth,
                 height: hudHeight
             )
             hudWindow.setFrame(newWindowFrame, display: true)
 
             let containerView = context.containerView
-            containerView.frame = NSRect(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
+            containerView.frame = .init(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
             containerView.layer?.backgroundColor = style.backgroundColor.cgColor
             containerView.layer?.shadowColor = style.shadowColor.cgColor
             containerView.layer?.shadowOpacity = 1.0
@@ -376,8 +376,8 @@ class HUDManager {
             {
                 context.views.iconView.image = fallbackImage
             } else {
-                let imageSize = NSSize(width: icon.size, height: icon.size)
-                context.views.iconView.image = NSImage(size: imageSize)
+                context.views.iconView.image = NSImage(
+                    size: .init(width: icon.size, height: icon.size))
             }
             context.views.iconView.contentTintColor = style.iconTintColor
 

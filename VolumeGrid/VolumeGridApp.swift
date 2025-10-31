@@ -12,7 +12,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
 
-        // Subscribe to HUD events directly
         hudSubscription = volumeMonitor.hudEvents
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in

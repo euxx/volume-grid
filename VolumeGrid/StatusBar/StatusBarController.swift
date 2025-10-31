@@ -51,9 +51,11 @@ final class StatusBarController {
         let initialVolume = volumeMonitor.volumePercentage
         let initialDevice = volumeMonitor.currentDevice?.name ?? "Unknown Device"
         isVolumeControlAvailable = volumeMonitor.isCurrentDeviceVolumeSupported
-        volumeChangeHandler = { [weak self] ratio in
-            guard let monitor = self?.volumeMonitor else { return }
-            monitor.setVolume(scalar: Float32(ratio))
+        volumeChangeHandler = { [weak volumeMonitor] ratio in
+            guard let monitor = volumeMonitor else { return }
+            Task { @MainActor in
+                monitor.setVolume(scalar: Float32(ratio))
+            }
         }
         let formattedVolume = formattedVolumeText(for: initialVolume)
 
@@ -89,30 +91,32 @@ final class StatusBarController {
     }
 
     private func bindVolumeUpdates() {
-        volumeMonitor.$volumePercentage
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] volume in
-                self?.latestVolume = volume
-                self?.statusBarVolumeView.update(percentage: volume)
-                self?.refreshVolumeMenu()
-            }
-            .store(in: &subscriptions)
+        Task { @MainActor in
+            volumeMonitor.$volumePercentage
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] volume in
+                    self?.latestVolume = volume
+                    self?.statusBarVolumeView.update(percentage: volume)
+                    self?.refreshVolumeMenu()
+                }
+                .store(in: &subscriptions)
 
-        volumeMonitor.$currentDevice
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] device in
-                self?.latestDeviceName = device?.name ?? "Unknown Device"
-                self?.refreshVolumeMenu()
-            }
-            .store(in: &subscriptions)
+            volumeMonitor.$currentDevice
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] device in
+                    self?.latestDeviceName = device?.name ?? "Unknown Device"
+                    self?.refreshVolumeMenu()
+                }
+                .store(in: &subscriptions)
 
-        volumeMonitor.$isCurrentDeviceVolumeSupported
-            .removeDuplicates()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] isSupported in
-                self?.updateVolumeInteraction(isSupported: isSupported)
-            }
-            .store(in: &subscriptions)
+            volumeMonitor.$isCurrentDeviceVolumeSupported
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] isSupported in
+                    self?.updateVolumeInteraction(isSupported: isSupported)
+                }
+                .store(in: &subscriptions)
+        }
     }
 
     // MARK: - Menu Actions
@@ -482,6 +486,8 @@ final class VolumeMenuItemView: NSView {
         let ratio = clampedX / bounds.width
 
         progressView.progress = ratio
-        handler(ratio)
+        DispatchQueue.global(qos: .userInitiated).async {
+            handler(ratio)
+        }
     }
 }

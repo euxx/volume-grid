@@ -37,14 +37,13 @@ enum VolumeFormatter {
         }
 
         let fractionString: String
-        switch fractionalPart {
-        case (quarterStep - volumeEpsilon)...(quarterStep + volumeEpsilon):
+        if abs(fractionalPart - quarterStep) <= volumeEpsilon {
             fractionString = "1/4"
-        case (0.5 - volumeEpsilon)...(0.5 + volumeEpsilon):
+        } else if abs(fractionalPart - 0.5) <= volumeEpsilon {
             fractionString = "2/4"
-        case (0.75 - volumeEpsilon)...(0.75 + volumeEpsilon):
+        } else if abs(fractionalPart - 0.75) <= volumeEpsilon {
             fractionString = "3/4"
-        default:
+        } else {
             fractionString = String(format: "%.2f", fractionalPart)
         }
 

@@ -4,7 +4,7 @@ import Cocoa
 final class SystemEventMonitor {
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    private var lastSignature: (timestamp: TimeInterval, data: Int)?
+    private var lastEventData: Int?
 
     init() {}
 
@@ -32,32 +32,20 @@ final class SystemEventMonitor {
         }
         globalMonitor = nil
         localMonitor = nil
-        lastSignature = nil
+        lastEventData = nil
     }
 
     private func process(event: NSEvent, handler: @escaping @MainActor () -> Void) {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { [weak self] in
-                self?.process(event: event, handler: handler)
-            }
-            return
-        }
-
         guard event.subtype.rawValue == 8 else { return }
         let keyCode = (event.data1 & 0xFFFF_0000) >> 16
         let keyFlags = event.data1 & 0x0000_FFFF
         let keyState = (keyFlags & 0xFF00) >> 8
-        let isKeyDown = keyState == 0xA
-        guard isKeyDown else { return }
+        guard keyState == 0xA else { return }
 
-        let signature = (timestamp: event.timestamp, data: event.data1)
-        if let last = lastSignature,
-            abs(last.timestamp - signature.timestamp) < 0.0001,
-            last.data == signature.data
-        {
+        if let last = lastEventData, last == event.data1 {
             return
         }
-        lastSignature = signature
+        lastEventData = event.data1
 
         switch keyCode & 0xFF {
         case 0, 1, 7:

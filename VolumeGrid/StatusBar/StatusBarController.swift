@@ -32,10 +32,8 @@ final class StatusBarController {
         launchAtLoginMenuItem.state = launchAtLoginController.isEnabled() ? .on : .off
 
         setupStatusBarButton()
-        Task { @MainActor in
-            self.setupMenu()
-            self.bindVolumeUpdates()
-        }
+        setupMenu()
+        bindVolumeUpdates()
     }
 
     // MARK: - Setup
@@ -55,9 +53,7 @@ final class StatusBarController {
         let initialDevice = volumeMonitor.currentDevice?.name ?? "Unknown Device"
         isVolumeControlAvailable = volumeMonitor.isCurrentDeviceVolumeSupported
         volumeChangeHandler = { [weak volumeMonitor] ratio in
-            Task { @MainActor in
-                volumeMonitor?.setVolume(scalar: Float32(ratio))
-            }
+            volumeMonitor?.setVolume(scalar: Float32(ratio))
         }
         let formattedVolume = formattedVolumeText(for: initialVolume)
 
@@ -93,41 +89,39 @@ final class StatusBarController {
     }
 
     private func bindVolumeUpdates() {
-        Task { @MainActor in
-            let volumeUpdates = volumeMonitor.$volumePercentage
-                .map { [weak self] volume -> (Int, String) in
-                    guard let self = self else { return (0, "0") }
-                    let formatted = self.formattedVolumeText(for: volume)
-                    return (volume, formatted)
-                }
-
-            let deviceUpdates = volumeMonitor.$currentDevice
-                .map { device -> String in
-                    device?.name ?? "Unknown Device"
-                }
-
-            Publishers.CombineLatest3(
-                volumeUpdates,
-                deviceUpdates,
-                volumeMonitor.$isCurrentDeviceVolumeSupported
-            )
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] (volumeData, deviceName, isSupported) in
-                guard let self = self else { return }
-                let (volume, formatted) = volumeData
-                self.latestVolume = volume
-                self.latestDeviceName = deviceName
-                self.statusBarVolumeView.update(percentage: volume)
-                self.updateVolumeInteraction(isSupported: isSupported)
-                self.volumeMenuView.update(
-                    percentage: volume,
-                    formattedVolume: formatted,
-                    deviceName: deviceName
-                )
-                self.menu.itemChanged(self.volumeMenuItem)
+        let volumeUpdates = volumeMonitor.$volumePercentage
+            .map { [weak self] volume -> (Int, String) in
+                guard let self = self else { return (0, "0") }
+                let formatted = self.formattedVolumeText(for: volume)
+                return (volume, formatted)
             }
-            .store(in: &subscriptions)
+
+        let deviceUpdates = volumeMonitor.$currentDevice
+            .map { device -> String in
+                device?.name ?? "Unknown Device"
+            }
+
+        Publishers.CombineLatest3(
+            volumeUpdates,
+            deviceUpdates,
+            volumeMonitor.$isCurrentDeviceVolumeSupported
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] (volumeData, deviceName, isSupported) in
+            guard let self = self else { return }
+            let (volume, formatted) = volumeData
+            self.latestVolume = volume
+            self.latestDeviceName = deviceName
+            self.statusBarVolumeView.update(percentage: volume)
+            self.updateVolumeInteraction(isSupported: isSupported)
+            self.volumeMenuView.update(
+                percentage: volume,
+                formattedVolume: formatted,
+                deviceName: deviceName
+            )
+            self.menu.itemChanged(self.volumeMenuItem)
         }
+        .store(in: &subscriptions)
     }
 
     @objc private func quitApp() {

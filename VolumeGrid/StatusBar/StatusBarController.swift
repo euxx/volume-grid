@@ -170,14 +170,15 @@ final class StatusBarController {
             guard let self else { return }
             defer { self.launchAtLoginMenuItem.isEnabled = true }
 
+            let newState: NSControl.StateValue
             switch result {
             case .success(let enabled):
-                self.launchAtLoginMenuItem.state = enabled ? .on : .off
+                newState = enabled ? .on : .off
             case .failure(let error):
-                self.launchAtLoginMenuItem.state =
-                    self.launchAtLoginController.isEnabled() ? .on : .off
+                newState = self.launchAtLoginController.isEnabled() ? .on : .off
                 self.showError(error.localizedDescription)
             }
+            self.launchAtLoginMenuItem.state = newState
         }
     }
 

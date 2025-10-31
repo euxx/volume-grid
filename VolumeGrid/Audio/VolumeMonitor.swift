@@ -233,27 +233,33 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
+    private func ensureMainThread<T>(_ work: @escaping () -> T) -> T {
+        if Thread.isMainThread {
+            return work()
+        } else {
+            return DispatchQueue.main.sync { work() }
+        }
+    }
+
     @discardableResult
     private func refreshMuteState(for deviceID: AudioDeviceID? = nil) -> Bool? {
-        if !Thread.isMainThread {
-            var result: Bool?
-            DispatchQueue.main.sync {
-                result = self.refreshMuteState(for: deviceID)
-            }
-            return result
+        ensureMainThread {
+            self.refreshMuteStateOnMainThread(for: deviceID)
         }
+    }
 
-        let resolvedDeviceID: AudioDeviceID
-        if let deviceID {
-            resolvedDeviceID = deviceID
-        } else {
-            let currentID = state.defaultOutputDeviceIDValue()
-            let effectiveID = currentID != 0 ? currentID : updateDefaultOutputDevice()
-            guard effectiveID != 0 else {
-                state.setDeviceMuted(false)
-                return nil
-            }
-            resolvedDeviceID = effectiveID
+    private func refreshMuteStateOnMainThread(for deviceID: AudioDeviceID? = nil) -> Bool? {
+
+        let resolvedDeviceID =
+            deviceID
+            ?? {
+                let currentID = state.defaultOutputDeviceIDValue()
+                return currentID != 0 ? currentID : updateDefaultOutputDevice()
+            }()
+
+        guard resolvedDeviceID != 0 else {
+            state.setDeviceMuted(false)
+            return nil
         }
 
         let elements = deviceManager.detectMuteElements(for: resolvedDeviceID)

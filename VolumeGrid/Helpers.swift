@@ -31,17 +31,15 @@ enum VolumeFormatter {
             return "\(integerPart + 1)"
         }
 
-        let fractionString: String
-        switch fractionalPart {
-        case (quarterStep - epsilon)...(quarterStep + epsilon):
-            fractionString = "1/4"
-        case (0.5 - epsilon)...(0.5 + epsilon):
-            fractionString = "2/4"
-        case (0.75 - epsilon)...(0.75 + epsilon):
-            fractionString = "3/4"
-        default:
-            fractionString = String(format: "%.2f", fractionalPart)
-        }
+        let fractionMap: [(range: ClosedRange<CGFloat>, string: String)] = [
+            ((quarterStep - epsilon)...(quarterStep + epsilon), "1/4"),
+            ((0.5 - epsilon)...(0.5 + epsilon), "2/4"),
+            ((0.75 - epsilon)...(0.75 + epsilon), "3/4"),
+        ]
+
+        let fractionString =
+            fractionMap.first { $0.range.contains(fractionalPart) }?.string
+            ?? String(format: "%.2f", fractionalPart)
 
         if integerPart == 0 {
             return fractionString

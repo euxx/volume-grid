@@ -1,7 +1,5 @@
 import Cocoa
 
-/// Dedicated handler for listening to system-defined events (e.g. global volume keys).
-/// All mutable state is MainActor-isolated for thread safety.
 @MainActor
 final class SystemEventMonitor {
     private var globalMonitor: Any?

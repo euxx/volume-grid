@@ -56,7 +56,6 @@ final class HUDWindowContext {
 }
 
 class HUDManager {
-    // MARK: - Constants
     private let hudWidth: CGFloat = 320
     private let hudHeight: CGFloat = 160
     private let hudAlpha: CGFloat = 0.97
@@ -66,7 +65,6 @@ class HUDManager {
     private let minVerticalPadding: CGFloat = 14
     private let animationDuration: TimeInterval = 0.2
 
-    // MARK: - Properties
     private var hudWindows: [CGDirectDisplayID: HUDWindowContext] = [:]
     private var hideHUDWorkItem: DispatchWorkItem?
     private var screenChangeCancellable: AnyCancellable?

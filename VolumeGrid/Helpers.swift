@@ -2,19 +2,13 @@ import AppKit
 import CoreGraphics
 import Foundation
 
-// MARK: - Constants
-
 let volumeEpsilon: CGFloat = 0.001
-
-// MARK: - Numeric Extensions
 
 extension Comparable {
     func clamped(to range: ClosedRange<Self>) -> Self {
         return min(max(self, range.lowerBound), range.upperBound)
     }
 }
-
-// MARK: - Volume Formatting
 
 enum VolumeFormatter {
     private static let blocksCount: CGFloat = 16.0

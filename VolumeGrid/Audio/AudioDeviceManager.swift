@@ -1,14 +1,11 @@
 import AudioToolbox
 import Foundation
 
-/// Audio device model.
 struct AudioDevice: Identifiable, Hashable, Sendable {
     let id: AudioDeviceID
     let name: String
 }
 
-/// Manages audio device detection and property queries.
-/// All methods are nonisolated and thread-safe as they only interact with CoreAudio APIs.
 final class AudioDeviceManager: Sendable {
     private nonisolated let defaultOutputDeviceAddress = AudioObjectPropertyAddress(
         mSelector: kAudioHardwarePropertyDefaultOutputDevice,
@@ -30,17 +27,12 @@ final class AudioDeviceManager: Sendable {
 
     nonisolated init() {}
 
-    /// Creates an AudioObjectPropertyAddress with common defaults
     nonisolated private func makePropertyAddress(
         selector: AudioObjectPropertySelector,
         scope: AudioObjectPropertyScope = kAudioDevicePropertyScopeOutput,
         element: AudioObjectPropertyElement = kAudioObjectPropertyElementMain
     ) -> AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(
-            mSelector: selector,
-            mScope: scope,
-            mElement: element
-        )
+        AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: element)
     }
 
     nonisolated private func detectElements(

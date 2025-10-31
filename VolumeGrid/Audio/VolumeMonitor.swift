@@ -172,8 +172,6 @@ class VolumeMonitor: ObservableObject {
     @Published var currentDevice: AudioDevice?
     @Published var isCurrentDeviceVolumeSupported: Bool = false
 
-    // MARK: - Helper Methods
-
     private nonisolated func resolveDeviceID() -> AudioDeviceID {
         let currentID = state.defaultOutputDeviceIDValue()
         return currentID != 0 ? currentID : updateDefaultOutputDevice()
@@ -215,6 +213,17 @@ class VolumeMonitor: ObservableObject {
         ThreadSafeProperty<AudioObjectPropertyListenerBlock?> =
             ThreadSafeProperty(nil)
 
+    private nonisolated func makePropertyAddress(
+        _ selector: AudioObjectPropertySelector,
+        element: AudioObjectPropertyElement = kAudioObjectPropertyElementMain
+    ) -> AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: element
+        )
+    }
+
     init() {
         let deviceID = updateDefaultOutputDevice()
         isCurrentDeviceVolumeSupported =
@@ -234,8 +243,6 @@ class VolumeMonitor: ObservableObject {
         volumeChangeDebouncer?.cancel()
         if Thread.isMainThread {
             nonisolatedStopListening()
-        } else {
-            assertionFailure("VolumeMonitor should be deallocated on main thread")
         }
     }
 
@@ -243,10 +250,8 @@ class VolumeMonitor: ObservableObject {
         hudEventSubject.eraseToAnyPublisher()
     }
 
-    // MARK: - Device Management
-
     @discardableResult
-    nonisolated private func updateDefaultOutputDevice() -> AudioDeviceID {
+    private nonisolated func updateDefaultOutputDevice() -> AudioDeviceID {
         let deviceID = deviceManager.getDefaultOutputDevice()
         state.updateDefaultOutputDeviceID(deviceID)
         return deviceID
@@ -254,17 +259,16 @@ class VolumeMonitor: ObservableObject {
 
     func getAudioDevices() {
         let devices = deviceManager.getAllDevices()
+        let resolvedID = resolveDeviceID()
 
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
             self.audioDevices = devices
-            let resolvedID = self.resolveDeviceID()
             if resolvedID != 0, let currentDevice = devices.first(where: { $0.id == resolvedID }) {
                 self.currentDevice = currentDevice
             }
         }
     }
-
-    // MARK: - Volume Control
 
     nonisolated func getCurrentVolume() -> Float32? {
         let deviceID = resolveDeviceID()
@@ -345,8 +349,6 @@ class VolumeMonitor: ObservableObject {
         return nil
     }
 
-    // MARK: - Event Handlers
-
     private func volumeChanged(address _: AudioObjectPropertyAddress) {
         guard let volume = getCurrentVolume() else { return }
 
@@ -377,8 +379,9 @@ class VolumeMonitor: ObservableObject {
 
             if shouldShowHUD {
                 self.volumeChangeDebouncer?.cancel()
+                let capturedScalar = currentScalar
                 let debouncer = DispatchWorkItem { [weak self] in
-                    self?.showVolumeHUD(volumeScalar: currentScalar)
+                    self?.showVolumeHUD(volumeScalar: capturedScalar)
                 }
                 self.volumeChangeDebouncer = debouncer
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: debouncer)
@@ -432,8 +435,6 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
-    // MARK: - HUD Display
-
     private func showVolumeHUD(volumeScalar: CGFloat, isUnsupported: Bool = false) {
         emitHUDEvent(volumeScalar: volumeScalar, isUnsupported: isUnsupported)
     }
@@ -456,8 +457,6 @@ class VolumeMonitor: ObservableObject {
 
         showVolumeHUD(volumeScalar: scalar, isUnsupported: isUnsupported)
     }
-
-    // MARK: - Listener Management
 
     func startListening() {
         let deviceID = resolveDeviceID()
@@ -502,11 +501,8 @@ class VolumeMonitor: ObservableObject {
             var listenerRegistered = false
             let volumeElementsSnapshot = state.volumeElementsSnapshot()
             for element in volumeElementsSnapshot {
-                var volumeAddress = AudioObjectPropertyAddress(
-                    mSelector: kAudioDevicePropertyVolumeScalar,
-                    mScope: kAudioDevicePropertyScopeOutput,
-                    mElement: element
-                )
+                var volumeAddress = makePropertyAddress(
+                    kAudioDevicePropertyVolumeScalar, element: element)
 
                 let volumeStatus = AudioObjectAddPropertyListenerBlock(
                     deviceID, &volumeAddress, audioQueue, volumeListener)
@@ -530,11 +526,8 @@ class VolumeMonitor: ObservableObject {
                 if let muteListener = muteListener {
                     var validMuteElements: [AudioObjectPropertyElement] = []
                     for element in muteElementsSnapshot {
-                        var muteAddress = AudioObjectPropertyAddress(
-                            mSelector: kAudioDevicePropertyMute,
-                            mScope: kAudioDevicePropertyScopeOutput,
-                            mElement: element
-                        )
+                        var muteAddress = makePropertyAddress(
+                            kAudioDevicePropertyMute, element: element)
 
                         if AudioObjectHasProperty(deviceID, &muteAddress) {
                             var muted: UInt32 = 0
@@ -611,11 +604,8 @@ class VolumeMonitor: ObservableObject {
         if let volumeListener = volumeListener {
             let registeredVolumes = state.registeredVolumeElementsSnapshot()
             for element in registeredVolumes {
-                var volumeAddress = AudioObjectPropertyAddress(
-                    mSelector: kAudioDevicePropertyVolumeScalar,
-                    mScope: kAudioDevicePropertyScopeOutput,
-                    mElement: element
-                )
+                var volumeAddress = makePropertyAddress(
+                    kAudioDevicePropertyVolumeScalar, element: element)
                 if removalDeviceID != 0 {
                     AudioObjectRemovePropertyListenerBlock(
                         removalDeviceID, &volumeAddress, audioQueue, volumeListener)
@@ -626,11 +616,7 @@ class VolumeMonitor: ObservableObject {
         if let muteListener = muteListener {
             let registeredMutes = state.registeredMuteElementsSnapshot()
             for element in registeredMutes {
-                var muteAddress = AudioObjectPropertyAddress(
-                    mSelector: kAudioDevicePropertyMute,
-                    mScope: kAudioDevicePropertyScopeOutput,
-                    mElement: element
-                )
+                var muteAddress = makePropertyAddress(kAudioDevicePropertyMute, element: element)
                 if removalDeviceID != 0 {
                     AudioObjectRemovePropertyListenerBlock(
                         removalDeviceID, &muteAddress, audioQueue, muteListener)
@@ -656,8 +642,6 @@ class VolumeMonitor: ObservableObject {
         nonisolatedStopListening()
     }
 
-    // MARK: - HUD Event Broadcasting
-
     private func emitHUDEvent(volumeScalar: CGFloat, isUnsupported: Bool) {
         let event = HUDEvent(
             volumeScalar: volumeScalar,
@@ -666,34 +650,22 @@ class VolumeMonitor: ObservableObject {
             isUnsupported: isUnsupported
         )
 
-        if Thread.isMainThread {
-            hudEventSubject.send(event)
-        } else {
-            DispatchQueue.main.async { [weak self] in
-                self?.hudEventSubject.send(event)
-            }
-        }
+        hudEventSubject.send(event)
     }
 
     private func updateVolumeSupportState(_ isSupported: Bool) {
-        if Thread.isMainThread {
-            isCurrentDeviceVolumeSupported = isSupported
-            if !isSupported {
-                state.updateLastVolumeScalar(0)
-                if volumePercentage != 0 {
-                    volumePercentage = 0
-                }
-            }
-        } else {
+        guard Thread.isMainThread else {
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.isCurrentDeviceVolumeSupported = isSupported
-                if !isSupported {
-                    self.state.updateLastVolumeScalar(0)
-                    if self.volumePercentage != 0 {
-                        self.volumePercentage = 0
-                    }
-                }
+                self?.updateVolumeSupportState(isSupported)
+            }
+            return
+        }
+
+        isCurrentDeviceVolumeSupported = isSupported
+        if !isSupported {
+            state.updateLastVolumeScalar(0)
+            if volumePercentage != 0 {
+                volumePercentage = 0
             }
         }
     }

@@ -55,9 +55,8 @@ final class StatusBarController {
         let initialDevice = volumeMonitor.currentDevice?.name ?? "Unknown Device"
         isVolumeControlAvailable = volumeMonitor.isCurrentDeviceVolumeSupported
         volumeChangeHandler = { [weak volumeMonitor] ratio in
-            guard let monitor = volumeMonitor else { return }
             Task { @MainActor in
-                monitor.setVolume(scalar: Float32(ratio))
+                volumeMonitor?.setVolume(scalar: Float32(ratio))
             }
         }
         let formattedVolume = formattedVolumeText(for: initialVolume)
@@ -130,8 +129,6 @@ final class StatusBarController {
             .store(in: &subscriptions)
         }
     }
-
-    // MARK: - Menu Actions
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
@@ -223,8 +220,6 @@ final class StatusBarController {
         alert.runModal()
     }
 }
-
-// MARK: - Status Bar UI Components
 
 private final class LinearProgressView: NSView {
     var trackColor: NSColor = NSColor.controlBackgroundColor.withAlphaComponent(0.6) {

@@ -13,7 +13,6 @@ enum LaunchAtLoginError: LocalizedError {
     }
 }
 
-/// Coordinates enabling/disabling launch at login using modern SMAppService API.
 final class LaunchAtLoginController {
     private let queue = DispatchQueue(label: "com.volumegrid.launchAtLogin", qos: .userInitiated)
 

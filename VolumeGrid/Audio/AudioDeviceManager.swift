@@ -1,6 +1,12 @@
 import AudioToolbox
 import Foundation
 
+// Audio device model.
+struct AudioDevice: Identifiable, Hashable {
+    let id: AudioDeviceID
+    let name: String
+}
+
 // Manages audio device detection and property queries
 class AudioDeviceManager {
     // MARK: - Helper Methods

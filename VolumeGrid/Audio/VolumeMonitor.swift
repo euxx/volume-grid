@@ -10,6 +10,27 @@ struct HUDEvent {
     let isUnsupported: Bool
 }
 
+private final class ThreadSafeProperty<T>: @unchecked Sendable {
+    private let lock = OSAllocatedUnfairLock()
+    private nonisolated(unsafe) var value: T
+
+    nonisolated init(_ initialValue: T) {
+        self.value = initialValue
+    }
+
+    nonisolated func get() -> T {
+        lock.withLock {
+            value
+        }
+    }
+
+    nonisolated func set(_ newValue: T) {
+        lock.withLock {
+            value = newValue
+        }
+    }
+}
+
 private final class VolumeStateStore: @unchecked Sendable {
     private let lock = OSAllocatedUnfairLock()
 
@@ -166,53 +187,33 @@ class VolumeMonitor: ObservableObject {
     }()
     private var volumeChangeDebouncer: DispatchWorkItem?
 
-    private let listenerLock = NSLock()
-    private nonisolated(unsafe) var _volumeListener: AudioObjectPropertyListenerBlock?
-    private nonisolated(unsafe) var _deviceListener: AudioObjectPropertyListenerBlock?
-    private nonisolated(unsafe) var _muteListener: AudioObjectPropertyListenerBlock?
-
     nonisolated private var volumeListener: AudioObjectPropertyListenerBlock? {
-        get {
-            listenerLock.lock()
-            defer { listenerLock.unlock() }
-            return _volumeListener
-        }
-        set {
-            listenerLock.lock()
-            defer { listenerLock.unlock() }
-            _volumeListener = newValue
-        }
+        get { volumeListenerProperty.get() }
+        set { volumeListenerProperty.set(newValue) }
     }
 
     nonisolated private var deviceListener: AudioObjectPropertyListenerBlock? {
-        get {
-            listenerLock.lock()
-            defer { listenerLock.unlock() }
-            return _deviceListener
-        }
-        set {
-            listenerLock.lock()
-            defer { listenerLock.unlock() }
-            _deviceListener = newValue
-        }
+        get { deviceListenerProperty.get() }
+        set { deviceListenerProperty.set(newValue) }
     }
 
     nonisolated private var muteListener: AudioObjectPropertyListenerBlock? {
-        get {
-            listenerLock.lock()
-            defer { listenerLock.unlock() }
-            return _muteListener
-        }
-        set {
-            listenerLock.lock()
-            defer { listenerLock.unlock() }
-            _muteListener = newValue
-        }
+        get { muteListenerProperty.get() }
+        set { muteListenerProperty.set(newValue) }
     }
 
     private nonisolated let audioQueue: DispatchQueue = DispatchQueue(
         label: "com.volumegrid.audio", qos: .userInitiated
     )
+    private nonisolated let volumeListenerProperty:
+        ThreadSafeProperty<AudioObjectPropertyListenerBlock?> =
+            ThreadSafeProperty(nil)
+    private nonisolated let deviceListenerProperty:
+        ThreadSafeProperty<AudioObjectPropertyListenerBlock?> =
+            ThreadSafeProperty(nil)
+    private nonisolated let muteListenerProperty:
+        ThreadSafeProperty<AudioObjectPropertyListenerBlock?> =
+            ThreadSafeProperty(nil)
 
     init() {
         let deviceID = updateDefaultOutputDevice()
@@ -353,15 +354,14 @@ class VolumeMonitor: ObservableObject {
         let percentage = Int(round(clampedVolume * 100))
         let currentScalar = CGFloat(clampedVolume)
         let previousScalar = state.lastVolumeScalarSnapshot()
-        let epsilon: CGFloat = 0.001
 
         let shouldShowHUD: Bool
         if let previousScalar {
             let delta = abs(previousScalar - currentScalar)
             let isAtBoundary =
-                (currentScalar <= epsilon && previousScalar <= epsilon)
-                || (currentScalar >= (1 - epsilon) && previousScalar >= (1 - epsilon))
-            shouldShowHUD = delta > epsilon || isAtBoundary
+                (currentScalar <= volumeEpsilon && previousScalar <= volumeEpsilon)
+                || (currentScalar >= (1 - volumeEpsilon) && previousScalar >= (1 - volumeEpsilon))
+            shouldShowHUD = delta > volumeEpsilon || isAtBoundary
         } else {
             shouldShowHUD = true
         }
@@ -371,7 +371,7 @@ class VolumeMonitor: ObservableObject {
             self.state.updateLastVolumeScalar(currentScalar)
             self.volumePercentage = percentage
 
-            if currentScalar > epsilon, self.state.deviceMuted() {
+            if currentScalar > volumeEpsilon, self.state.deviceMuted() {
                 self.state.setDeviceMuted(false)
             }
 

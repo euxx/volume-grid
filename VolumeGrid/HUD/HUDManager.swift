@@ -12,23 +12,29 @@ struct HUDStyle {
     let blockEmptyColor: NSColor
 }
 
-final class HUDWindowContext {
-    let screenID: CGDirectDisplayID
-    let window: NSWindow
-
-    let containerView: NSView
-    let contentStack: NSStackView
-    let iconContainer: NSView
+struct HUDViewComponents {
     let iconView: NSImageView
     let textStack: NSStackView
     let deviceLabel: NSTextField
     let volumeLabel: NSTextField
     let blocksView: VolumeBlocksView
+}
 
-    let iconWidthConstraint: NSLayoutConstraint
-    let iconHeightConstraint: NSLayoutConstraint
-    let volumeLabelWidthConstraint: NSLayoutConstraint
-    let blocksWidthConstraint: NSLayoutConstraint
+struct HUDConstraints {
+    let iconWidth: NSLayoutConstraint
+    let iconHeight: NSLayoutConstraint
+    let volumeLabelWidth: NSLayoutConstraint
+    let blocksWidth: NSLayoutConstraint
+}
+
+final class HUDWindowContext {
+    let screenID: CGDirectDisplayID
+    let window: NSWindow
+    let containerView: NSView
+    let contentStack: NSStackView
+    let iconContainer: NSView
+    let views: HUDViewComponents
+    let constraints: HUDConstraints
 
     init(
         screenID: CGDirectDisplayID,
@@ -36,30 +42,16 @@ final class HUDWindowContext {
         containerView: NSView,
         contentStack: NSStackView,
         iconContainer: NSView,
-        iconView: NSImageView,
-        textStack: NSStackView,
-        deviceLabel: NSTextField,
-        volumeLabel: NSTextField,
-        blocksView: VolumeBlocksView,
-        iconWidthConstraint: NSLayoutConstraint,
-        iconHeightConstraint: NSLayoutConstraint,
-        volumeLabelWidthConstraint: NSLayoutConstraint,
-        blocksWidthConstraint: NSLayoutConstraint
+        views: HUDViewComponents,
+        constraints: HUDConstraints
     ) {
         self.screenID = screenID
         self.window = window
         self.containerView = containerView
         self.contentStack = contentStack
         self.iconContainer = iconContainer
-        self.iconView = iconView
-        self.textStack = textStack
-        self.deviceLabel = deviceLabel
-        self.volumeLabel = volumeLabel
-        self.blocksView = blocksView
-        self.iconWidthConstraint = iconWidthConstraint
-        self.iconHeightConstraint = iconHeightConstraint
-        self.volumeLabelWidthConstraint = volumeLabelWidthConstraint
-        self.blocksWidthConstraint = blocksWidthConstraint
+        self.views = views
+        self.constraints = constraints
     }
 }
 
@@ -241,21 +233,29 @@ class HUDManager {
         window.setFrameOrigin(windowOrigin)
         window.alphaValue = hudAlpha
 
+        let views = HUDViewComponents(
+            iconView: iconView,
+            textStack: textStack,
+            deviceLabel: deviceLabel,
+            volumeLabel: volumeLabel,
+            blocksView: blocksView
+        )
+
+        let constraints = HUDConstraints(
+            iconWidth: iconWidthConstraint,
+            iconHeight: iconHeightConstraint,
+            volumeLabelWidth: volumeWidthConstraint,
+            blocksWidth: blocksWidthConstraint
+        )
+
         return HUDWindowContext(
             screenID: screenID,
             window: window,
             containerView: containerView,
             contentStack: contentStack,
             iconContainer: iconContainer,
-            iconView: iconView,
-            textStack: textStack,
-            deviceLabel: deviceLabel,
-            volumeLabel: volumeLabel,
-            blocksView: blocksView,
-            iconWidthConstraint: iconWidthConstraint,
-            iconHeightConstraint: iconHeightConstraint,
-            volumeLabelWidthConstraint: volumeWidthConstraint,
-            blocksWidthConstraint: blocksWidthConstraint
+            views: views,
+            constraints: constraints
         )
     }
 
@@ -316,8 +316,7 @@ class HUDManager {
         volumeScalar: CGFloat, deviceName: String?, isMuted: Bool, isUnsupported: Bool = false
     ) {
         let clampedScalar = volumeScalar.clamped(to: 0...1)
-        let epsilon: CGFloat = 0.001
-        let isMutedForDisplay = isMuted || clampedScalar <= epsilon
+        let isMutedForDisplay = isMuted || clampedScalar <= volumeEpsilon
         let displayedScalar = isMutedForDisplay ? 0 : clampedScalar
 
         let spacingIconToDevice: CGFloat = isUnsupported ? 20 : 14
@@ -373,35 +372,38 @@ class HUDManager {
             if let speakerImage = NSImage(
                 systemSymbolName: icon.symbolName, accessibilityDescription: "Volume")
             {
-                context.iconView.image = speakerImage
+                context.views.iconView.image = speakerImage
             } else if let fallbackImage = NSImage(
                 named: NSImage.touchBarAudioOutputVolumeHighTemplateName)
             {
-                context.iconView.image = fallbackImage
+                context.views.iconView.image = fallbackImage
             } else {
-                context.iconView.image = NSImage(size: NSSize(width: icon.size, height: icon.size))
+                let imageSize = NSSize(width: icon.size, height: icon.size)
+                context.views.iconView.image = NSImage(size: imageSize)
             }
-            context.iconView.contentTintColor = style.iconTintColor
+            context.views.iconView.contentTintColor = style.iconTintColor
 
-            context.iconWidthConstraint.constant = icon.size
-            context.iconHeightConstraint.constant = icon.size
+            context.constraints.iconWidth.constant = icon.size
+            context.constraints.iconHeight.constant = icon.size
 
-            context.deviceLabel.stringValue = deviceName + "  -"
-            context.deviceLabel.textColor = style.secondaryTextColor
+            context.views.deviceLabel.stringValue = deviceName + "  -"
+            context.views.deviceLabel.textColor = style.secondaryTextColor
 
-            context.volumeLabel.stringValue = statusString
-            context.volumeLabel.textColor = style.primaryTextColor
+            context.views.volumeLabel.stringValue = statusString
+            context.views.volumeLabel.textColor = style.primaryTextColor
             let widthPadding: CGFloat = 6
-            context.volumeLabelWidthConstraint.constant = effectiveStatusTextWidth + widthPadding
-            context.textStack.spacing = gapBetweenDeviceAndCount
+            context.constraints.volumeLabelWidth.constant = effectiveStatusTextWidth + widthPadding
+            context.views.textStack.spacing = gapBetweenDeviceAndCount
 
-            context.blocksView.update(style: style, fillFraction: displayedScalar)
-            context.blocksView.isHidden = isUnsupported
-            let blocksWidth = isUnsupported ? 0 : context.blocksView.intrinsicContentSize.width
-            context.blocksWidthConstraint.constant = blocksWidth
+            context.views.blocksView.update(style: style, fillFraction: displayedScalar)
+            context.views.blocksView.isHidden = isUnsupported
+            let blocksWidth =
+                isUnsupported ? 0 : context.views.blocksView.intrinsicContentSize.width
+            context.constraints.blocksWidth.constant = blocksWidth
 
             context.contentStack.setCustomSpacing(spacingIconToDevice, after: context.iconContainer)
-            context.contentStack.setCustomSpacing(spacingDeviceToBlocks, after: context.textStack)
+            context.contentStack.setCustomSpacing(
+                spacingDeviceToBlocks, after: context.views.textStack)
 
             if !isAlreadyVisible {
                 hudWindow.alphaValue = 0

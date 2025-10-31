@@ -92,12 +92,8 @@ class HUDManager {
     }
 
     private func screenID(for screen: NSScreen) -> CGDirectDisplayID? {
-        if let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-            as? NSNumber
-        {
-            return CGDirectDisplayID(number.uint32Value)
-        }
-        return nil
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)
+            .map { CGDirectDisplayID($0.uint32Value) }
     }
 
     private func makeHUDWindow(for screen: NSScreen, screenID: CGDirectDisplayID)
@@ -286,6 +282,30 @@ class HUDManager {
         hudWindows = updated
     }
 
+    private func calculateHUDWidth(
+        deviceName: String,
+        statusString: String
+    ) -> (width: CGFloat, statusTextWidth: CGFloat) {
+        let deviceNSString = NSString(string: deviceName + "  -")
+        let font = NSFont.systemFont(ofSize: 12)
+        let deviceTextSize = deviceNSString.size(withAttributes: [.font: font])
+
+        let statusNSString = NSString(string: statusString)
+        let statusTextSize = statusNSString.size(withAttributes: [.font: font])
+        let maxVolumeSampleString = VolumeFormatter.formatVolumeCount(quarterBlocks: 15.75)
+        let maxVolumeSampleWidth = NSString(string: maxVolumeSampleString)
+            .size(withAttributes: [.font: font]).width
+        let effectiveStatusTextWidth = max(statusTextSize.width, maxVolumeSampleWidth)
+
+        let gapBetweenDeviceAndCount: CGFloat = 8
+        let combinedWidth =
+            deviceTextSize.width + gapBetweenDeviceAndCount + effectiveStatusTextWidth
+        let marginX: CGFloat = 24
+        let dynamicHudWidth = max(320, combinedWidth + 2 * marginX)
+
+        return (dynamicHudWidth, effectiveStatusTextWidth)
+    }
+
     func showHUD(
         volumeScalar: CGFloat, deviceName: String?, isMuted: Bool, isUnsupported: Bool = false
     ) {
@@ -295,26 +315,16 @@ class HUDManager {
         let displayedScalar = isMutedForDisplay ? 0 : clampedScalar
 
         let deviceName = deviceName ?? "Unknown Device"
-        let deviceNSString = NSString(string: deviceName + "  -")
-        let deviceFont = NSFont.systemFont(ofSize: 12)
-        let deviceTextSize = deviceNSString.size(withAttributes: [.font: deviceFont])
         let statusString =
             isUnsupported
             ? "Not Supported"
             : VolumeFormatter.formattedVolumeString(forScalar: displayedScalar)
-        let statusNSString = NSString(string: statusString)
-        let statusFont = NSFont.systemFont(ofSize: 12)
-        let statusTextSize = statusNSString.size(withAttributes: [.font: statusFont])
-        let maxVolumeSampleString = VolumeFormatter.formatVolumeCount(quarterBlocks: 15.75)
-        let maxVolumeSampleWidth = NSString(string: maxVolumeSampleString).size(withAttributes: [
-            .font: statusFont
-        ]).width
-        let effectiveStatusTextWidth = max(statusTextSize.width, maxVolumeSampleWidth)
+
+        let (dynamicHudWidth, effectiveStatusTextWidth) = calculateHUDWidth(
+            deviceName: deviceName,
+            statusString: statusString
+        )
         let gapBetweenDeviceAndCount: CGFloat = 8
-        let combinedWidth =
-            deviceTextSize.width + gapBetweenDeviceAndCount + effectiveStatusTextWidth
-        let marginX: CGFloat = 24
-        let dynamicHudWidth = max(320, combinedWidth + 2 * marginX)
 
         syncHUDWindowsWithScreens()
 

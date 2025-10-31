@@ -153,6 +153,21 @@ class VolumeMonitor: ObservableObject {
     @Published var currentDevice: AudioDevice?
     @Published var isCurrentDeviceVolumeSupported: Bool = false
 
+    // MARK: - Helper Methods
+
+    private func clamp(_ value: Float32) -> Float32 {
+        max(0, min(value, 1))
+    }
+
+    private func clamp(_ value: CGFloat) -> CGFloat {
+        max(0, min(value, 1))
+    }
+
+    private nonisolated func resolveDeviceID() -> AudioDeviceID {
+        let currentID = state.defaultOutputDeviceIDValue()
+        return currentID != 0 ? currentID : updateDefaultOutputDevice()
+    }
+
     private nonisolated let deviceManager = AudioDeviceManager()
     private nonisolated let state = VolumeStateStore()
     private nonisolated let systemEventMonitor: SystemEventMonitor = {
@@ -208,8 +223,7 @@ class VolumeMonitor: ObservableObject {
 
         DispatchQueue.main.async {
             self.audioDevices = devices
-            let existingID = self.state.defaultOutputDeviceIDValue()
-            let resolvedID = existingID != 0 ? existingID : self.updateDefaultOutputDevice()
+            let resolvedID = self.resolveDeviceID()
             if resolvedID != 0, let currentDevice = devices.first(where: { $0.id == resolvedID }) {
                 self.currentDevice = currentDevice
             }
@@ -219,7 +233,7 @@ class VolumeMonitor: ObservableObject {
     // MARK: - Volume Control
 
     nonisolated func getCurrentVolume() -> Float32? {
-        let deviceID = state.defaultOutputDeviceIDValue()
+        let deviceID = resolveDeviceID()
         guard deviceID != 0 else { return nil }
 
         let elements = deviceManager.detectVolumeElements(for: deviceID)
@@ -236,14 +250,14 @@ class VolumeMonitor: ObservableObject {
     }
 
     func setVolume(scalar: Float32) {
-        let clampedScalar = max(0, min(scalar, 1))
+        let clampedScalar = clamp(scalar)
 
         guard let audioQueue else { return }
 
         audioQueue.async { [weak self] in
             guard let self else { return }
 
-            let deviceID = self.state.defaultOutputDeviceIDValue()
+            let deviceID = self.resolveDeviceID()
             guard deviceID != 0 else { return }
 
             let elements = self.state.volumeElementsSnapshot()
@@ -287,12 +301,7 @@ class VolumeMonitor: ObservableObject {
 
     private func refreshMuteStateOnMainThread(for deviceID: AudioDeviceID? = nil) -> Bool? {
 
-        let resolvedDeviceID =
-            deviceID
-            ?? {
-                let currentID = state.defaultOutputDeviceIDValue()
-                return currentID != 0 ? currentID : updateDefaultOutputDevice()
-            }()
+        let resolvedDeviceID = deviceID ?? resolveDeviceID()
 
         guard resolvedDeviceID != 0 else {
             state.setDeviceMuted(false)
@@ -324,7 +333,7 @@ class VolumeMonitor: ObservableObject {
     private func volumeChanged(address _: AudioObjectPropertyAddress) {
         guard let volume = getCurrentVolume() else { return }
 
-        let clampedVolume = max(0, min(volume, 1))
+        let clampedVolume = clamp(volume)
         let percentage = Int(round(clampedVolume * 100))
 
         DispatchQueue.main.async {
@@ -392,7 +401,7 @@ class VolumeMonitor: ObservableObject {
         }
 
         if let volume = getCurrentVolume() {
-            let clamped = max(0, min(volume, 1))
+            let clamped = clamp(volume)
             let percentage = Int(round(clamped * 100))
             self.volumePercentage = percentage
             self.state.updateLastVolumeScalar(CGFloat(clamped))
@@ -413,7 +422,7 @@ class VolumeMonitor: ObservableObject {
     private func showHUDForCurrentVolume() {
         _ = refreshMuteState()
         if let volume = getCurrentVolume() {
-            let clamped = max(0, min(volume, 1))
+            let clamped = clamp(volume)
             let scalar = CGFloat(clamped)
             state.updateLastVolumeScalar(scalar)
             if state.deviceMuted() {
@@ -432,7 +441,7 @@ class VolumeMonitor: ObservableObject {
     // MARK: - Listener Management
 
     func startListening() {
-        let deviceID = updateDefaultOutputDevice()
+        let deviceID = resolveDeviceID()
         guard deviceID != 0 else {
             updateVolumeSupportState(false)
             return
@@ -583,8 +592,7 @@ class VolumeMonitor: ObservableObject {
             mElement: 0
         )
 
-        let removalDeviceID =
-            state.listeningDeviceIDValue() ?? state.defaultOutputDeviceIDValue()
+        let removalDeviceID = state.listeningDeviceIDValue() ?? resolveDeviceID()
 
         if let volumeListener = volumeListener {
             let registeredVolumes = state.registeredVolumeElementsSnapshot()

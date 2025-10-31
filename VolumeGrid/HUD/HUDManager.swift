@@ -320,6 +320,9 @@ class HUDManager {
         let isMutedForDisplay = isMuted || clampedScalar <= epsilon
         let displayedScalar = isMutedForDisplay ? 0 : clampedScalar
 
+        let spacingIconToDevice: CGFloat = isUnsupported ? 20 : 14
+        let spacingDeviceToBlocks: CGFloat = isUnsupported ? 0 : 20
+
         let deviceName = deviceName ?? "Unknown Device"
         let statusString =
             isUnsupported
@@ -397,8 +400,6 @@ class HUDManager {
             let blocksWidth = isUnsupported ? 0 : context.blocksView.intrinsicContentSize.width
             context.blocksWidthConstraint.constant = blocksWidth
 
-            let spacingIconToDevice: CGFloat = isUnsupported ? 20 : 14
-            let spacingDeviceToBlocks: CGFloat = isUnsupported ? 0 : 20
             context.contentStack.setCustomSpacing(spacingIconToDevice, after: context.iconContainer)
             context.contentStack.setCustomSpacing(spacingDeviceToBlocks, after: context.textStack)
 
@@ -437,10 +438,8 @@ class HUDManager {
     }
 
     private func hudStyle(for appearance: NSAppearance) -> HUDStyle {
-        let bestMatch =
-            appearance.bestMatch(from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
-            ?? .aqua
-        let isDarkInterface = [.darkAqua, .vibrantDark].contains(bestMatch)
+        let isDarkInterface = [.darkAqua, .vibrantDark].contains(
+            appearance.bestMatch(from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight]) ?? .aqua)
 
         let backgroundBase = resolveColor(NSColor.windowBackgroundColor, for: appearance)
         let backgroundColor = backgroundBase.withAlphaComponent(isDarkInterface ? 0.92 : 0.97)

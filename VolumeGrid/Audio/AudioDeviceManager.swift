@@ -43,67 +43,45 @@ final class AudioDeviceManager: Sendable {
         )
     }
 
-    /// Detects available elements for a given property selector
     nonisolated private func detectElements(
         for deviceID: AudioDeviceID,
         selector: AudioObjectPropertySelector,
         verifyReadable: Bool = false
     ) -> [AudioObjectPropertyElement] {
         let candidates: [AudioObjectPropertyElement] = [
-            kAudioObjectPropertyElementMain,
-            1,
-            2,
+            kAudioObjectPropertyElementMain, 1, 2,
         ]
 
         var detected: [AudioObjectPropertyElement] = []
 
         for element in candidates {
             var address = makePropertyAddress(selector: selector, element: element)
+            guard AudioObjectHasProperty(deviceID, &address) else { continue }
 
-            if AudioObjectHasProperty(deviceID, &address) {
-                if verifyReadable {
-                    var value: UInt32 = 0
-                    var size = UInt32(MemoryLayout<UInt32>.size)
-                    let readStatus = AudioObjectGetPropertyData(
-                        deviceID, &address, 0, nil, &size, &value)
-                    guard readStatus == noErr else { continue }
-                }
-
-                if element == kAudioObjectPropertyElementMain {
-                    return [element]
-                }
-                detected.append(element)
+            if verifyReadable {
+                var value: UInt32 = 0
+                var size = UInt32(MemoryLayout<UInt32>.size)
+                guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &value) == noErr
+                else { continue }
             }
+
+            if element == kAudioObjectPropertyElementMain {
+                return [element]
+            }
+            detected.append(element)
         }
 
         return detected
     }
 
-    #if DEBUG
-        nonisolated private func log(_ message: String) {
-            print("[AudioDeviceManager] \(message)")
-        }
-    #endif
-
     @discardableResult
     nonisolated func getDefaultOutputDevice() -> AudioDeviceID {
         var address = defaultOutputDeviceAddress
-
         var deviceID: AudioDeviceID = 0
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
         let status = AudioObjectGetPropertyData(
             AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
-        if status == noErr {
-            #if DEBUG
-                log("Got default device ID: \(deviceID)")
-            #endif
-            return deviceID
-        } else {
-            #if DEBUG
-                log("Error getting default output device: \(status)")
-            #endif
-            return 0
-        }
+        return status == noErr ? deviceID : 0
     }
 
     @discardableResult
@@ -129,29 +107,16 @@ final class AudioDeviceManager: Sendable {
 
     nonisolated func getCurrentVolume(
         for deviceID: AudioDeviceID, elements: [AudioObjectPropertyElement]
-    )
-        -> Float32?
-    {
+    ) -> Float32? {
         guard !elements.isEmpty else { return nil }
 
         let channelVolumes = elements.compactMap { element -> Float32? in
             var address = makePropertyAddress(
-                selector: kAudioDevicePropertyVolumeScalar,
-                element: element
-            )
-
+                selector: kAudioDevicePropertyVolumeScalar, element: element)
             var volume: Float32 = 0.0
             var size = UInt32(MemoryLayout<Float32>.size)
-            let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &volume)
-
-            if status == noErr {
-                return volume
-            } else {
-                #if DEBUG
-                    log("Error getting volume for element \(element): \(status)")
-                #endif
-                return nil
-            }
+            return AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &volume) == noErr
+                ? volume : nil
         }
 
         guard !channelVolumes.isEmpty else { return nil }
@@ -168,19 +133,12 @@ final class AudioDeviceManager: Sendable {
 
         for element in elements {
             var address = makePropertyAddress(
-                selector: kAudioDevicePropertyVolumeScalar,
-                element: element
-            )
-
+                selector: kAudioDevicePropertyVolumeScalar, element: element)
             var mutableValue = value
             let status = AudioObjectSetPropertyData(
                 deviceID, &address, 0, nil, UInt32(MemoryLayout<Float32>.size), &mutableValue)
             if status == noErr {
                 success = true
-            } else {
-                #if DEBUG
-                    log("Error setting volume for element \(element): \(status)")
-                #endif
             }
         }
 
@@ -196,19 +154,12 @@ final class AudioDeviceManager: Sendable {
         var success = false
 
         for element in elements {
-            var address = makePropertyAddress(
-                selector: kAudioDevicePropertyMute,
-                element: element
-            )
+            var address = makePropertyAddress(selector: kAudioDevicePropertyMute, element: element)
             var mutableValue = muteValue
             let status = AudioObjectSetPropertyData(
                 deviceID, &address, 0, nil, UInt32(MemoryLayout<UInt32>.size), &mutableValue)
             if status == noErr {
                 success = true
-            } else {
-                #if DEBUG
-                    log("Error setting mute for element \(element): \(status)")
-                #endif
             }
         }
 
@@ -248,51 +199,33 @@ final class AudioDeviceManager: Sendable {
 
     nonisolated func getAllDevices() -> [AudioDevice] {
         var address = devicesAddress
-
         var size: UInt32 = 0
-        var status = AudioObjectGetPropertyDataSize(
-            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size)
-        guard status == noErr else {
-            #if DEBUG
-                log("Error getting devices size: \(status)")
-            #endif
-            return []
-        }
+
+        guard
+            AudioObjectGetPropertyDataSize(
+                AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr
+        else { return [] }
 
         let deviceCount = Int(size) / MemoryLayout<AudioDeviceID>.size
         var deviceIDs = [AudioDeviceID](repeating: 0, count: deviceCount)
-        status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceIDs)
-        guard status == noErr else {
-            #if DEBUG
-                log("Error getting devices: \(status)")
-            #endif
-            return []
-        }
 
-        var devices: [AudioDevice] = []
-        for deviceID in deviceIDs {
-            if let name = getDeviceName(deviceID) {
-                devices.append(AudioDevice(id: deviceID, name: name))
-            }
-        }
+        guard
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceIDs)
+                == noErr
+        else { return [] }
 
-        return devices
+        return deviceIDs.compactMap { deviceID in
+            getDeviceName(deviceID).map { AudioDevice(id: deviceID, name: $0) }
+        }
     }
 
     nonisolated func getDeviceName(_ deviceID: AudioDeviceID) -> String? {
         var address = deviceNameAddress
-
         var unmanagedName: Unmanaged<CFString>?
         var size = UInt32(MemoryLayout<Unmanaged<CFString>>.size)
         let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &unmanagedName)
-        guard status == noErr, let unmanaged = unmanagedName else {
-            #if DEBUG
-                log("Error getting device name for \(deviceID): \(status)")
-            #endif
-            return nil
-        }
-        let name = unmanaged.takeRetainedValue() as String
-        return name
+        guard status == noErr, let unmanaged = unmanagedName else { return nil }
+        return unmanaged.takeRetainedValue() as String
     }
 }

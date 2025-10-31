@@ -131,15 +131,15 @@ final class StatusBarController {
     @objc private func showAbout() {
         let appName =
             Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "VolumeGrid"
-        let version =
+        let appVersion = [
             Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "Unknown"
-        let build =
-            Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
+                ?? "Unknown",
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown",
+        ]
 
         let alert = NSAlert()
         alert.messageText = appName
-        alert.informativeText = "Version: \(version) (Build \(build))"
+        alert.informativeText = "Version: \(appVersion[0]) (Build \(appVersion[1]))"
         alert.alertStyle = .informational
 
         let contactString = NSMutableAttributedString(string: "GitHub")
@@ -171,7 +171,7 @@ final class StatusBarController {
 
         launchAtLoginController.setEnabled(targetState) { [weak self] result in
             guard let self else { return }
-            defer { self.launchAtLoginMenuItem.isEnabled = true }
+            self.launchAtLoginMenuItem.isEnabled = true
 
             switch result {
             case .success(let enabled):

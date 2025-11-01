@@ -35,6 +35,29 @@ final class AudioDeviceManager: Sendable {
         .init(mSelector: selector, mScope: scope, mElement: element)
     }
 
+    nonisolated private func getPropertyData<T>(
+        deviceID: AudioDeviceID,
+        address: inout AudioObjectPropertyAddress,
+        value: inout T
+    ) -> Bool {
+        var size = UInt32(MemoryLayout<T>.size)
+        return withUnsafeMutableBytes(of: &value) { buffer in
+            AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, buffer.baseAddress!) == noErr
+        }
+    }
+
+    nonisolated private func setPropertyData<T>(
+        deviceID: AudioDeviceID,
+        address: inout AudioObjectPropertyAddress,
+        value: T
+    ) -> Bool {
+        var mutableValue = value
+        let size = UInt32(MemoryLayout<T>.size)
+        return withUnsafeBytes(of: &mutableValue) { buffer in
+            AudioObjectSetPropertyData(deviceID, &address, 0, nil, size, buffer.baseAddress!) == noErr
+        }
+    }
+
     nonisolated private func detectElements(
         for deviceID: AudioDeviceID,
         selector: AudioObjectPropertySelector,
@@ -104,9 +127,7 @@ final class AudioDeviceManager: Sendable {
             var address = makePropertyAddress(
                 selector: kAudioDevicePropertyVolumeScalar, element: element)
             var volume: Float32 = 0.0
-            var size = UInt32(MemoryLayout<Float32>.size)
-            return AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &volume) == noErr
-                ? volume : nil
+            return getPropertyData(deviceID: deviceID, address: &address, value: &volume) ? volume : nil
         }
 
         return channelVolumes.isEmpty
@@ -124,12 +145,7 @@ final class AudioDeviceManager: Sendable {
         for element in elements {
             var address = makePropertyAddress(
                 selector: kAudioDevicePropertyVolumeScalar, element: element)
-            var mutableValue = value
-            let status = AudioObjectSetPropertyData(
-                deviceID, &address, 0, nil, UInt32(MemoryLayout<Float32>.size), &mutableValue)
-            if status == noErr {
-                success = true
-            }
+            success = setPropertyData(deviceID: deviceID, address: &address, value: value) || success
         }
 
         return success
@@ -145,12 +161,7 @@ final class AudioDeviceManager: Sendable {
 
         for element in elements {
             var address = makePropertyAddress(selector: kAudioDevicePropertyMute, element: element)
-            var mutableValue = muteValue
-            let status = AudioObjectSetPropertyData(
-                deviceID, &address, 0, nil, UInt32(MemoryLayout<UInt32>.size), &mutableValue)
-            if status == noErr {
-                success = true
-            }
+            success = setPropertyData(deviceID: deviceID, address: &address, value: muteValue) || success
         }
 
         return success
@@ -171,10 +182,7 @@ final class AudioDeviceManager: Sendable {
             )
 
             var muted: UInt32 = 0
-            var size = UInt32(MemoryLayout<UInt32>.size)
-            let status = AudioObjectGetPropertyData(
-                deviceID, &address, 0, nil, &size, &muted)
-            if status == noErr {
+            if getPropertyData(deviceID: deviceID, address: &address, value: &muted) {
                 readAnyChannel = true
                 if muted != 0 {
                     muteDetected = true
@@ -213,9 +221,7 @@ final class AudioDeviceManager: Sendable {
     nonisolated func getDeviceName(_ deviceID: AudioDeviceID) -> String? {
         var address = deviceNameAddress
         var unmanagedName: Unmanaged<CFString>?
-        var size = UInt32(MemoryLayout<Unmanaged<CFString>>.size)
-        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &unmanagedName)
-        guard status == noErr, let unmanaged = unmanagedName else { return nil }
-        return unmanaged.takeRetainedValue() as String
+        return getPropertyData(deviceID: deviceID, address: &address, value: &unmanagedName) && unmanagedName != nil
+            ? unmanagedName!.takeRetainedValue() as String : nil
     }
 }

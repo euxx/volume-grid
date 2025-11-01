@@ -100,8 +100,6 @@ final class AudioDeviceManager: Sendable {
     nonisolated func getCurrentVolume(
         for deviceID: AudioDeviceID, elements: [AudioObjectPropertyElement]
     ) -> Float32? {
-        guard !elements.isEmpty else { return nil }
-
         let channelVolumes = elements.compactMap { element -> Float32? in
             var address = makePropertyAddress(
                 selector: kAudioDevicePropertyVolumeScalar, element: element)
@@ -111,8 +109,8 @@ final class AudioDeviceManager: Sendable {
                 ? volume : nil
         }
 
-        guard !channelVolumes.isEmpty else { return nil }
-        return channelVolumes.reduce(0, +) / Float32(channelVolumes.count)
+        return channelVolumes.isEmpty
+            ? nil : channelVolumes.reduce(0, +) / Float32(channelVolumes.count)
     }
 
     nonisolated func setVolume(

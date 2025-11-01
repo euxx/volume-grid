@@ -438,13 +438,9 @@ class HUDManager {
     }
 
     private func hudStyle(for appearance: NSAppearance) -> HUDStyle {
-        let isDarkInterface =
-            appearance.bestMatch(
-                from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight]
-            ) == .darkAqua
-            || appearance.bestMatch(
-                from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight]
-            ) == .vibrantDark
+        let bestMatch = appearance.bestMatch(
+            from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
+        let isDarkInterface = bestMatch == .darkAqua || bestMatch == .vibrantDark
 
         let backgroundBase = resolveColor(NSColor.windowBackgroundColor, for: appearance)
         let backgroundColor = backgroundBase.withAlphaComponent(isDarkInterface ? 0.92 : 0.97)

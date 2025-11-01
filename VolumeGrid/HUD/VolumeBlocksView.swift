@@ -68,28 +68,25 @@ final class VolumeBlocksView: NSView {
 
     func update(style: HUDStyle, fillFraction: CGFloat) {
         self.style = style
-        blockLayers.forEach { $0.backgroundColor = style.blockEmptyColor.cgColor }
-        fillLayers.forEach { $0.backgroundColor = style.blockFillColor.cgColor }
+        for blockLayer in blockLayers {
+            blockLayer.backgroundColor = style.blockEmptyColor.cgColor
+        }
+        for fillLayer in fillLayers {
+            fillLayer.backgroundColor = style.blockFillColor.cgColor
+        }
 
-        let clampedFraction = max(0, min(1, fillFraction))
+        let clampedFraction = fillFraction.clamped(to: 0...1)
         let totalBlocks = clampedFraction * CGFloat(blockCount)
 
         for (index, fillLayer) in fillLayers.enumerated() {
-            var blockFill = totalBlocks - CGFloat(index)
-            blockFill = max(0, min(1, blockFill))
-            blockFill = (blockFill * 4).rounded() / 4
-            if blockFill <= 0 {
-                fillLayer.isHidden = true
-                fillLayer.frame = .init(x: 0, y: 0, width: 0, height: blockHeight)
-            } else {
-                fillLayer.isHidden = false
-                fillLayer.frame = .init(
-                    x: 0,
-                    y: 0,
-                    width: blockWidth * blockFill,
-                    height: blockHeight
-                )
-            }
+            let blockFill = ((totalBlocks - CGFloat(index)).clamped(to: 0...1) * 4).rounded() / 4
+            fillLayer.isHidden = blockFill <= 0
+            fillLayer.frame = .init(
+                x: 0,
+                y: 0,
+                width: blockWidth * blockFill,
+                height: blockHeight
+            )
         }
     }
 }

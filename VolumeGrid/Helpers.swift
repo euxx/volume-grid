@@ -15,12 +15,12 @@ enum VolumeFormatter {
     private static let quarterStep: CGFloat = 0.25
 
     static func formattedVolumeString(for percentage: Int) -> String {
-        let clamped = max(0, min(percentage, 100))
+        let clamped = percentage.clamped(to: 0...100)
         return formattedVolumeString(forScalar: CGFloat(clamped) / 100.0)
     }
 
     static func formattedVolumeString(forScalar scalar: CGFloat) -> String {
-        let totalBlocks = max(0, min(scalar, 1)) * blocksCount
+        let totalBlocks = scalar.clamped(to: 0...1) * blocksCount
         let quarterBlocks = (totalBlocks / quarterStep).rounded() * quarterStep
         return formatVolumeCount(quarterBlocks: quarterBlocks)
     }
@@ -38,11 +38,11 @@ enum VolumeFormatter {
 
         let fractionString: String
         switch fractionalPart {
-        case let f where abs(f - quarterStep) <= volumeEpsilon:
+        case quarterStep - volumeEpsilon...quarterStep + volumeEpsilon:
             fractionString = "1/4"
-        case let f where abs(f - 0.5) <= volumeEpsilon:
+        case 0.5 - volumeEpsilon...0.5 + volumeEpsilon:
             fractionString = "2/4"
-        case let f where abs(f - 0.75) <= volumeEpsilon:
+        case 0.75 - volumeEpsilon...0.75 + volumeEpsilon:
             fractionString = "3/4"
         default:
             fractionString = String(format: "%.2f", fractionalPart)
@@ -64,7 +64,7 @@ enum VolumeIconHelper {
         isUnsupported: Bool = false,
         forHUD: Bool = false
     ) -> VolumeIcon {
-        let clamped = max(0, min(percentage, 100))
+        let clamped = percentage.clamped(to: 0...100)
 
         if isUnsupported {
             return VolumeIcon(symbolName: "nosign", size: 30)

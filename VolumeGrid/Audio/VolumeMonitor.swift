@@ -250,9 +250,7 @@ class VolumeMonitor: ObservableObject {
     }
 
     func setVolume(percentage: Int) {
-        let clamped = percentage.clamped(to: 0...100)
-        let scalar = Float32(Double(clamped) / 100.0)
-        setVolume(scalar: scalar)
+        setVolume(scalar: Float32(percentage.clamped(to: 0...100)) / 100.0)
     }
 
     func setVolume(scalar: Float32) {
@@ -304,17 +302,12 @@ class VolumeMonitor: ObservableObject {
         }
 
         state.updateMuteElements(elements)
-
-        if let muted = deviceManager.getMuteState(for: resolvedDeviceID, elements: elements) {
-            state.setDeviceMuted(muted)
-            if muted {
-                volumePercentage = 0
-            }
-            return muted
+        let muted = deviceManager.getMuteState(for: resolvedDeviceID, elements: elements) ?? false
+        state.setDeviceMuted(muted)
+        if muted {
+            volumePercentage = 0
         }
-
-        state.setDeviceMuted(false)
-        return nil
+        return muted ? true : nil
     }
 
     private func volumeChanged(address _: AudioObjectPropertyAddress) {

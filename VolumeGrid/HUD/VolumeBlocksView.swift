@@ -41,7 +41,9 @@ final class VolumeBlocksView: NSView {
         for index in 0..<blockCount {
             let x = CGFloat(index) * (blockWidth + blockSpacing)
             let blockRect = CGRect(x: x, y: 0, width: blockWidth, height: blockHeight)
-            let blockPath = CGPath(roundedRect: CGRect(x: 0, y: 0, width: blockWidth, height: blockHeight), cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+            let blockPath = CGPath(
+                roundedRect: CGRect(x: 0, y: 0, width: blockWidth, height: blockHeight),
+                cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
 
             let blockLayer = CAShapeLayer()
             blockLayer.frame = blockRect

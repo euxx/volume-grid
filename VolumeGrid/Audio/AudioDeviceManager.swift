@@ -42,7 +42,8 @@ final class AudioDeviceManager: Sendable {
     ) -> Bool {
         var size = UInt32(MemoryLayout<T>.size)
         return withUnsafeMutableBytes(of: &value) { buffer in
-            AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, buffer.baseAddress!) == noErr
+            AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, buffer.baseAddress!)
+                == noErr
         }
     }
 
@@ -54,7 +55,8 @@ final class AudioDeviceManager: Sendable {
         var mutableValue = value
         let size = UInt32(MemoryLayout<T>.size)
         return withUnsafeBytes(of: &mutableValue) { buffer in
-            AudioObjectSetPropertyData(deviceID, &address, 0, nil, size, buffer.baseAddress!) == noErr
+            AudioObjectSetPropertyData(deviceID, &address, 0, nil, size, buffer.baseAddress!)
+                == noErr
         }
     }
 
@@ -127,7 +129,8 @@ final class AudioDeviceManager: Sendable {
             var address = makePropertyAddress(
                 selector: kAudioDevicePropertyVolumeScalar, element: element)
             var volume: Float32 = 0.0
-            return getPropertyData(deviceID: deviceID, address: &address, value: &volume) ? volume : nil
+            return getPropertyData(deviceID: deviceID, address: &address, value: &volume)
+                ? volume : nil
         }
 
         return channelVolumes.isEmpty
@@ -145,7 +148,8 @@ final class AudioDeviceManager: Sendable {
         for element in elements {
             var address = makePropertyAddress(
                 selector: kAudioDevicePropertyVolumeScalar, element: element)
-            success = setPropertyData(deviceID: deviceID, address: &address, value: value) || success
+            success =
+                setPropertyData(deviceID: deviceID, address: &address, value: value) || success
         }
 
         return success
@@ -161,7 +165,8 @@ final class AudioDeviceManager: Sendable {
 
         for element in elements {
             var address = makePropertyAddress(selector: kAudioDevicePropertyMute, element: element)
-            success = setPropertyData(deviceID: deviceID, address: &address, value: muteValue) || success
+            success =
+                setPropertyData(deviceID: deviceID, address: &address, value: muteValue) || success
         }
 
         return success
@@ -221,7 +226,8 @@ final class AudioDeviceManager: Sendable {
     nonisolated func getDeviceName(_ deviceID: AudioDeviceID) -> String? {
         var address = deviceNameAddress
         var unmanagedName: Unmanaged<CFString>?
-        return getPropertyData(deviceID: deviceID, address: &address, value: &unmanagedName) && unmanagedName != nil
+        return getPropertyData(deviceID: deviceID, address: &address, value: &unmanagedName)
+            && unmanagedName != nil
             ? unmanagedName!.takeRetainedValue() as String : nil
     }
 }

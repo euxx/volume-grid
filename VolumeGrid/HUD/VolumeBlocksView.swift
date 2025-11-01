@@ -7,8 +7,8 @@ final class VolumeBlocksView: NSView {
     private let blockSpacing: CGFloat = 2
     private let cornerRadius: CGFloat = 0.5
     private var style: HUDStyle
-    private var blockLayers: [CALayer] = []
-    private var fillLayers: [CALayer] = []
+    private var blockLayers: [CAShapeLayer] = []
+    private var fillLayers: [CAShapeLayer] = []
 
     private var totalWidth: CGFloat {
         CGFloat(blockCount) * blockWidth + CGFloat(blockCount - 1) * blockSpacing
@@ -36,30 +36,25 @@ final class VolumeBlocksView: NSView {
         blockLayers.removeAll()
         fillLayers.removeAll()
 
-        let containerLayer = CALayer()
-        containerLayer.frame = .init(
-            x: 0, y: 0, width: totalWidth, height: blockHeight)
-        containerLayer.backgroundColor = CGColor.clear
-        layer?.addSublayer(containerLayer)
+        layer?.sublayers?.forEach { $0.removeFromSuperlayer() }
 
         for index in 0..<blockCount {
-            let blockLayer = CALayer()
-            blockLayer.frame = .init(
-                x: CGFloat(index) * (blockWidth + blockSpacing),
-                y: 0,
-                width: blockWidth,
-                height: blockHeight
-            )
-            blockLayer.cornerRadius = cornerRadius
-            blockLayer.backgroundColor = style.blockEmptyColor.cgColor
+            let x = CGFloat(index) * (blockWidth + blockSpacing)
+            let blockRect = CGRect(x: x, y: 0, width: blockWidth, height: blockHeight)
+            let blockPath = CGPath(roundedRect: CGRect(x: 0, y: 0, width: blockWidth, height: blockHeight), cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
 
-            let fillLayer = CALayer()
-            fillLayer.cornerRadius = cornerRadius
-            fillLayer.backgroundColor = style.blockFillColor.cgColor
-            fillLayer.frame = .init(x: 0, y: 0, width: 0, height: blockHeight)
+            let blockLayer = CAShapeLayer()
+            blockLayer.frame = blockRect
+            blockLayer.path = blockPath
+            blockLayer.fillColor = style.blockEmptyColor.cgColor
+
+            let fillLayer = CAShapeLayer()
+            fillLayer.frame = CGRect(x: 0, y: 0, width: 0, height: blockHeight)
+            fillLayer.path = blockPath
+            fillLayer.fillColor = style.blockFillColor.cgColor
 
             blockLayer.addSublayer(fillLayer)
-            containerLayer.addSublayer(blockLayer)
+            layer?.addSublayer(blockLayer)
             blockLayers.append(blockLayer)
             fillLayers.append(fillLayer)
         }
@@ -68,24 +63,22 @@ final class VolumeBlocksView: NSView {
     func update(style: HUDStyle, fillFraction: CGFloat) {
         self.style = style
         for blockLayer in blockLayers {
-            blockLayer.backgroundColor = style.blockEmptyColor.cgColor
+            blockLayer.fillColor = style.blockEmptyColor.cgColor
         }
         for fillLayer in fillLayers {
-            fillLayer.backgroundColor = style.blockFillColor.cgColor
+            fillLayer.fillColor = style.blockFillColor.cgColor
         }
 
-        let clampedFraction = fillFraction.clamped(to: 0...1)
+        let clampedFraction = min(max(fillFraction, 0), 1)
         let totalBlocks = clampedFraction * CGFloat(blockCount)
 
         for (index, fillLayer) in fillLayers.enumerated() {
-            let blockFill = ((totalBlocks - CGFloat(index)).clamped(to: 0...1) * 4).rounded() / 4
+            let blockFill = min(max((totalBlocks - CGFloat(index)), 0), 1)
+            let fillWidth = (blockWidth * blockFill * 4).rounded() / 4
             fillLayer.isHidden = blockFill <= 0
-            fillLayer.frame = .init(
-                x: 0,
-                y: 0,
-                width: blockWidth * blockFill,
-                height: blockHeight
-            )
+            var frame = fillLayer.frame
+            frame.size.width = fillWidth
+            fillLayer.frame = frame
         }
     }
 }

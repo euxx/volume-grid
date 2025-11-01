@@ -36,8 +36,6 @@ final class StatusBarController {
         bindVolumeUpdates()
     }
 
-    // MARK: - Setup
-
     private func setupStatusBarButton() {
         guard let button = statusItem.button else { return }
         button.addSubview(statusBarVolumeView)
@@ -183,8 +181,6 @@ final class StatusBarController {
             }
         }
     }
-
-    // MARK: - Helpers
 
     private func updateVolumeInteraction(isSupported: Bool) {
         isVolumeControlAvailable = isSupported

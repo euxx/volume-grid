@@ -50,8 +50,6 @@ private final class VolumeStateStore: @unchecked Sendable {
         lock.withLock(body)
     }
 
-    // MARK: - Device IDs
-
     nonisolated func updateDefaultOutputDeviceID(_ id: AudioDeviceID) {
         withLock { defaultOutputDeviceID = id }
     }
@@ -67,8 +65,6 @@ private final class VolumeStateStore: @unchecked Sendable {
     nonisolated func listeningDeviceIDValue() -> AudioDeviceID? {
         withLock { listeningDeviceID }
     }
-
-    // MARK: - Volume Elements
 
     nonisolated func updateVolumeElements(_ elements: [AudioObjectPropertyElement]) {
         withLock { volumeElements = elements }
@@ -102,8 +98,6 @@ private final class VolumeStateStore: @unchecked Sendable {
         withLock { registeredMuteElements }
     }
 
-    // MARK: - Volume Muted State
-
     nonisolated func setDeviceMuted(_ muted: Bool) {
         withLock { isDeviceMuted = muted }
     }
@@ -112,8 +106,6 @@ private final class VolumeStateStore: @unchecked Sendable {
         withLock { isDeviceMuted }
     }
 
-    // MARK: - Volume Scalar
-
     nonisolated func updateLastVolumeScalar(_ scalar: CGFloat?) {
         withLock { lastVolumeScalar = scalar }
     }
@@ -121,8 +113,6 @@ private final class VolumeStateStore: @unchecked Sendable {
     nonisolated func lastVolumeScalarSnapshot() -> CGFloat? {
         withLock { lastVolumeScalar }
     }
-
-    // MARK: - Listening flag
 
     nonisolated func setListeningActive(_ active: Bool) {
         withLock { isListening = active }

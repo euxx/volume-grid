@@ -19,8 +19,7 @@ final class VolumeBlocksView: NSView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
-        layer = CALayer()
-        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.backgroundColor = CGColor.clear
         createBlockLayers()
     }
 
@@ -40,7 +39,7 @@ final class VolumeBlocksView: NSView {
         let containerLayer = CALayer()
         containerLayer.frame = .init(
             x: 0, y: 0, width: totalWidth, height: blockHeight)
-        containerLayer.backgroundColor = NSColor.clear.cgColor
+        containerLayer.backgroundColor = CGColor.clear
         layer?.addSublayer(containerLayer)
 
         for index in 0..<blockCount {

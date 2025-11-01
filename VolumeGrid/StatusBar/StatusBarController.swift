@@ -18,6 +18,7 @@ final class StatusBarController {
     private var volumeChangeHandler: ((CGFloat) -> Void)?
     private var isVolumeControlAvailable = false
 
+    @MainActor
     init(volumeMonitor: VolumeMonitor, launchAtLoginController: LaunchAtLoginController) {
         self.volumeMonitor = volumeMonitor
         self.launchAtLoginController = launchAtLoginController
@@ -86,6 +87,7 @@ final class StatusBarController {
         statusBarVolumeView.update(percentage: initialVolume)
     }
 
+    @MainActor
     private func bindVolumeUpdates() {
         let volumeUpdates = volumeMonitor.$volumePercentage
             .map { [weak self] volume -> (Int, String) in

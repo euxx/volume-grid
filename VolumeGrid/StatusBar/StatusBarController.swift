@@ -17,6 +17,8 @@ final class StatusBarController {
     private var latestDeviceName: String = "Unknown Device"
     private var volumeChangeHandler: ((CGFloat) -> Void)?
     private var isVolumeControlAvailable = false
+    private var aboutWindow: NSWindow?
+    private var aboutWindowObserver: NSObjectProtocol?
 
     @MainActor
     init(volumeMonitor: VolumeMonitor, launchAtLoginController: LaunchAtLoginController) {
@@ -112,14 +114,16 @@ final class StatusBarController {
             let (volume, formatted) = volumeData
             self.latestVolume = volume
             self.latestDeviceName = deviceName
-            self.statusBarVolumeView.update(percentage: volume)
-            self.updateVolumeInteraction(isSupported: isSupported)
-            self.volumeMenuView.update(
-                percentage: volume,
-                formattedVolume: formatted,
-                deviceName: deviceName
-            )
-            self.menu.itemChanged(self.volumeMenuItem)
+            DispatchQueue.main.async {
+                self.statusBarVolumeView.update(percentage: volume)
+                self.updateVolumeInteraction(isSupported: isSupported)
+                self.volumeMenuView.update(
+                    percentage: volume,
+                    formattedVolume: formatted,
+                    deviceName: deviceName
+                )
+                self.menu.itemChanged(self.volumeMenuItem)
+            }
         }
         .store(in: &subscriptions)
     }
@@ -129,6 +133,13 @@ final class StatusBarController {
     }
 
     @objc private func showAbout() {
+        if let existingWindow = aboutWindow {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            existingWindow.orderFrontRegardless()
+            existingWindow.makeKey()
+            return
+        }
+
         let appName =
             Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "VolumeGrid"
         let appVersion = [
@@ -137,13 +148,39 @@ final class StatusBarController {
             Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown",
         ]
 
-        let alert = NSAlert()
-        alert.messageText = appName
-        alert.informativeText = "Version: \(appVersion[0]) (Build \(appVersion[1]))"
-        alert.alertStyle = .informational
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 280),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: true
+        )
+        window.title = "About \(appName)"
+        window.isReleasedWhenClosed = false
+        window.isRestorable = false
 
-        let contactString = NSMutableAttributedString(string: "GitHub")
-        let range = (contactString.string as NSString).range(of: "GitHub")
+        let containerView = NSView()
+        containerView.translatesAutoresizingMaskIntoConstraints = false
+
+        let appIcon = NSImageView()
+        appIcon.image = NSApplication.shared.applicationIconImage
+        appIcon.translatesAutoresizingMaskIntoConstraints = false
+
+        let appNameLabel = NSTextField(labelWithString: appName)
+        appNameLabel.alignment = .center
+        appNameLabel.font = NSFont.boldSystemFont(ofSize: 16)
+        appNameLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let versionLabel = NSTextField(
+            labelWithString: "Version: \(appVersion[0]) (Build \(appVersion[1]))"
+        )
+        versionLabel.alignment = .center
+        versionLabel.font = NSFont.systemFont(ofSize: 12)
+        versionLabel.textColor = NSColor.secondaryLabelColor
+        versionLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let contactString = NSMutableAttributedString(string: "https://github.com/euxx/VolumeGrid")
+        let range = (contactString.string as NSString).range(
+            of: "https://github.com/euxx/VolumeGrid")
         if range.location != NSNotFound {
             contactString.addAttribute(
                 .link,
@@ -153,16 +190,71 @@ final class StatusBarController {
         }
 
         let contactLabel = NSTextField(labelWithAttributedString: contactString)
+        contactLabel.alignment = .center
         contactLabel.allowsEditingTextAttributes = true
         contactLabel.isSelectable = true
-        contactLabel.lineBreakMode = .byWordWrapping
-        contactLabel.maximumNumberOfLines = 0
         contactLabel.translatesAutoresizingMaskIntoConstraints = false
-        alert.accessoryView = contactLabel
-        contactLabel.widthAnchor.constraint(equalToConstant: 280).isActive = true
 
+        containerView.addSubview(appIcon)
+        containerView.addSubview(appNameLabel)
+        containerView.addSubview(versionLabel)
+        containerView.addSubview(contactLabel)
+
+        NSLayoutConstraint.activate([
+            appIcon.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 16),
+            appIcon.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+            appIcon.widthAnchor.constraint(equalToConstant: 64),
+            appIcon.heightAnchor.constraint(equalToConstant: 64),
+
+            appNameLabel.topAnchor.constraint(equalTo: appIcon.bottomAnchor, constant: 12),
+            appNameLabel.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+            appNameLabel.leftAnchor.constraint(
+                greaterThanOrEqualTo: containerView.leftAnchor, constant: 20),
+            appNameLabel.rightAnchor.constraint(
+                lessThanOrEqualTo: containerView.rightAnchor, constant: -20),
+
+            versionLabel.topAnchor.constraint(
+                equalTo: appNameLabel.bottomAnchor, constant: 4),
+            versionLabel.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+            versionLabel.leftAnchor.constraint(
+                greaterThanOrEqualTo: containerView.leftAnchor, constant: 20),
+            versionLabel.rightAnchor.constraint(
+                lessThanOrEqualTo: containerView.rightAnchor, constant: -20),
+
+            contactLabel.topAnchor.constraint(
+                equalTo: versionLabel.bottomAnchor, constant: 12),
+            contactLabel.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
+            contactLabel.leftAnchor.constraint(
+                greaterThanOrEqualTo: containerView.leftAnchor, constant: 20),
+            contactLabel.rightAnchor.constraint(
+                lessThanOrEqualTo: containerView.rightAnchor, constant: -20),
+            contactLabel.bottomAnchor.constraint(
+                equalTo: containerView.bottomAnchor, constant: -20),
+
+            containerView.widthAnchor.constraint(equalToConstant: 320),
+            containerView.heightAnchor.constraint(equalToConstant: 190),
+        ])
+
+        window.contentView = containerView
+
+        // Only add the observer when the window is first created
+        aboutWindowObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            self?.aboutWindow = nil
+            if let observer = self?.aboutWindowObserver {
+                NotificationCenter.default.removeObserver(observer)
+                self?.aboutWindowObserver = nil
+            }
+        }
+
+        self.aboutWindow = window
+
+        window.center()
         NSApplication.shared.activate(ignoringOtherApps: true)
-        alert.runModal()
+        window.makeKeyAndOrderFront(nil)
     }
 
     @objc private func toggleLaunchAtLogin() {

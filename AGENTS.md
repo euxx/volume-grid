@@ -4,6 +4,9 @@ Don't say sentences that begin with perfect.
 
 Remove unnecessary comments.
 
+Check detected lint Problems from VSCode.
+
+
 ## Development
 
 Run commands after code changes to ensure consistent formatting:

@@ -177,6 +177,10 @@ class HUDManager {
         textStack.alignment = .centerY
         textStack.spacing = 8
 
+        let leadingSpacer = NSView()
+        leadingSpacer.translatesAutoresizingMaskIntoConstraints = false
+        leadingSpacer.widthAnchor.constraint(equalToConstant: 30).isActive = true
+
         let deviceLabel = NSTextField(labelWithString: "")
         deviceLabel.translatesAutoresizingMaskIntoConstraints = false
         deviceLabel.textColor = style.secondaryTextColor
@@ -206,6 +210,7 @@ class HUDManager {
         volumeWidthConstraint.priority = .required
         volumeWidthConstraint.isActive = true
 
+        textStack.addArrangedSubview(leadingSpacer)
         textStack.addArrangedSubview(deviceLabel)
         textStack.addArrangedSubview(volumeLabel)
         contentStack.addArrangedSubview(textStack)

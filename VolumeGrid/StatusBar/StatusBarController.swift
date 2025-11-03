@@ -394,12 +394,12 @@ final class StatusBarVolumeView: NSView {
         progressBackgroundView.translatesAutoresizingMaskIntoConstraints = false
         progressBackgroundView.wantsLayer = true
         progressBackgroundView.layer?.backgroundColor =
-            NSColor.systemGray.withAlphaComponent(0.3).cgColor
+            NSColor.systemGray.withAlphaComponent(0.6).cgColor
         progressBackgroundView.layer?.cornerRadius = 1
 
         progressView.translatesAutoresizingMaskIntoConstraints = false
         progressView.wantsLayer = true
-        progressView.layer?.backgroundColor = NSColor.systemGray.cgColor
+        progressView.layer?.backgroundColor = NSColor.gray.cgColor
         progressView.layer?.cornerRadius = 1
 
         addSubview(iconView)

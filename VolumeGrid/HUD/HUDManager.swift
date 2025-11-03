@@ -3,7 +3,6 @@ import Combine
 import SwiftUI
 
 struct HUDStyle {
-    let backgroundColor: NSColor
     let shadowColor: NSColor
     let iconTintColor: NSColor
     let primaryTextColor: NSColor
@@ -59,11 +58,11 @@ class HUDManager {
     private let hudWidth: CGFloat = 320
     private let hudHeight: CGFloat = 160
     private let hudAlpha: CGFloat = 0.97
-    private let hudDisplayDuration: TimeInterval = 2.0
-    private let hudCornerRadius: CGFloat = 12
-    private let marginX: CGFloat = 24
+    private let hudDisplayDuration: TimeInterval = 1
+    private let hudCornerRadius: CGFloat = 20
+    private let marginX: CGFloat = 30
     private let minVerticalPadding: CGFloat = 14
-    private let animationDuration: TimeInterval = 0.2
+    private let animationDuration: TimeInterval = 1
 
     private var hudWindows: [CGDirectDisplayID: HUDWindowContext] = [:]
     private var hideHUDWorkItem: DispatchWorkItem?
@@ -108,17 +107,30 @@ class HUDManager {
         ]
         window.ignoresMouseEvents = true
 
-        let containerView = NSView(
+        let containerView = NSVisualEffectView(
             frame: .init(x: 0, y: 0, width: hudWidth, height: hudHeight))
+        let bestMatch = window.effectiveAppearance.bestMatch(
+            from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
+        let isDarkInterface = bestMatch == .darkAqua || bestMatch == .vibrantDark
+        containerView.material = .hudWindow
+        if !isDarkInterface {
+            containerView.appearance = NSAppearance(named: .darkAqua)
+        }
+        containerView.blendingMode = .behindWindow
+        containerView.state = .active
         containerView.wantsLayer = true
         let style = hudStyle(for: window.effectiveAppearance)
-        containerView.layer?.backgroundColor = style.backgroundColor.cgColor
         containerView.layer?.cornerRadius = hudCornerRadius
         containerView.layer?.masksToBounds = true
+        if !isDarkInterface {
+            containerView.layer?.backgroundColor = NSColor.darkGray.withAlphaComponent(0.6).cgColor
+        }
+        containerView.layer?.borderWidth = 0.6
+        containerView.layer?.borderColor = NSColor.white.withAlphaComponent(0.06).cgColor
         containerView.layer?.shadowColor = style.shadowColor.cgColor
-        containerView.layer?.shadowOpacity = 1.0
-        containerView.layer?.shadowOffset = .init(width: 0, height: 2)
-        containerView.layer?.shadowRadius = 8
+        containerView.layer?.shadowOpacity = 0.6
+        containerView.layer?.shadowOffset = .init(width: 0, height: 4)
+        containerView.layer?.shadowRadius = 10
         window.contentView = containerView
 
         let contentStack = NSStackView()
@@ -223,8 +235,8 @@ class HUDManager {
         contentStack.addArrangedSubview(blocksView)
         blocksView.update(style: style, fillFraction: 0)
 
-        let spacingIconToDevice: CGFloat = 14
-        let spacingDeviceToBlocks: CGFloat = 20
+        let spacingIconToDevice: CGFloat = 16
+        let spacingDeviceToBlocks: CGFloat = 24
         contentStack.setCustomSpacing(spacingIconToDevice, after: iconContainer)
         contentStack.setCustomSpacing(spacingDeviceToBlocks, after: textStack)
 
@@ -361,7 +373,6 @@ class HUDManager {
 
             let containerView = context.containerView
             containerView.frame = .init(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
-            containerView.layer?.backgroundColor = style.backgroundColor.cgColor
             containerView.layer?.shadowColor = style.shadowColor.cgColor
             containerView.layer?.shadowOpacity = 1.0
 
@@ -447,21 +458,14 @@ class HUDManager {
             from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
         let isDarkInterface = bestMatch == .darkAqua || bestMatch == .vibrantDark
 
-        let backgroundBase = resolveColor(NSColor.windowBackgroundColor, for: appearance)
-        let backgroundColor = backgroundBase.withAlphaComponent(isDarkInterface ? 0.92 : 0.97)
-        let shadowColor = NSColor.black.withAlphaComponent(isDarkInterface ? 0.6 : 0.25)
-        let iconTintColor = resolveColor(NSColor.labelColor, for: appearance)
-        let primaryTextColor = resolveColor(NSColor.labelColor, for: appearance)
-        let secondaryTextColor = resolveColor(NSColor.secondaryLabelColor, for: appearance)
-        let neutralFillBase = resolveColor(NSColor.systemGray, for: appearance)
-        let blockFillColor = neutralFillBase.withAlphaComponent(isDarkInterface ? 0.99 : 1.0)
-        let blockEmptyColor =
-            isDarkInterface
-            ? NSColor.white.withAlphaComponent(0.25)
-            : NSColor.black.withAlphaComponent(0.12)
+        let shadowColor = NSColor.white.withAlphaComponent(0.9)
+        let iconTintColor = NSColor.white
+        let primaryTextColor = NSColor.white
+        let secondaryTextColor = NSColor.white.withAlphaComponent(0.9)
+        let blockFillColor = NSColor.white.withAlphaComponent(isDarkInterface ? 0.99 : 1.0)
+        let blockEmptyColor = NSColor.white.withAlphaComponent(0.3)
 
         return HUDStyle(
-            backgroundColor: backgroundColor,
             shadowColor: shadowColor,
             iconTintColor: iconTintColor,
             primaryTextColor: primaryTextColor,

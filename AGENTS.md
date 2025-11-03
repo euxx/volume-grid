@@ -1,5 +1,13 @@
 # Rules
 
+Research #changes or #codebase extensively until you fully understand the issue.
+
+Think hard to determine root cause and how to address it.
+
+Make sure you consider existing unit tests and behaviors to understand the side effects of a possible fix.
+
+Present a few options and open questions when appropriate.
+
 Don't say sentences that begin with perfect.
 
 Remove unnecessary comments.

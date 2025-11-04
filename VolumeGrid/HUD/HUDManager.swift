@@ -58,11 +58,11 @@ class HUDManager {
     private let hudWidth: CGFloat = 320
     private let hudHeight: CGFloat = 160
     private let hudAlpha: CGFloat = 0.97
-    private let hudDisplayDuration: TimeInterval = 1
+    private let hudDisplayDuration: TimeInterval = 1.4
     private let hudCornerRadius: CGFloat = 20
     private let marginX: CGFloat = 30
     private let minVerticalPadding: CGFloat = 14
-    private let animationDuration: TimeInterval = 1
+    private let animationDuration: TimeInterval = 0.7
 
     private var hudWindows: [CGDirectDisplayID: HUDWindowContext] = [:]
     private var hideHUDWorkItem: DispatchWorkItem?
@@ -445,7 +445,9 @@ class HUDManager {
                         hudWindow.animator().alphaValue = 0
                     },
                     completionHandler: {
-                        hudWindow.orderOut(nil)
+                        if hudWindow.alphaValue == 0 {
+                            hudWindow.orderOut(nil)
+                        }
                     })
             }
         }

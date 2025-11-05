@@ -344,7 +344,6 @@ class VolumeMonitor: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             _ = self.refreshMuteState()
-            self.showHUDForCurrentVolume()
         }
     }
 

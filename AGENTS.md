@@ -8,7 +8,7 @@ Make sure you consider existing unit tests and behaviors to understand the side 
 
 Present a few options and open questions when appropriate.
 
-Don't say sentences that begin with perfect.
+Don't say sentences that begin with perfect or similar.
 
 Remove unnecessary comments.
 
@@ -19,7 +19,6 @@ Check detected lint Problems from VSCode.
 
 Run commands after code changes to ensure consistent formatting:
 ```sh
-brew install swift-format
 swift-format lint --recursive .
 swift-format format --recursive --in-place .
 ```

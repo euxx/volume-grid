@@ -62,7 +62,8 @@ class HUDManager {
     private let hudCornerRadius: CGFloat = 20
     private let marginX: CGFloat = 30
     private let minVerticalPadding: CGFloat = 14
-    private let animationDuration: TimeInterval = 0.7
+    private let fadeInDuration: TimeInterval = 0.3
+    private let fadeOutDuration: TimeInterval = 0.6
 
     private var hudWindows: [CGDirectDisplayID: HUDWindowContext] = [:]
     private var hideHUDWorkItem: DispatchWorkItem?
@@ -424,7 +425,7 @@ class HUDManager {
                 hudWindow.orderFrontRegardless()
                 NSAnimationContext.runAnimationGroup(
                     { context in
-                        context.duration = self.animationDuration
+                        context.duration = self.fadeInDuration
                         hudWindow.animator().alphaValue = self.hudAlpha
                     }, completionHandler: nil)
             } else {
@@ -441,7 +442,7 @@ class HUDManager {
                 let hudWindow = context.window
                 NSAnimationContext.runAnimationGroup(
                     { context in
-                        context.duration = self.animationDuration
+                        context.duration = self.fadeOutDuration
                         hudWindow.animator().alphaValue = 0
                     },
                     completionHandler: {

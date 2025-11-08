@@ -329,10 +329,10 @@ class HUDManager {
     }
 
     func showHUD(
-        volumeScalar: CGFloat, deviceName: String?, isMuted: Bool, isUnsupported: Bool = false
+        volumeScalar: CGFloat, deviceName: String?, isUnsupported: Bool = false
     ) {
         let clampedScalar = volumeScalar.clamped(to: 0...1)
-        let isMutedForDisplay = isMuted || clampedScalar <= volumeEpsilon
+        let isMutedForDisplay = clampedScalar <= volumeEpsilon
         let displayedScalar = isMutedForDisplay ? 0 : clampedScalar
 
         let spacingIconToDevice: CGFloat = isUnsupported ? 20 : 14
@@ -380,7 +380,6 @@ class HUDManager {
             let volumePercentage = Int(clampedScalar * 100)
             let icon = VolumeIconHelper.hudIcon(
                 for: volumePercentage,
-                isMuted: isMutedForDisplay,
                 isUnsupported: isUnsupported
             )
 

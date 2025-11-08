@@ -6,7 +6,6 @@ import Cocoa
 struct HUDEvent {
     let volumeScalar: CGFloat
     let deviceName: String?
-    let isMuted: Bool
     let isUnsupported: Bool
 }
 
@@ -296,6 +295,11 @@ class VolumeMonitor: ObservableObject {
         state.setDeviceMuted(muted)
         if muted {
             volumePercentage = 0
+        } else {
+            // When unmuting, set volumePercentage to the actual current volume
+            if let volume = getCurrentVolume() {
+                volumePercentage = Int(round(volume * 100))
+            }
         }
         return muted ? true : nil
     }
@@ -343,7 +347,13 @@ class VolumeMonitor: ObservableObject {
     private func muteChanged(address _: AudioObjectPropertyAddress) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            let wasMuted = self.state.deviceMuted()
             _ = self.refreshMuteState()
+            let isNowMuted = self.state.deviceMuted()
+            if wasMuted != isNowMuted {
+                self.showVolumeHUD(
+                    volumeScalar: isNowMuted ? 0 : CGFloat(self.volumePercentage) / 100.0)
+            }
         }
     }
 
@@ -594,7 +604,6 @@ class VolumeMonitor: ObservableObject {
         let event = HUDEvent(
             volumeScalar: volumeScalar,
             deviceName: currentDevice?.name,
-            isMuted: state.deviceMuted(),
             isUnsupported: isUnsupported
         )
 

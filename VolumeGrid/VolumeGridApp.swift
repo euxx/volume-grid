@@ -19,7 +19,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.hudManager.showHUD(
                     volumeScalar: event.volumeScalar,
                     deviceName: event.deviceName,
-                    isMuted: event.isMuted,
                     isUnsupported: event.isUnsupported
                 )
             }

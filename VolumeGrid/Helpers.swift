@@ -60,7 +60,6 @@ enum VolumeIconHelper {
 
     static func icon(
         for percentage: Int,
-        isMuted: Bool = false,
         isUnsupported: Bool = false,
         forHUD: Bool = false
     ) -> VolumeIcon {
@@ -70,7 +69,7 @@ enum VolumeIconHelper {
             return VolumeIcon(symbolName: "nosign", size: 30)
         }
 
-        if isMuted || clamped == 0 {
+        if clamped == 0 {
             let size: CGFloat = forHUD ? 32 : 15
             let symbolName = forHUD ? "speaker.slash.fill" : "speaker.slash"
             return VolumeIcon(symbolName: symbolName, size: size)
@@ -94,9 +93,8 @@ enum VolumeIconHelper {
 
     static func hudIcon(
         for percentage: Int,
-        isMuted: Bool = false,
         isUnsupported: Bool = false
     ) -> VolumeIcon {
-        icon(for: percentage, isMuted: isMuted, isUnsupported: isUnsupported, forHUD: true)
+        icon(for: percentage, isUnsupported: isUnsupported, forHUD: true)
     }
 }

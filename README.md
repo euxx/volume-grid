@@ -1,62 +1,30 @@
 # VolumeGrid
 
-macOS Tohoe 26 changed the system volume HUD: it now appears only as a single bar in the top-right corner of the active display, removing the classic 16-tile feedback.
-
-VolumeGrid restores that classic HUD and adds the current output device indicator introduced in macOS Tohoe 26. It is designed for users who often adjust volume or work with multiple displays.
+Bringing back the classic volume HUD for macOS Tohoe 26 and a little more.
 
 ## Features
 
-- 🎵 Restores the classic volume HUD style
-- 🖥️ Supports multiple displays
-- 📊 Shows 16 tiles with quarter-tile increments for precise feedback
-- 🔄 Automatically listens for device changes and shows the HUD when, for example, a Bluetooth headset connects
-- 📱 Provides menu bar controls
-- 🔄 Supports launch at login
+- 🎵 Classic 16-tile volume HUD with quarter-tile precision
+- 📱 Shows output device name and volume level
+- 🖥️ Displays on all screens
+- 🔄 Appears when switching output devices
+- 📱 Subtle menu bar icon with progress bar
 
-## Usage
+## Installation
 
-1. Download the latest release from the [Releases](https://github.com/euxx/VolumeGrid/releases) page.
-2. Launch the app; it will continue to run in the background.
-3. A volume icon appears in the menu bar.
-4. Adjusting the system volume shows the classic HUD overlay.
-5. Click the menu bar icon to view the current volume and output device.
-6. Enable launch at login from the menu if desired.
+Recommended for macOS Tohoe 26 or later only.
 
-## Development
+Download the latest release from [Releases](https://github.com/euxx/VolumeGrid/releases).
 
-### Run Options
 
-- Double-click the `.app`, or run `open build/Build/Products/Release/VolumeGrid.app`
-- In Xcode choose `Product > Run` (shortcut `⌘R`) to debug directly
-- Command-line build: `xcodebuild -project VolumeGrid.xcodeproj -scheme VolumeGrid -configuration Release -derivedDataPath ~/Downloads/volumegrid-build`
+## Background
 
-### Code Quality Tools
+macOS Tohoe 26 changed the long-time system volume HUD: it now only appears in the top-right corner of the active display, removing the classic 16-tile feedback.
 
-This project uses the following tools to maintain code quality and consistency:
+The new HUD is hard to read at a glance, especially on multiple displays where the active display might not be the one you're using. It also lacks separate tiles, making precise volume adjustment difficult.
 
-- **swift-format**: Apple's official Swift code formatter focused on consistent style.
-  - Install: `brew install swift-format`
-  - Run (lint): `swift-format lint --recursive .`
-  - Run (format): `swift-format format --recursive --in-place .`
-  - Config: `.swift-format` (JSON format that sets indentation, line length, and more)
-  - Integration: Added to the Xcode Build Phase for automatic formatting.
-
-These tools ensure code adheres to project standards and run automatically during development.
-
-## TODOs
-
-- [x] Dark and light mode support / adapt HUD colors to the background
-- [x] Display a mute icon
-- [x] Choose an open-source license
-- [x] Automate releases with GitHub Actions
-- [ ] Add internationalization
-- [ ] Create an app icon
-- [x] Finalize launch-at-login behavior
-- [x] About view with app version and contact details
-- [x] Rename the project
-- [x] Replace all Chinese content with English
-- [x] Linters, type checkers, auto-formatters
+Different websites, videos, or music often have varying volume levels, so I frequently adjust the volume. I created VolumeGrid for personal use initially. I've been using it from day one, iterating through several versions and fixing edge cases. It should be functional.
 
 ## License
 
-VolumeGrid is available under the MIT License. See `LICENSE` for details.
+Available under the MIT License. See `LICENSE` for details.

@@ -1,19 +1,12 @@
 # Rules
 
-Research #changes or #codebase extensively until you fully understand the issue.
-
-Think hard to determine root cause and how to address it.
-
-Make sure you consider existing unit tests and behaviors to understand the side effects of a possible fix.
-
-Present a few options and open questions when appropriate.
-
-Don't say sentences that begin with perfect or similar.
-
-Remove unnecessary comments.
-
-Check detected lint Problems from VSCode.
-
+- Research #changes or #codebase extensively until fully understanding the issue.
+- Think hard to determine root cause and solution thoroughly.
+- Consider existing behaviors to understand side effects of fixes.
+- Present a few options and open questions when appropriate.
+- Don't say sentences that begin with perfect or similar.
+- Remove unnecessary comments.
+- Check VSCode lint problems.
 
 ## Development
 

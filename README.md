@@ -1,13 +1,13 @@
 # VolumeGrid
 
-Bringing back the classic volume HUD for macOS Tohoe 26 and a little more.
+Bringing back the classic volume HUD for macOS Tohoe 26 and more.
 
 ## Features
 
 - 🎵 Classic 16-tile volume HUD with quarter-tile precision
-- 📱 Shows output device name and volume level
+- 📱 Shows the sound output device and output volume
 - 🖥️ Displays on all screens
-- 🔄 Appears when switching output devices
+- 🔄 Appears when switching sound output devices
 - 📱 Subtle menu bar icon with progress bar
 
 ## Installation

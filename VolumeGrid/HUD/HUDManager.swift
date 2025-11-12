@@ -97,7 +97,7 @@ class HUDManager {
             backing: .buffered,
             defer: false
         )
-        window.level = .floating
+        window.level = .screenSaver
         window.backgroundColor = .clear
         window.isOpaque = false
         window.collectionBehavior = [

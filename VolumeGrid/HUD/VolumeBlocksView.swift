@@ -36,7 +36,11 @@ final class VolumeBlocksView: NSView {
         blockLayers.removeAll()
         fillLayers.removeAll()
 
-        layer?.sublayers?.forEach { $0.removeFromSuperlayer() }
+        if let sublayers = layer?.sublayers {
+            for sublayer in sublayers {
+                sublayer.removeFromSuperlayer()
+            }
+        }
 
         for index in 0..<blockCount {
             let x = CGFloat(index) * (blockWidth + blockSpacing)

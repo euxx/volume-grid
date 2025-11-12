@@ -6,7 +6,7 @@ Bringing back the classic volume HUD for macOS Tohoe 26 and more.
 
 - 🎵 Classic 16-tile volume HUD with quarter-tile precision
 - 📱 Shows the sound output device and output volume
-- 🖥️ Displays on all screens
+- 🖥️ Displays volume HUD on all screens
 - 🔄 Appears when switching sound output devices
 - 📱 Subtle menu bar icon with progress bar
 - 🛠️ Native, minimal, and lightweight implementation

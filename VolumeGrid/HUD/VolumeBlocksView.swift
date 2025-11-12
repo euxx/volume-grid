@@ -2,9 +2,9 @@ import Cocoa
 
 final class VolumeBlocksView: NSView {
     private let blockCount = 16
-    private let blockWidth: CGFloat = 14
+    private let blockWidth: CGFloat = 10
     private let blockHeight: CGFloat = 6
-    private let blockSpacing: CGFloat = 2
+    private let blockSpacing: CGFloat = 1
     private let cornerRadius: CGFloat = 0.5
     private var style: HUDStyle
     private var blockLayers: [CAShapeLayer] = []
@@ -19,7 +19,8 @@ final class VolumeBlocksView: NSView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
-        layer?.backgroundColor = CGColor.clear
+        layer?.backgroundColor =
+            NSColor(red: 30 / 255, green: 30 / 255, blue: 30 / 255, alpha: 0.5).cgColor
         createBlockLayers()
     }
 
@@ -52,7 +53,7 @@ final class VolumeBlocksView: NSView {
             let blockLayer = CAShapeLayer()
             blockLayer.frame = blockRect
             blockLayer.path = blockPath
-            blockLayer.fillColor = style.blockEmptyColor.cgColor
+            blockLayer.fillColor = CGColor.clear
 
             let fillLayer = CAShapeLayer()
             fillLayer.frame = CGRect(x: 0, y: 0, width: 0, height: blockHeight)
@@ -68,9 +69,6 @@ final class VolumeBlocksView: NSView {
 
     func update(style: HUDStyle, fillFraction: CGFloat) {
         self.style = style
-        for blockLayer in blockLayers {
-            blockLayer.fillColor = style.blockEmptyColor.cgColor
-        }
         for fillLayer in fillLayers {
             fillLayer.fillColor = style.blockFillColor.cgColor
         }

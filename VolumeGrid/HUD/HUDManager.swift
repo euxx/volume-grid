@@ -8,7 +8,6 @@ struct HUDStyle {
     let primaryTextColor: NSColor
     let secondaryTextColor: NSColor
     let blockFillColor: NSColor
-    let blockEmptyColor: NSColor
 }
 
 struct HUDViewComponents {
@@ -55,12 +54,12 @@ final class HUDWindowContext {
 }
 
 class HUDManager {
-    private let hudWidth: CGFloat = 320
+    private let hudWidth: CGFloat = 240
     private let hudHeight: CGFloat = 160
     private let hudAlpha: CGFloat = 0.97
     private let hudDisplayDuration: TimeInterval = 1.4
     private let hudCornerRadius: CGFloat = 20
-    private let marginX: CGFloat = 30
+    private let marginX: CGFloat = 10
     private let minVerticalPadding: CGFloat = 14
     private let fadeInDuration: TimeInterval = 0.3
     private let fadeOutDuration: TimeInterval = 0.6
@@ -110,22 +109,15 @@ class HUDManager {
 
         let containerView = NSVisualEffectView(
             frame: .init(x: 0, y: 0, width: hudWidth, height: hudHeight))
-        let bestMatch = window.effectiveAppearance.bestMatch(
-            from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
-        let isDarkInterface = bestMatch == .darkAqua || bestMatch == .vibrantDark
         containerView.material = .hudWindow
-        if !isDarkInterface {
-            containerView.appearance = NSAppearance(named: .darkAqua)
-        }
+        containerView.appearance = NSAppearance(named: .darkAqua)
         containerView.blendingMode = .behindWindow
         containerView.state = .active
         containerView.wantsLayer = true
         let style = hudStyle(for: window.effectiveAppearance)
         containerView.layer?.cornerRadius = hudCornerRadius
         containerView.layer?.masksToBounds = true
-        if !isDarkInterface {
-            containerView.layer?.backgroundColor = NSColor.darkGray.withAlphaComponent(0.6).cgColor
-        }
+        containerView.layer?.backgroundColor = NSColor.darkGray.withAlphaComponent(0.7).cgColor
         containerView.layer?.borderWidth = 0.6
         containerView.layer?.borderColor = NSColor.white.withAlphaComponent(0.06).cgColor
         containerView.layer?.shadowColor = style.shadowColor.cgColor
@@ -321,8 +313,7 @@ class HUDManager {
         let gapBetweenDeviceAndCount: CGFloat = 8
         let combinedWidth =
             deviceTextSize.width + gapBetweenDeviceAndCount + effectiveStatusTextWidth
-        let marginX: CGFloat = 24
-        let dynamicHudWidth = max(320, combinedWidth + 2 * marginX)
+        let dynamicHudWidth = max(hudWidth, combinedWidth + marginX)
 
         return (dynamicHudWidth, effectiveStatusTextWidth)
     }
@@ -455,24 +446,18 @@ class HUDManager {
     }
 
     private func hudStyle(for appearance: NSAppearance) -> HUDStyle {
-        let bestMatch = appearance.bestMatch(
-            from: [.darkAqua, .vibrantDark, .aqua, .vibrantLight])
-        let isDarkInterface = bestMatch == .darkAqua || bestMatch == .vibrantDark
-
         let shadowColor = NSColor.white.withAlphaComponent(0.9)
-        let iconTintColor = NSColor.white
-        let primaryTextColor = NSColor.white
-        let secondaryTextColor = NSColor.white.withAlphaComponent(0.9)
-        let blockFillColor = NSColor.white.withAlphaComponent(isDarkInterface ? 0.99 : 1.0)
-        let blockEmptyColor = NSColor.white.withAlphaComponent(0.3)
+        let iconTintColor = NSColor.white.withAlphaComponent(0.9)
+        let primaryTextColor = NSColor.white.withAlphaComponent(0.9)
+        let secondaryTextColor = NSColor.white.withAlphaComponent(0.79)
+        let blockFillColor = NSColor.white.withAlphaComponent(0.9)
 
         return HUDStyle(
             shadowColor: shadowColor,
             iconTintColor: iconTintColor,
             primaryTextColor: primaryTextColor,
             secondaryTextColor: secondaryTextColor,
-            blockFillColor: blockFillColor,
-            blockEmptyColor: blockEmptyColor
+            blockFillColor: blockFillColor
         )
     }
 }

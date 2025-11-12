@@ -449,7 +449,7 @@ class HUDManager {
         let shadowColor = NSColor.white.withAlphaComponent(0.9)
         let iconTintColor = NSColor.white.withAlphaComponent(0.9)
         let primaryTextColor = NSColor.white.withAlphaComponent(0.9)
-        let secondaryTextColor = NSColor.white.withAlphaComponent(0.79)
+        let secondaryTextColor = NSColor.white.withAlphaComponent(0.9)
         let blockFillColor = NSColor.white.withAlphaComponent(0.9)
 
         return HUDStyle(

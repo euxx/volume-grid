@@ -1,5 +1,5 @@
 cask "volumegrid" do
-  version "0.1.0"
+  version "1.0.0"
   sha256 "PLACEHOLDER_SHA256_HASH"
 
   url "https://github.com/euxx/VolumeGrid/releases/download/v#{version}/VolumeGrid-#{version}.dmg"
@@ -11,5 +11,5 @@ cask "volumegrid" do
 
   app "VolumeGrid.app"
 
-  uninstall quit: "eux.volumegrid"
+  uninstall quit: "euxx.volumegrid"
 end

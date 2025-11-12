@@ -297,8 +297,7 @@ class HUDManager {
         }
 
         for (_, context) in remaining {
-            context.window.orderOut(nil)
-            context.window.contentView = nil
+            context.window.close()
         }
 
         hudWindows = updated

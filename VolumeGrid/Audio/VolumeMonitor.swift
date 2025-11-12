@@ -141,6 +141,7 @@ class VolumeMonitor: ObservableObject {
         PassthroughSubject<HUDEvent, Never>()
     }()
     private var volumeChangeDebouncer: DispatchWorkItem?
+    private var deviceChangeDebouncer: DispatchWorkItem?
 
     nonisolated private var volumeListener: AudioObjectPropertyListenerBlock? {
         get { volumeListenerProperty.get() }
@@ -198,6 +199,7 @@ class VolumeMonitor: ObservableObject {
 
     deinit {
         volumeChangeDebouncer?.cancel()
+        deviceChangeDebouncer?.cancel()
         if Thread.isMainThread {
             nonisolatedStopListening()
         }
@@ -358,41 +360,47 @@ class VolumeMonitor: ObservableObject {
     }
 
     private func deviceChanged() {
-        stopListening()
-        updateDefaultOutputDevice()
-        getAudioDevices()
-        startListening()
+        deviceChangeDebouncer?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.stopListening()
+            self.updateDefaultOutputDevice()
+            self.getAudioDevices()
+            self.startListening()
 
-        let currentOutputID = state.defaultOutputDeviceIDValue()
-        if currentOutputID != 0 {
-            if let current = audioDevices.first(where: { $0.id == currentOutputID }) {
-                currentDevice = current
-            } else if let name = deviceManager.getDeviceName(currentOutputID) {
-                currentDevice = AudioDevice(id: currentOutputID, name: name)
+            let currentOutputID = self.state.defaultOutputDeviceIDValue()
+            if currentOutputID != 0 {
+                if let current = self.audioDevices.first(where: { $0.id == currentOutputID }) {
+                    self.currentDevice = current
+                } else if let name = self.deviceManager.getDeviceName(currentOutputID) {
+                    self.currentDevice = AudioDevice(id: currentOutputID, name: name)
+                } else {
+                    self.currentDevice = nil
+                }
             } else {
-                currentDevice = nil
+                self.currentDevice = nil
             }
-        } else {
-            currentDevice = nil
-        }
-        updateVolumeSupportState(
-            currentOutputID != 0 && deviceManager.supportsVolumeControl(currentOutputID))
+            self.updateVolumeSupportState(
+                currentOutputID != 0 && self.deviceManager.supportsVolumeControl(currentOutputID))
 
-        if currentOutputID != 0 && deviceManager.supportsVolumeControl(currentOutputID) {
-            _ = refreshMuteState()
-        }
+            if currentOutputID != 0 && self.deviceManager.supportsVolumeControl(currentOutputID) {
+                _ = self.refreshMuteState()
+            }
 
-        if let volume = getCurrentVolume() {
-            let clamped = volume.clamped(to: 0...1)
-            let percentage = Int(round(clamped * 100))
-            self.volumePercentage = percentage
-            self.state.updateLastVolumeScalar(CGFloat(clamped))
-            self.showVolumeHUD(volumeScalar: CGFloat(clamped))
-        } else {
-            self.volumePercentage = 0
-            self.state.updateLastVolumeScalar(0)
-            self.showVolumeHUD(volumeScalar: 0, isUnsupported: true)
+            if let volume = self.getCurrentVolume() {
+                let clamped = volume.clamped(to: 0...1)
+                let percentage = Int(round(clamped * 100))
+                self.volumePercentage = percentage
+                self.state.updateLastVolumeScalar(CGFloat(clamped))
+                self.showVolumeHUD(volumeScalar: CGFloat(clamped))
+            } else {
+                self.volumePercentage = 0
+                self.state.updateLastVolumeScalar(0)
+                self.showVolumeHUD(volumeScalar: 0, isUnsupported: true)
+            }
         }
+        deviceChangeDebouncer = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: workItem)
     }
 
     private func showVolumeHUD(volumeScalar: CGFloat, isUnsupported: Bool = false) {

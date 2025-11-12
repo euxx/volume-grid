@@ -15,6 +15,17 @@ Bringing back the classic volume HUD for macOS Tohoe 26 and more.
 
 Recommended for macOS Tohoe 26 or later only.
 
+### Via Homebrew Cask
+
+Recommended, as it will handle updates.
+
+```bash
+brew tap euxx/volumegrid
+brew install --cask volumegrid
+```
+
+### Manual Download
+
 Download the latest release from [Releases](https://github.com/euxx/VolumeGrid/releases).
 
 

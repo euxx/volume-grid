@@ -365,7 +365,7 @@ class HUDManager {
             let screenFrame = screen.frame
             let newWindowFrame = NSRect(
                 x: screenFrame.midX - dynamicHudWidth / 2,
-                y: screenFrame.midY - hudHeight / 2,
+                y: screenFrame.midY - hudHeight / 2 - 40,
                 width: dynamicHudWidth,
                 height: hudHeight
             )

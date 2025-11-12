@@ -9,6 +9,7 @@ Bringing back the classic volume HUD for macOS Tohoe 26 and more.
 - 🖥️ Displays on all screens
 - 🔄 Appears when switching sound output devices
 - 📱 Subtle menu bar icon with progress bar
+- 🛠️ Native, minimal, and lightweight implementation
 
 ## Installation
 

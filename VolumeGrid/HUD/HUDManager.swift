@@ -101,7 +101,6 @@ class HUDManager {
         window.backgroundColor = .clear
         window.isOpaque = false
         window.collectionBehavior = [
-            .canJoinAllSpaces,
             .transient,
             .ignoresCycle,
         ]

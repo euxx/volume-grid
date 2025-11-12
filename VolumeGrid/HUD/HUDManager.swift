@@ -476,12 +476,4 @@ class HUDManager {
             blockEmptyColor: blockEmptyColor
         )
     }
-
-    private func resolveColor(_ color: NSColor, for appearance: NSAppearance) -> NSColor {
-        var resolved = color
-        appearance.performAsCurrentDrawingAppearance {
-            resolved = color.usingColorSpace(.extendedSRGB) ?? color
-        }
-        return resolved
-    }
 }

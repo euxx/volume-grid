@@ -1,23 +1,23 @@
 # VolumeGrid
 
-Bringing back the classic volume HUD for macOS Tohoe 26 and more.
+Bringing back the classic volume HUD for macOS Tohoe 26 with more.
 
 ## Features
 
 - 🎵 Classic 16-tile volume HUD with quarter-tile precision
-- 🎧 Shows the sound output device and numeric volume
+- 🎧 Displays the sound output device and numeric volume on volume HUD
 - 🖥️ Displays volume HUD on all screens
-- 🔄 Appears when switching sound output devices
-- 🔊 Subtle menu bar icon with progress bar
-- 🛠️ Native, minimal, and lightweight implementation
+- 🔄 Displays volume HUD when switching sound output devices
+- 🔊 Menu bar icon with subtle progress bar that changes with volume
+- 🛠️ Native, minimal, lightweight implementation
 
 ## Installation
 
-Recommended for macOS Tohoe 26 or later only.
+Recommended for macOS Tohoe 26 and later.
 
 ### Via Homebrew Cask
 
-Recommended, as it will handle updates.
+Recommended for automatic updates.
 
 ```bash
 brew tap euxx/volumegrid
@@ -28,15 +28,14 @@ brew install --cask volumegrid
 
 Download the latest release from [Releases](https://github.com/euxx/VolumeGrid/releases).
 
-
 ## Background
 
-macOS Tohoe 26 changed the long-time system volume HUD: it now only appears in the top-right corner of the active display, removing the classic 16-tile feedback.
+macOS Tohoe 26 replaced the classic 16-tile volume HUD with a smaller one that appears only in the top-right corner of the active display.
 
-The new HUD is hard to read at a glance, especially on multiple displays where the active display might not be the one you're using. It also lacks separate tiles, making precise volume adjustment difficult.
+The new HUD is hard to read at a glance, especially on multiple displays where the active screen might not be the one in use. It also lacks separate tiles, making precise volume adjustments challenging.
 
-Different websites, videos, or music often have varying volume levels, so I frequently adjust the volume. I created VolumeGrid for personal use initially. I've been using it from day one, iterating through several versions and fixing edge cases. It should be functional.
+Due to varying volume levels across different websites, videos, and music, I often adjust the volume. I initially created VolumeGrid for personal use and have been using it since day one, iterating through versions and fixing edge cases. It is fully functional.
 
 ## License
 
-Available under the MIT License. See `LICENSE` for details.
+Under the [MIT](LICENSE) License.

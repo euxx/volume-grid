@@ -32,9 +32,9 @@ Download the latest release from [Releases](https://github.com/euxx/VolumeGrid/r
 
 macOS Tohoe 26 replaced the classic 16-tile volume HUD with a smaller one that appears only in the top-right corner of the active display.
 
-The new HUD is hard to read at a glance, especially on multiple displays where the active screen might not be the one in use. It also lacks separate tiles, making precise volume adjustments challenging.
+The new HUD is hard to read at a glance, especially on multiple displays where the active screen might not be the one in use. 
 
-Due to varying volume levels across different websites, videos, and music, I often adjust the volume. I initially created VolumeGrid for personal use and have been using it since day one, iterating through versions and fixing edge cases. It is fully functional.
+Due to varying volume levels across different websites, videos, and music, I frequently adjust the volume. I have been using VolumeGrid since day one, going through several iterations and fixing edge cases.
 
 ## License
 

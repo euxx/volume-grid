@@ -18,15 +18,15 @@ swift-format format --recursive --in-place .
 
 Try building and running the project to verify correctness:
 ```sh
-xcodebuild -project VolumeGrid.xcodeproj -scheme VolumeGrid -configuration Release -derivedDataPath ~/Downloads/volumegrid-build 2>&1 | grep -i warning
+xcodebuild -project VolumeGrid.xcodeproj -scheme "Volume Grid" -configuration Release -derivedDataPath ~/Downloads/volumegrid-build 2>&1 | grep -i warning
 
-xcodebuild clean -project VolumeGrid.xcodeproj -scheme VolumeGrid -configuration Release -derivedDataPath ~/Downloads/volumegrid-build
+xcodebuild clean -project VolumeGrid.xcodeproj -scheme "Volume Grid" -configuration Release -derivedDataPath ~/Downloads/volumegrid-build
 
-xcodebuild -project VolumeGrid.xcodeproj -scheme VolumeGrid -configuration Release -derivedDataPath ~/Downloads/volumegrid-build
+xcodebuild -project VolumeGrid.xcodeproj -scheme "Volume Grid" -configuration Release -derivedDataPath ~/Downloads/volumegrid-build
 
-killall VolumeGrid
+killall "Volume Grid"
 
-open ~/Downloads/volumegrid-build/Build/Products/Release/VolumeGrid.app
+open ~/Downloads/volumegrid-build/Build/Products/Release/Volume\ Grid.app
 ```
 
 ## Release

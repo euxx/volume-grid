@@ -11,7 +11,8 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "VolumeGrid",
-            path: "VolumeGrid"
+            path: "VolumeGrid",
+            resources: [.copy("Assets/icon.png")]
         )
     ]
 )

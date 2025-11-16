@@ -162,7 +162,7 @@ final class StatusBarController {
         containerView.translatesAutoresizingMaskIntoConstraints = false
 
         let appIcon = NSImageView()
-        appIcon.image = NSApplication.shared.applicationIconImage
+        appIcon.image = NSImage(named: "icon") ?? NSApplication.shared.applicationIconImage
         appIcon.translatesAutoresizingMaskIntoConstraints = false
 
         let appNameLabel = NSTextField(labelWithString: appName)

@@ -1,6 +1,6 @@
 # VolumeGrid <img src="assets/icon.png" width="40" height="40" alt="VolumeGrid Icon" style="vertical-align: middle; margin-left: 20px;">
 
-Bringing back the classic volume HUD for macOS Tohoe 26 with more.
+Bringing back the classic volume HUD for macOS Tahoe 26 with more.
 
 ## Features
 
@@ -13,7 +13,7 @@ Bringing back the classic volume HUD for macOS Tohoe 26 with more.
 
 ## Installation
 
-Recommended for macOS Tohoe 26 and later.
+Recommended for macOS Tahoe 26 and later.
 
 ### Via Homebrew Cask
 
@@ -30,7 +30,7 @@ Download the latest release from [Releases](https://github.com/euxx/VolumeGrid/r
 
 ## Background
 
-macOS Tohoe 26 replaced the classic 16-tile volume HUD with a smaller one that appears only in the top-right corner of the active display.
+macOS Tahoe 26 replaced the classic 16-tile volume HUD with a smaller one that appears only in the top-right corner of the active display.
 
 The new HUD is hard to read at a glance, especially on multiple displays where the active screen might not be the one in use.
 

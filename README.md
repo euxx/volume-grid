@@ -20,8 +20,7 @@ Recommended for macOS Tahoe 26 and later.
 Recommended for automatic updates.
 
 ```bash
-brew tap euxx/volumegrid
-brew install --cask volumegrid
+brew install --cask euxx/volumegrid
 ```
 
 ### Manual Download

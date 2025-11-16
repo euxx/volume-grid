@@ -28,7 +28,7 @@ jobs:
           set -eo pipefail
           xcodebuild \
             -project VolumeGrid.xcodeproj \
-            -scheme VolumeGrid \
+            -scheme "Volume Grid" \
             -configuration Release \
             -derivedDataPath build \
             CODE_SIGN_IDENTITY="" \
@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           set -eo pipefail
-          APP_PATH="build/Build/Products/Release/VolumeGrid.app"
+          APP_PATH="build/Build/Products/Release/Volume Grid.app"
           if [[ ! -d "${APP_PATH}" ]]; then
             echo "Expected app bundle not found at ${APP_PATH}"
             exit 1
@@ -53,13 +53,13 @@ jobs:
           mkdir -p "${TMP_DIR}"
           cp -r "${APP_PATH}" "${TMP_DIR}/"
           create-dmg \
-            --volname "VolumeGrid" \
+            --volname "Volume Grid" \
             --window-pos 200 120 \
             --window-size 600 400 \
             --icon-size 100 \
-            --icon "VolumeGrid.app" 150 200 \
+            --icon "Volume Grid.app" 150 200 \
             --app-drop-link 450 200 \
-            "VolumeGrid-${GITHUB_REF_NAME}.dmg" \
+            "Volume Grid-${GITHUB_REF_NAME}.dmg" \
             "${TMP_DIR}"
 
           rm -rf "${TMP_DIR}"
@@ -67,15 +67,15 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VolumeGrid-${{ github.ref_name }}-app
-          path: VolumeGrid-${{ github.ref_name }}.dmg
+          name: Volume Grid-${{ github.ref_name }}-app
+          path: Volume Grid-${{ github.ref_name }}.dmg
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          files: VolumeGrid-${{ github.ref_name }}.dmg
+          files: Volume Grid-${{ github.ref_name }}.dmg
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

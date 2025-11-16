@@ -48,9 +48,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-    043089CA2EA61F7A005D83F7 /* VolumeGrid */ = {
+    043089CA2EA61F7A005D83F7 /* Volume Grid */ = {
       isa = PBXNativeTarget;
-      buildConfigurationList = 043089D62EA61F7B005D83F7 /* Build configuration list for PBXNativeTarget "VolumeGrid" */;
+      buildConfigurationList = 043089D62EA61F7B005D83F7 /* Build configuration list for PBXNativeTarget "Volume Grid" */;
       buildPhases = (
         043089C72EA61F7A005D83F7 /* Sources */,
         043089C82EA61F7A005D83F7 /* Frameworks */,
@@ -63,11 +63,11 @@
       fileSystemSynchronizedGroups = (
         043089CD2EA61F7A005D83F7 /* VolumeGrid */,
       );
-      name = VolumeGrid;
+      name = "Volume Grid";
       packageProductDependencies = (
       );
-      productName = VolumeGrid;
-      productReference = 043089CB2EA61F7A005D83F7 /* VolumeGrid.app */;
+      productName = "Volume Grid";
+      productReference = 043089CB2EA61F7A005D83F7 /* Volume Grid.app */;
       productType = "com.apple.product-type.application";
     };
 /* End PBXNativeTarget section */
@@ -85,7 +85,7 @@
           };
         };
       };
-      buildConfigurationList = 043089C62EA61F7A005D83F7 /* Build configuration list for PBXProject "VolumeGrid" */;
+      buildConfigurationList = 043089C62EA61F7A005D83F7 /* Build configuration list for PBXProject "Volume Grid" */;
       developmentRegion = en;
       hasScannedForEncodings = 0;
       knownRegions = (
@@ -99,7 +99,7 @@
       projectDirPath = "";
       projectRoot = "";
       targets = (
-        043089CA2EA61F7A005D83F7 /* VolumeGrid */,
+        043089CA2EA61F7A005D83F7 /* Volume Grid */,
       );
     };
 /* End PBXProject section */
@@ -317,7 +317,7 @@
       defaultConfigurationIsVisible = 0;
       defaultConfigurationName = Release;
     };
-    043089D62EA61F7B005D83F7 /* Build configuration list for PBXNativeTarget "VolumeGrid" */ = {
+    043089D62EA61F7B005D83F7 /* Build configuration list for PBXNativeTarget "Volume Grid" */ = {
       isa = XCConfigurationList;
       buildConfigurations = (
         043089D72EA61F7B005D83F7 /* Debug */,

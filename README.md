@@ -1,4 +1,4 @@
-# VolumeGrid
+# VolumeGrid <img src="assets/icon.png" width="40" height="40" alt="VolumeGrid Icon" style="vertical-align: middle; margin-left: 20px;">
 
 Bringing back the classic volume HUD for macOS Tohoe 26 with more.
 

@@ -140,12 +140,13 @@ final class StatusBarController {
             return
         }
 
+        let bundle = Bundle.main
         let appName =
-            Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "VolumeGrid"
+            bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Volume Grid"
         let appVersion = [
-            Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
                 ?? "Unknown",
-            Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown",
+            bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown",
         ]
 
         let window = NSWindow(
@@ -162,7 +163,7 @@ final class StatusBarController {
         containerView.translatesAutoresizingMaskIntoConstraints = false
 
         let appIcon = NSImageView()
-        appIcon.image = NSImage(named: "icon") ?? NSApplication.shared.applicationIconImage
+        appIcon.image = NSApplication.shared.applicationIconImage
         appIcon.translatesAutoresizingMaskIntoConstraints = false
 
         let appNameLabel = NSTextField(labelWithString: appName)

@@ -59,7 +59,7 @@ jobs:
             --icon-size 100 \
             --icon "Volume Grid.app" 150 200 \
             --app-drop-link 450 200 \
-            "Volume Grid-${GITHUB_REF_NAME}.dmg" \
+            "VolumeGrid-${GITHUB_REF_NAME}.dmg" \
             "${TMP_DIR}"
 
           rm -rf "${TMP_DIR}"
@@ -67,15 +67,15 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Volume Grid-${{ github.ref_name }}-app
-          path: Volume Grid-${{ github.ref_name }}.dmg
+          name: VolumeGrid-${{ github.ref_name }}-app
+          path: VolumeGrid-${{ github.ref_name }}.dmg
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          files: Volume Grid-${{ github.ref_name }}.dmg
+          files: VolumeGrid-${{ github.ref_name }}.dmg
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

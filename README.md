@@ -4,7 +4,7 @@ Bringing back the classic volume HUD for macOS Tahoe 26 with more.
 
 ## Features
 
-- 🎵 Classic 16-tile volume HUD with quarter-tile precision
+- 🔲 Classic 16-tile volume HUD with quarter-tile precision
 - 🎧 Shows the sound output device and numeric volume on volume HUD
 - 🖥️ Shows volume HUD on all displays
 - 🔄 Shows volume HUD when switching sound output devices

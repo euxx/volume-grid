@@ -12,6 +12,7 @@ jobs:
     runs-on: macos-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout repository
@@ -80,12 +81,21 @@ jobs:
 
       - name: Commit and push cask updates
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global url."https://${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git fetch origin main
+          git checkout main
           git add Casks/volume-grid.rb
-          git commit -m "chore: update cask version and sha256 for ${GITHUB_REF_NAME}" || true
-          git push
+          if git diff-index --quiet HEAD --; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update cask version and sha256 for ${GITHUB_REF_NAME}"
+            git push origin main
+          fi
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

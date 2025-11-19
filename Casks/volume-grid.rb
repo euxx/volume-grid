@@ -1,4 +1,4 @@
-cask "volumegrid" do
+cask "volume-grid" do
   version "1.0.0"
   sha256 "PLACEHOLDER_SHA256_HASH"
 

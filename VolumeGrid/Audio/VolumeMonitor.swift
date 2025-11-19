@@ -198,11 +198,10 @@ class VolumeMonitor: ObservableObject {
     }
 
     deinit {
+        // Cancel any pending UI update tasks to prevent them from executing after deinit
+        // CoreAudio listeners must be explicitly cleaned up via stopListening() before deallocation
         volumeChangeDebouncer?.cancel()
         deviceChangeDebouncer?.cancel()
-        if Thread.isMainThread {
-            nonisolatedStopListening()
-        }
     }
 
     nonisolated var hudEvents: AnyPublisher<HUDEvent, Never> {
@@ -605,6 +604,10 @@ class VolumeMonitor: ObservableObject {
     }
 
     func stopListening() {
+        // Cancel pending UI updates to prevent them from firing after stopping
+        volumeChangeDebouncer?.cancel()
+        deviceChangeDebouncer?.cancel()
+
         nonisolatedStopListening()
     }
 

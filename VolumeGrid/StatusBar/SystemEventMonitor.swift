@@ -5,6 +5,8 @@ final class SystemEventMonitor {
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var lastEventData: Int?
+    private var lastEventTime: Date?
+    private let debounceInterval: TimeInterval = 0.1
 
     init() {}
 
@@ -28,6 +30,7 @@ final class SystemEventMonitor {
             globalMonitor = nil
             localMonitor = nil
             lastEventData = nil
+            lastEventTime = nil
         }
 
         if let monitor = globalMonitor {
@@ -45,10 +48,15 @@ final class SystemEventMonitor {
         let keyState = (keyFlags & 0xFF00) >> 8
         guard keyState == 0xA else { return }
 
-        if let last = lastEventData, last == event.data1 {
-            return
+        let now = Date()
+        if let last = lastEventData, last == event.data1, let lastTime = lastEventTime {
+            let timeSinceLastEvent = now.timeIntervalSince(lastTime)
+            if timeSinceLastEvent < debounceInterval {
+                return
+            }
         }
         lastEventData = event.data1
+        lastEventTime = now
 
         switch keyCode & 0xFF {
         case 0, 1, 7:

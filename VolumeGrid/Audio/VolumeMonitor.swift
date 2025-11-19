@@ -311,23 +311,12 @@ class VolumeMonitor: ObservableObject {
     }
 
     private func volumeChanged(address _: AudioObjectPropertyAddress) {
+        // Always show HUD when volume changes (triggered by volume key press or API change)
         guard let volume = getCurrentVolume() else { return }
 
         let clampedVolume = volume.clamped(to: 0...1)
         let percentage = Int(round(clampedVolume * 100))
         let currentScalar = CGFloat(clampedVolume)
-        let previousScalar = state.lastVolumeScalarSnapshot()
-
-        let shouldShowHUD: Bool
-        if let previousScalar {
-            let delta = abs(previousScalar - currentScalar)
-            let isAtBoundary =
-                (currentScalar <= volumeEpsilon && previousScalar <= volumeEpsilon)
-                || (currentScalar >= (1 - volumeEpsilon) && previousScalar >= (1 - volumeEpsilon))
-            shouldShowHUD = delta > volumeEpsilon || isAtBoundary
-        } else {
-            shouldShowHUD = true
-        }
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -338,27 +327,31 @@ class VolumeMonitor: ObservableObject {
                 self.state.setDeviceMuted(false)
             }
 
-            if shouldShowHUD {
-                self.volumeChangeDebouncer?.cancel()
-                let capturedScalar = currentScalar
-                let debouncer = DispatchWorkItem { [weak self] in
-                    self?.showVolumeHUD(volumeScalar: capturedScalar)
-                }
-                self.volumeChangeDebouncer = debouncer
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: debouncer)
+            self.volumeChangeDebouncer?.cancel()
+            let capturedScalar = currentScalar
+            let debouncer = DispatchWorkItem { [weak self] in
+                self?.showVolumeHUD(volumeScalar: capturedScalar)
             }
+            self.volumeChangeDebouncer = debouncer
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: debouncer)
         }
     }
 
     private func muteChanged(address _: AudioObjectPropertyAddress) {
+        // CoreAudio can fire mute callbacks even when state doesn't change (e.g., browser video resolution change)
+        // Only show HUD when mute state actually changes to avoid spurious displays
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let wasMuted = self.state.deviceMuted()
+            let previousVolumeScalar =
+                self.state.lastVolumeScalarSnapshot() ?? CGFloat(self.volumePercentage) / 100.0
             _ = self.refreshMuteState()
             let isNowMuted = self.state.deviceMuted()
+
+            // Only display HUD if mute state actually changed
             if wasMuted != isNowMuted {
-                self.showVolumeHUD(
-                    volumeScalar: isNowMuted ? 0 : CGFloat(self.volumePercentage) / 100.0)
+                let displayScalar = isNowMuted ? 0 : previousVolumeScalar
+                self.showVolumeHUD(volumeScalar: displayScalar)
             }
         }
     }
@@ -418,9 +411,10 @@ class VolumeMonitor: ObservableObject {
 
         if let volume = getCurrentVolume() {
             let clamped = volume.clamped(to: 0...1)
-            scalar = CGFloat(clamped)
-            state.updateLastVolumeScalar(scalar)
-            volumePercentage = state.deviceMuted() ? 0 : Int(round(clamped * 100))
+            let isMuted = state.deviceMuted()
+            scalar = isMuted ? 0 : CGFloat(clamped)
+            state.updateLastVolumeScalar(CGFloat(clamped))
+            volumePercentage = isMuted ? 0 : Int(round(clamped * 100))
             isUnsupported = false
         } else {
             scalar = state.lastVolumeScalarSnapshot() ?? 0
@@ -521,6 +515,7 @@ class VolumeMonitor: ObservableObject {
             }
         }
 
+        // Key press handler: always show HUD when user presses volume/mute keys
         systemEventMonitor.start { [weak self] in
             guard let self else { return }
             if self.isCurrentDeviceVolumeSupported {

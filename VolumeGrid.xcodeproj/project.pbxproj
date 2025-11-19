@@ -6,8 +6,13 @@
   objectVersion = 77;
   objects = {
 
+/* Begin PBXBuildFile section */
+    0BE5742B2ECDF57B00D15640 /* VolumeGrid.icon in Resources */ = {isa = PBXBuildFile; fileRef = 0BE574272ECDF57B00D15640 /* VolumeGrid.icon */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
     043089CB2EA61F7A005D83F7 /* Volume Grid.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Volume Grid.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+    0BE574272ECDF57B00D15640 /* VolumeGrid.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = VolumeGrid.icon; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -32,6 +37,7 @@
     043089C22EA61F7A005D83F7 = {
       isa = PBXGroup;
       children = (
+        0BE574272ECDF57B00D15640 /* VolumeGrid.icon */,
         043089CD2EA61F7A005D83F7 /* VolumeGrid */,
         043089CC2EA61F7A005D83F7 /* Products */,
       );
@@ -40,7 +46,7 @@
     043089CC2EA61F7A005D83F7 /* Products */ = {
       isa = PBXGroup;
       children = (
-        043089CB2EA61F7A005D83F7 /* VolumeGrid.app */,
+        043089CB2EA61F7A005D83F7 /* Volume Grid.app */,
       );
       name = Products;
       sourceTree = "<group>";
@@ -85,7 +91,7 @@
           };
         };
       };
-      buildConfigurationList = 043089C62EA61F7A005D83F7 /* Build configuration list for PBXProject "Volume Grid" */;
+      buildConfigurationList = 043089C62EA61F7A005D83F7 /* Build configuration list for PBXProject "VolumeGrid" */;
       developmentRegion = en;
       hasScannedForEncodings = 0;
       knownRegions = (
@@ -109,6 +115,7 @@
       isa = PBXResourcesBuildPhase;
       buildActionMask = 2147483647;
       files = (
+        0BE5742B2ECDF57B00D15640 /* VolumeGrid.icon in Resources */,
       );
       runOnlyForDeploymentPostprocessing = 0;
     };
@@ -248,20 +255,20 @@
     043089D72EA61F7B005D83F7 /* Debug */ = {
       isa = XCBuildConfiguration;
       buildSettings = {
+        ASSETCATALOG_COMPILER_APPICON_NAME = VolumeGrid;
         CODE_SIGN_ENTITLEMENTS = VolumeGrid/VolumeGrid.entitlements;
         CODE_SIGN_STYLE = Automatic;
         COMBINE_HIDPI_IMAGES = YES;
         CURRENT_PROJECT_VERSION = 1;
+        DISPLAY_NAME = "Volume Grid";
         ENABLE_APP_SANDBOX = YES;
         ENABLE_PREVIEWS = YES;
         ENABLE_USER_SELECTED_FILES = readonly;
         GENERATE_INFOPLIST_FILE = YES;
         INFOPLIST_KEY_CFBundleDisplayName = "$(DISPLAY_NAME)";
         INFOPLIST_KEY_NSHumanReadableCopyright = "";
-        LD_RUNPATH_SEARCH_PATHS = (
-        );
+        LD_RUNPATH_SEARCH_PATHS = "";
         MARKETING_VERSION = 1.0.0;
-        DISPLAY_NAME = "Volume Grid";
         PRODUCT_BUNDLE_IDENTIFIER = one.eux.volumegrid;
         PRODUCT_NAME = "Volume Grid";
         REGISTER_APP_GROUPS = YES;
@@ -271,17 +278,18 @@
         SWIFT_EMIT_LOC_STRINGS = YES;
         SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
         SWIFT_VERSION = 5.0;
-        ASSETCATALOG_COMPILER_APPICON_NAME = VolumeGrid;
       };
       name = Debug;
     };
     043089D82EA61F7B005D83F7 /* Release */ = {
       isa = XCBuildConfiguration;
       buildSettings = {
+        ASSETCATALOG_COMPILER_APPICON_NAME = VolumeGrid;
         CODE_SIGN_ENTITLEMENTS = VolumeGrid/VolumeGrid.entitlements;
         CODE_SIGN_STYLE = Automatic;
         COMBINE_HIDPI_IMAGES = YES;
         CURRENT_PROJECT_VERSION = 1;
+        DISPLAY_NAME = "Volume Grid";
         ENABLE_APP_SANDBOX = YES;
         ENABLE_PREVIEWS = YES;
         ENABLE_USER_SELECTED_FILES = readonly;
@@ -293,7 +301,6 @@
           "@executable_path/../Frameworks",
         );
         MARKETING_VERSION = 1.0.0;
-        DISPLAY_NAME = "Volume Grid";
         PRODUCT_BUNDLE_IDENTIFIER = one.eux.volumegrid;
         PRODUCT_NAME = "Volume Grid";
         REGISTER_APP_GROUPS = YES;
@@ -303,7 +310,6 @@
         SWIFT_EMIT_LOC_STRINGS = YES;
         SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
         SWIFT_VERSION = 5.0;
-        ASSETCATALOG_COMPILER_APPICON_NAME = VolumeGrid;
       };
       name = Release;
     };

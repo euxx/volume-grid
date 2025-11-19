@@ -30,95 +30,100 @@ private final class ThreadSafeProperty<T>: @unchecked Sendable {
     }
 }
 
+private struct VolumeState {
+    var defaultOutputDeviceID: AudioDeviceID = 0
+    var listeningDeviceID: AudioDeviceID?
+    var volumeElements: [AudioObjectPropertyElement] = []
+    var muteElements: [AudioObjectPropertyElement] = []
+    var registeredVolumeElements: [AudioObjectPropertyElement] = []
+    var registeredMuteElements: [AudioObjectPropertyElement] = []
+    var lastVolumeScalar: CGFloat?
+    var isDeviceMuted = false
+    var isListening = false
+}
+
 private final class VolumeStateStore: @unchecked Sendable {
     private let lock = OSAllocatedUnfairLock()
-
-    private nonisolated(unsafe) var defaultOutputDeviceID: AudioDeviceID = 0
-    private nonisolated(unsafe) var listeningDeviceID: AudioDeviceID?
-    private nonisolated(unsafe) var volumeElements: [AudioObjectPropertyElement] = []
-    private nonisolated(unsafe) var muteElements: [AudioObjectPropertyElement] = []
-    private nonisolated(unsafe) var registeredVolumeElements: [AudioObjectPropertyElement] = []
-    private nonisolated(unsafe) var registeredMuteElements: [AudioObjectPropertyElement] = []
-    private nonisolated(unsafe) var lastVolumeScalar: CGFloat?
-    private nonisolated(unsafe) var isDeviceMuted = false
-    private nonisolated(unsafe) var isListening = false
+    private nonisolated(unsafe) var state = VolumeState()
 
     nonisolated init() {}
 
-    nonisolated func withLock<T>(_ body: @Sendable () -> T) -> T {
-        lock.withLock(body)
-    }
-
-    nonisolated func updateDefaultOutputDeviceID(_ id: AudioDeviceID) {
-        withLock { defaultOutputDeviceID = id }
+    nonisolated func withLock<T>(_ body: @Sendable (inout VolumeState) -> T) -> T {
+        lock.withLock {
+            body(&state)
+        }
     }
 
     nonisolated func defaultOutputDeviceIDValue() -> AudioDeviceID {
-        withLock { defaultOutputDeviceID }
+        withLock { $0.defaultOutputDeviceID }
     }
 
-    nonisolated func updateListeningDeviceID(_ id: AudioDeviceID?) {
-        withLock { listeningDeviceID = id }
+    nonisolated func updateDefaultOutputDeviceID(_ id: AudioDeviceID) {
+        withLock { $0.defaultOutputDeviceID = id }
     }
 
     nonisolated func listeningDeviceIDValue() -> AudioDeviceID? {
-        withLock { listeningDeviceID }
+        withLock { $0.listeningDeviceID }
     }
 
-    nonisolated func updateVolumeElements(_ elements: [AudioObjectPropertyElement]) {
-        withLock { volumeElements = elements }
+    nonisolated func updateListeningDeviceID(_ id: AudioDeviceID?) {
+        withLock { $0.listeningDeviceID = id }
     }
 
     nonisolated func volumeElementsSnapshot() -> [AudioObjectPropertyElement] {
-        withLock { volumeElements }
+        withLock { $0.volumeElements }
     }
 
-    nonisolated func updateMuteElements(_ elements: [AudioObjectPropertyElement]) {
-        withLock { muteElements = elements }
+    nonisolated func updateVolumeElements(_ elements: [AudioObjectPropertyElement]) {
+        withLock { $0.volumeElements = elements }
     }
 
     nonisolated func muteElementsSnapshot() -> [AudioObjectPropertyElement] {
-        withLock { muteElements }
+        withLock { $0.muteElements }
     }
 
-    nonisolated func updateRegisteredVolumeElements(_ elements: [AudioObjectPropertyElement]) {
-        withLock { registeredVolumeElements = elements }
+    nonisolated func updateMuteElements(_ elements: [AudioObjectPropertyElement]) {
+        withLock { $0.muteElements = elements }
     }
 
     nonisolated func registeredVolumeElementsSnapshot() -> [AudioObjectPropertyElement] {
-        withLock { registeredVolumeElements }
+        withLock { $0.registeredVolumeElements }
     }
 
-    nonisolated func updateRegisteredMuteElements(_ elements: [AudioObjectPropertyElement]) {
-        withLock { registeredMuteElements = elements }
+    nonisolated func updateRegisteredVolumeElements(_ elements: [AudioObjectPropertyElement]) {
+        withLock { $0.registeredVolumeElements = elements }
     }
 
     nonisolated func registeredMuteElementsSnapshot() -> [AudioObjectPropertyElement] {
-        withLock { registeredMuteElements }
+        withLock { $0.registeredMuteElements }
     }
 
-    nonisolated func setDeviceMuted(_ muted: Bool) {
-        withLock { isDeviceMuted = muted }
+    nonisolated func updateRegisteredMuteElements(_ elements: [AudioObjectPropertyElement]) {
+        withLock { $0.registeredMuteElements = elements }
     }
 
     nonisolated func deviceMuted() -> Bool {
-        withLock { isDeviceMuted }
+        withLock { $0.isDeviceMuted }
     }
 
-    nonisolated func updateLastVolumeScalar(_ scalar: CGFloat?) {
-        withLock { lastVolumeScalar = scalar }
+    nonisolated func setDeviceMuted(_ muted: Bool) {
+        withLock { $0.isDeviceMuted = muted }
     }
 
     nonisolated func lastVolumeScalarSnapshot() -> CGFloat? {
-        withLock { lastVolumeScalar }
+        withLock { $0.lastVolumeScalar }
     }
 
-    nonisolated func setListeningActive(_ active: Bool) {
-        withLock { isListening = active }
+    nonisolated func updateLastVolumeScalar(_ scalar: CGFloat?) {
+        withLock { $0.lastVolumeScalar = scalar }
     }
 
     nonisolated func isListeningActive() -> Bool {
-        withLock { isListening }
+        withLock { $0.isListening }
+    }
+
+    nonisolated func setListeningActive(_ active: Bool) {
+        withLock { $0.isListening = active }
     }
 }
 

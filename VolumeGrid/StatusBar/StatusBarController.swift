@@ -179,13 +179,13 @@ final class StatusBarController {
         versionLabel.textColor = NSColor.secondaryLabelColor
         versionLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let contactString = NSMutableAttributedString(string: "https://github.com/euxx/VolumeGrid")
+        let contactString = NSMutableAttributedString(string: "https://github.com/euxx/volume-grid")
         let range = (contactString.string as NSString).range(
-            of: "https://github.com/euxx/VolumeGrid")
+            of: "https://github.com/euxx/volume-grid")
         if range.location != NSNotFound {
             contactString.addAttribute(
                 .link,
-                value: "https://github.com/euxx/VolumeGrid",
+                value: "https://github.com/euxx/volume-grid",
                 range: range
             )
         }

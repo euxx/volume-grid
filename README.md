@@ -1,4 +1,4 @@
-# VolumeGrid <img src="assets/icon.png" width="40" height="40" alt="VolumeGrid Icon" style="vertical-align: middle; margin-left: 20px;">
+# VolumeGrid <img src=".github/assets/icon.png" width="40" height="40" alt="VolumeGrid Icon" style="vertical-align: middle; margin-left: 20px;">
 
 Bringing back the classic volume HUD for macOS Tahoe 26 with more.
 
@@ -11,7 +11,7 @@ Bringing back the classic volume HUD for macOS Tahoe 26 with more.
 - 🔊 Menu bar icon with subtle progress bar that changes with volume
 - 🛠️ Native, minimal, lightweight implementation
 
-<img src="assets/screen-recording.gif" alt="VolumeGrid Screenshot" style="width: 100%; max-width: 800px; margin-top: 20px; border: 1px solid #ccc; border-radius: 8px;">
+<img src=".github/assets/screen-recording.gif" alt="VolumeGrid Screenshot" style="width: 100%; max-width: 800px; margin-top: 20px; border: 1px solid #ccc; border-radius: 8px;">
 
 ## Installation
 

@@ -31,8 +31,6 @@ open ~/Downloads/volumegrid-build/Build/Products/Release/Volume\ Grid.app
 
 ## Release
 
-### Update Version
-
 1. Update CHANGELOG.md:
    - Add version entry: `## [X.Y.Z] - YYYY-MM-DD` with changes
 
@@ -44,11 +42,15 @@ open ~/Downloads/volumegrid-build/Build/Products/Release/Volume\ Grid.app
    - Update `MARKETING_VERSION = X.Y.Z` (must match CFBundleShortVersionString)
    - Update `CURRENT_PROJECT_VERSION = N` (must match CFBundleVersion)
 
-4. Commit and release:
+4. Commit if changes were made:
 ```sh
 git add CHANGELOG.md VolumeGrid/Info.plist VolumeGrid.xcodeproj/project.pbxproj
 git commit -m "chore: update version to vX.Y.Z"
 git push origin main
+```
+
+5. Create a GitHub release:
+```sh
 git tag -a vX.Y.Z -m "Release vX.Y.Z"
 git push origin vX.Y.Z
 ```

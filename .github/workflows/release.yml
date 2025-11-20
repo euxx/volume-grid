@@ -21,7 +21,7 @@ jobs:
       - name: Select Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "15.4"
+          xcode-version: "26.1.0"
 
       - name: Build VolumeGrid
         shell: bash
@@ -72,6 +72,50 @@ jobs:
           echo "DMG_SHA256=${SHA256}" >> $GITHUB_ENV
           echo "SHA256 Hash: ${SHA256}"
 
+      - name: Extract changelog
+        id: changelog
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Extracting changelog for version: $VERSION"
+
+          # Extract changelog content for this version
+          CHANGELOG=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '1d;$d')
+
+          # Handle multi-line content for GitHub Actions output
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Debug output
+          echo "Extracted changelog:"
+          echo "$CHANGELOG"
+
+      - name: Create annotated tag with changelog
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAG_NAME="${GITHUB_REF_NAME}"
+
+          # Get the changelog content
+          CHANGELOG=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '1d;$d')
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global url."https://${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+          # Create annotated tag with changelog if it doesn't exist
+          if ! git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            git tag -a "$TAG_NAME" -m "Release $TAG_NAME" -m "$CHANGELOG"
+            git push origin "$TAG_NAME"
+            echo "Annotated tag created and pushed with changelog"
+          else
+            echo "Tag $TAG_NAME already exists, skipping tag creation"
+          fi
+
       - name: Update cask file
         shell: bash
         run: |
@@ -108,7 +152,8 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.content }}
           files: VolumeGrid-${{ github.ref_name }}.dmg
-          generate_release_notes: true
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

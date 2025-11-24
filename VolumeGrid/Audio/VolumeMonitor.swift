@@ -1,7 +1,10 @@
 import AudioToolbox
 import Cocoa
 @preconcurrency import Combine
+import os
 @preconcurrency import os.lock
+
+let logger = Logger(subsystem: "com.volumegrid", category: "VolumeMonitor")
 
 struct HUDEvent {
     let volumeScalar: CGFloat
@@ -315,7 +318,7 @@ class VolumeMonitor: ObservableObject {
     }
 
     private func volumeChanged(address _: AudioObjectPropertyAddress) {
-        // Always show HUD when volume changes (triggered by volume key press or API change)
+        // Only show HUD when volume actually changes (triggered by volume key press or real API change)
         guard let volume = getCurrentVolume() else { return }
 
         let clampedVolume = volume.clamped(to: 0...1)
@@ -324,10 +327,15 @@ class VolumeMonitor: ObservableObject {
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            let lastScalar = self.state.lastVolumeScalarSnapshot() ?? 0
+            let volumeActuallyChanged = abs(currentScalar - lastScalar) > volumeEpsilon
+            if !volumeActuallyChanged {
+                return
+            }
             self.state.updateLastVolumeScalar(currentScalar)
             self.volumePercentage = percentage
-
             if currentScalar > volumeEpsilon, self.state.deviceMuted() {
+                logger.debug("volumeChanged: Volume > 0 but device is muted, unmuting")
                 self.state.setDeviceMuted(false)
             }
 
@@ -481,7 +489,10 @@ class VolumeMonitor: ObservableObject {
                 }
             }
 
-            guard listenerRegistered else { return }
+            guard listenerRegistered else {
+                logger.debug("startListening: No volume listeners were registered")
+                return
+            }
             state.updateRegisteredVolumeElements(volumeElementsSnapshot)
 
             let muteElementsSnapshot = state.muteElementsSnapshot()
@@ -526,6 +537,9 @@ class VolumeMonitor: ObservableObject {
                 self.showHUDForCurrentVolume()
             } else {
                 let fallbackScalar = self.state.lastVolumeScalarSnapshot() ?? 0
+                logger.debug(
+                    "startListening: Device doesn't support volume control, showing unsupported HUD"
+                )
                 self.showVolumeHUD(volumeScalar: fallbackScalar, isUnsupported: true)
             }
         }

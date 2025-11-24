@@ -204,9 +204,13 @@ class VolumeMonitor: ObservableObject {
 
     deinit {
         // Cancel any pending UI update tasks to prevent them from executing after deinit
-        // CoreAudio listeners must be explicitly cleaned up via stopListening() before deallocation
         volumeChangeDebouncer?.cancel()
         deviceChangeDebouncer?.cancel()
+
+        // CRITICAL: Remove CoreAudio property listeners before deallocation
+        // Without this, CoreAudio holds strong references to listener blocks that capture self,
+        // leading to use-after-free crashes when callbacks fire after VolumeMonitor is deallocated
+        nonisolatedStopListening()
     }
 
     nonisolated var hudEvents: AnyPublisher<HUDEvent, Never> {
@@ -458,7 +462,7 @@ class VolumeMonitor: ObservableObject {
 
             volumeListener = {
                 [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in
-                guard let self = self else { return }
+                guard let self = self, self.state.isListeningActive() else { return }
                 self.volumeChanged(address: inAddresses.pointee)
             }
 
@@ -485,7 +489,7 @@ class VolumeMonitor: ObservableObject {
                 muteListener = {
                     [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>)
                     in
-                    guard let self = self else { return }
+                    guard let self = self, self.state.isListeningActive() else { return }
                     self.muteChanged(address: inAddresses.pointee)
                 }
 
@@ -533,7 +537,7 @@ class VolumeMonitor: ObservableObject {
         )
 
         deviceListener = { [weak self] (_: UInt32, _: UnsafePointer<AudioObjectPropertyAddress>) in
-            guard let self = self else { return }
+            guard let self = self, self.state.isListeningActive() else { return }
             DispatchQueue.main.async {
                 self.deviceChanged()
             }
@@ -553,6 +557,9 @@ class VolumeMonitor: ObservableObject {
 
     private nonisolated func nonisolatedStopListening() {
         assert(Thread.isMainThread, "nonisolatedStopListening must be called from main thread")
+
+        // Disable listening flag first to prevent callbacks from executing
+        state.setListeningActive(false)
 
         MainActor.assumeIsolated {
             systemEventMonitor.stop()
@@ -600,7 +607,6 @@ class VolumeMonitor: ObservableObject {
         state.updateListeningDeviceID(nil)
         state.updateRegisteredVolumeElements([])
         state.updateRegisteredMuteElements([])
-        state.setListeningActive(false)
     }
 
     func stopListening() {

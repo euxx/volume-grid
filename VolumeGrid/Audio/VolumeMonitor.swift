@@ -194,6 +194,9 @@ class VolumeMonitor: ObservableObject {
         let deviceID = updateDefaultOutputDevice()
         isCurrentDeviceVolumeSupported =
             deviceID != 0 && deviceManager.supportsVolumeControl(deviceID)
+        logger.debug(
+            "VolumeMonitor initialized: deviceID=\(deviceID, privacy: .public), supportsVolume=\(self.isCurrentDeviceVolumeSupported, privacy: .public)"
+        )
         if deviceID != 0 {
             if let volume = getCurrentVolume() {
                 volumePercentage = Int(volume * 100)
@@ -262,10 +265,16 @@ class VolumeMonitor: ObservableObject {
             guard let self else { return }
 
             let deviceID = self.resolveDeviceID()
-            guard deviceID != 0 else { return }
+            guard deviceID != 0 else {
+                logger.debug("setVolume: Device ID is 0, cannot set volume")
+                return
+            }
 
             let elements = self.state.volumeElementsSnapshot()
-            guard !elements.isEmpty else { return }
+            guard !elements.isEmpty else {
+                logger.debug("setVolume: No volume elements found for device")
+                return
+            }
 
             _ = self.deviceManager.setVolume(clampedScalar, for: deviceID, elements: elements)
 
@@ -362,6 +371,7 @@ class VolumeMonitor: ObservableObject {
 
             // Only display HUD if mute state actually changed
             if wasMuted != isNowMuted {
+                logger.debug("muteChanged: Mute state changed from \(wasMuted) to \(isNowMuted)")
                 let displayScalar = isNowMuted ? 0 : previousVolumeScalar
                 self.showVolumeHUD(volumeScalar: displayScalar)
             }
@@ -391,6 +401,10 @@ class VolumeMonitor: ObservableObject {
             }
             self.updateVolumeSupportState(
                 currentOutputID != 0 && self.deviceManager.supportsVolumeControl(currentOutputID))
+            let deviceName = self.currentDevice?.name ?? "Unknown"
+            logger.debug(
+                "deviceChanged: New device - id=\(currentOutputID, privacy: .public), name=\(deviceName, privacy: .public), supportsVolume=\(self.isCurrentDeviceVolumeSupported, privacy: .public)"
+            )
 
             if currentOutputID != 0 && self.deviceManager.supportsVolumeControl(currentOutputID) {
                 _ = self.refreshMuteState()

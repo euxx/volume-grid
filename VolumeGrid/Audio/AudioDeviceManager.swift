@@ -27,7 +27,7 @@ final class AudioDeviceManager: Sendable {
 
     nonisolated init() {}
 
-    nonisolated private func makePropertyAddress(
+    nonisolated func makePropertyAddress(
         selector: AudioObjectPropertySelector,
         scope: AudioObjectPropertyScope = kAudioDevicePropertyScopeOutput,
         element: AudioObjectPropertyElement = kAudioObjectPropertyElementMain

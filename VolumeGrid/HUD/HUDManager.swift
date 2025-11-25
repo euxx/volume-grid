@@ -53,21 +53,25 @@ final class HUDWindowContext {
     }
 }
 
-class HUDManager {
-    private let hudWidth: CGFloat = 240
-    private let hudHeight: CGFloat = 160
-    private let hudAlpha: CGFloat = 0.97
-    private let hudDisplayDuration: TimeInterval = 1.4
-    private let hudCornerRadius: CGFloat = 20
-    private let marginX: CGFloat = 10
-    private let minVerticalPadding: CGFloat = 14
-    private let fadeInDuration: TimeInterval = 0.3
-    private let fadeOutDuration: TimeInterval = 0.6
+struct HUDConstants {
+    static let width: CGFloat = 240
+    static let height: CGFloat = 160
+    static let alpha: CGFloat = 0.97
+    static let displayDuration: TimeInterval = 1.4
+    static let cornerRadius: CGFloat = 20
+    static let marginX: CGFloat = 10
+    static let minVerticalPadding: CGFloat = 14
+    static let fadeInDuration: TimeInterval = 0.3
+    static let fadeOutDuration: TimeInterval = 0.6
+    static let textFont = NSFont.systemFont(ofSize: 12)
+}
 
+class HUDManager {
     private var hudWindows: [CGDirectDisplayID: HUDWindowContext] = [:]
     private var hideHUDWorkItem: DispatchWorkItem?
     private var screenChangeCancellable: AnyCancellable?
 
+    @MainActor
     init() {
         syncHUDWindowsWithScreens()
         screenChangeCancellable = NotificationCenter.default
@@ -88,11 +92,12 @@ class HUDManager {
             .map { CGDirectDisplayID($0.uint32Value) }
     }
 
+    @MainActor
     private func makeHUDWindow(for screen: NSScreen, screenID: CGDirectDisplayID)
         -> HUDWindowContext
     {
         let window = NSWindow(
-            contentRect: .init(x: 0, y: 0, width: hudWidth, height: hudHeight),
+            contentRect: .init(x: 0, y: 0, width: HUDConstants.width, height: HUDConstants.height),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -107,14 +112,14 @@ class HUDManager {
         window.ignoresMouseEvents = true
 
         let containerView = NSVisualEffectView(
-            frame: .init(x: 0, y: 0, width: hudWidth, height: hudHeight))
+            frame: .init(x: 0, y: 0, width: HUDConstants.width, height: HUDConstants.height))
         containerView.material = .hudWindow
         containerView.appearance = NSAppearance(named: .darkAqua)
         containerView.blendingMode = .behindWindow
         containerView.state = .active
         containerView.wantsLayer = true
         let style = hudStyle()
-        containerView.layer?.cornerRadius = hudCornerRadius
+        containerView.layer?.cornerRadius = HUDConstants.cornerRadius
         containerView.layer?.masksToBounds = true
         containerView.layer?.backgroundColor = NSColor.darkGray.withAlphaComponent(0.7).cgColor
         containerView.layer?.borderWidth = 0.6
@@ -136,16 +141,18 @@ class HUDManager {
             contentStack.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
             contentStack.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
             contentStack.leadingAnchor.constraint(
-                greaterThanOrEqualTo: containerView.leadingAnchor, constant: marginX),
+                greaterThanOrEqualTo: containerView.leadingAnchor, constant: HUDConstants.marginX),
             contentStack.trailingAnchor.constraint(
-                lessThanOrEqualTo: containerView.trailingAnchor, constant: -marginX),
+                lessThanOrEqualTo: containerView.trailingAnchor, constant: -HUDConstants.marginX),
         ])
         let topConstraint = contentStack.topAnchor.constraint(
-            greaterThanOrEqualTo: containerView.topAnchor, constant: minVerticalPadding)
+            greaterThanOrEqualTo: containerView.topAnchor, constant: HUDConstants.minVerticalPadding
+        )
         topConstraint.priority = .defaultHigh
         topConstraint.isActive = true
         let bottomConstraint = contentStack.bottomAnchor.constraint(
-            lessThanOrEqualTo: containerView.bottomAnchor, constant: -minVerticalPadding)
+            lessThanOrEqualTo: containerView.bottomAnchor,
+            constant: -HUDConstants.minVerticalPadding)
         bottomConstraint.priority = .defaultHigh
         bottomConstraint.isActive = true
 
@@ -234,11 +241,11 @@ class HUDManager {
 
         let screenFrame = screen.frame
         let windowOrigin = CGPoint(
-            x: screenFrame.midX - hudWidth / 2,
-            y: screenFrame.midY - hudHeight / 2
+            x: screenFrame.midX - HUDConstants.width / 2,
+            y: screenFrame.midY - HUDConstants.height / 2
         )
         window.setFrameOrigin(windowOrigin)
-        window.alphaValue = hudAlpha
+        window.alphaValue = HUDConstants.alpha
 
         let views = HUDViewComponents(
             iconView: iconView,
@@ -266,6 +273,7 @@ class HUDManager {
         )
     }
 
+    @MainActor
     private func syncHUDWindowsWithScreens() {
         if !Thread.isMainThread {
             DispatchQueue.main.async {
@@ -299,24 +307,24 @@ class HUDManager {
         statusString: String
     ) -> (width: CGFloat, statusTextWidth: CGFloat) {
         let deviceNSString = NSString(string: deviceName + "  -")
-        let font = NSFont.systemFont(ofSize: 12)
-        let deviceTextSize = deviceNSString.size(withAttributes: [.font: font])
+        let deviceTextSize = deviceNSString.size(withAttributes: [.font: HUDConstants.textFont])
 
         let statusNSString = NSString(string: statusString)
-        let statusTextSize = statusNSString.size(withAttributes: [.font: font])
+        let statusTextSize = statusNSString.size(withAttributes: [.font: HUDConstants.textFont])
         let maxVolumeSampleString = VolumeFormatter.formatVolumeCount(quarterBlocks: 15.75)
         let maxVolumeSampleWidth = NSString(string: maxVolumeSampleString)
-            .size(withAttributes: [.font: font]).width
+            .size(withAttributes: [.font: HUDConstants.textFont]).width
         let effectiveStatusTextWidth = max(statusTextSize.width, maxVolumeSampleWidth)
 
         let gapBetweenDeviceAndCount: CGFloat = 8
         let combinedWidth =
             deviceTextSize.width + gapBetweenDeviceAndCount + effectiveStatusTextWidth
-        let dynamicHudWidth = max(hudWidth, combinedWidth + marginX)
+        let dynamicHudWidth = max(HUDConstants.width, combinedWidth + HUDConstants.marginX)
 
         return (dynamicHudWidth, effectiveStatusTextWidth)
     }
 
+    @MainActor
     func showHUD(
         volumeScalar: CGFloat, deviceName: String?, isUnsupported: Bool = false
     ) {
@@ -355,14 +363,15 @@ class HUDManager {
             let screenFrame = screen.frame
             let newWindowFrame = NSRect(
                 x: screenFrame.midX - dynamicHudWidth / 2,
-                y: screenFrame.midY - hudHeight / 2 - 40,
+                y: screenFrame.midY - HUDConstants.height / 2 - 40,
                 width: dynamicHudWidth,
-                height: hudHeight
+                height: HUDConstants.height
             )
             hudWindow.setFrame(newWindowFrame, display: true)
 
             let containerView = context.containerView
-            containerView.frame = .init(x: 0, y: 0, width: dynamicHudWidth, height: hudHeight)
+            containerView.frame = .init(
+                x: 0, y: 0, width: dynamicHudWidth, height: HUDConstants.height)
             containerView.layer?.shadowColor = style.shadowColor.cgColor
             containerView.layer?.shadowOpacity = 1.0
 
@@ -413,12 +422,12 @@ class HUDManager {
                 hudWindow.orderFrontRegardless()
                 NSAnimationContext.runAnimationGroup(
                     { context in
-                        context.duration = self.fadeInDuration
-                        hudWindow.animator().alphaValue = self.hudAlpha
+                        context.duration = HUDConstants.fadeInDuration
+                        hudWindow.animator().alphaValue = HUDConstants.alpha
                     }, completionHandler: nil)
             } else {
                 hudWindow.orderFrontRegardless()
-                hudWindow.alphaValue = self.hudAlpha
+                hudWindow.alphaValue = HUDConstants.alpha
             }
         }
 
@@ -430,7 +439,7 @@ class HUDManager {
                 let hudWindow = context.window
                 NSAnimationContext.runAnimationGroup(
                     { context in
-                        context.duration = self.fadeOutDuration
+                        context.duration = HUDConstants.fadeOutDuration
                         hudWindow.animator().alphaValue = 0
                     },
                     completionHandler: {
@@ -441,16 +450,19 @@ class HUDManager {
             }
         }
         hideHUDWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + hudDisplayDuration, execute: workItem)
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + HUDConstants.displayDuration, execute: workItem)
     }
 
+    private static let defaultHUDStyle = HUDStyle(
+        shadowColor: NSColor.white.withAlphaComponent(0.9),
+        iconTintColor: NSColor.white.withAlphaComponent(0.9),
+        primaryTextColor: NSColor.white.withAlphaComponent(0.9),
+        secondaryTextColor: NSColor.white.withAlphaComponent(0.9),
+        blockFillColor: NSColor.white.withAlphaComponent(0.9)
+    )
+
     private func hudStyle() -> HUDStyle {
-        HUDStyle(
-            shadowColor: NSColor.white.withAlphaComponent(0.9),
-            iconTintColor: NSColor.white.withAlphaComponent(0.9),
-            primaryTextColor: NSColor.white.withAlphaComponent(0.9),
-            secondaryTextColor: NSColor.white.withAlphaComponent(0.9),
-            blockFillColor: NSColor.white.withAlphaComponent(0.9)
-        )
+        Self.defaultHUDStyle
     }
 }

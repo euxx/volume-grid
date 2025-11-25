@@ -10,13 +10,13 @@ final class VolumeIconHelperExtendedTests: XCTestCase {
     func testIconSelectionAcrossRange() {
         let icon0 = VolumeIconHelper.icon(for: 0)
         XCTAssertEqual(icon0.symbolName, "speaker.slash")
-        
+
         let icon20 = VolumeIconHelper.icon(for: 20)
         XCTAssertEqual(icon20.symbolName, "speaker.wave.1")
-        
+
         let icon50 = VolumeIconHelper.icon(for: 50)
         XCTAssertEqual(icon50.symbolName, "speaker.wave.2")
-        
+
         let icon80 = VolumeIconHelper.icon(for: 80)
         XCTAssertEqual(icon80.symbolName, "speaker.wave.3")
     }
@@ -24,7 +24,7 @@ final class VolumeIconHelperExtendedTests: XCTestCase {
     func testIconSelectionBoundaries() {
         XCTAssertEqual(VolumeIconHelper.icon(for: 32).symbolName, "speaker.wave.1")
         XCTAssertEqual(VolumeIconHelper.icon(for: 33).symbolName, "speaker.wave.2")
-        
+
         XCTAssertEqual(VolumeIconHelper.icon(for: 65).symbolName, "speaker.wave.2")
         XCTAssertEqual(VolumeIconHelper.icon(for: 66).symbolName, "speaker.wave.3")
     }
@@ -71,13 +71,13 @@ final class VolumeIconHelperExtendedTests: XCTestCase {
     func testHUDIconSelectionAcrossRange() {
         let icon0 = VolumeIconHelper.hudIcon(for: 0)
         XCTAssertEqual(icon0.symbolName, "speaker.slash.fill")
-        
+
         let icon20 = VolumeIconHelper.hudIcon(for: 20)
         XCTAssertEqual(icon20.symbolName, "speaker.wave.1.fill")
-        
+
         let icon50 = VolumeIconHelper.hudIcon(for: 50)
         XCTAssertEqual(icon50.symbolName, "speaker.wave.2.fill")
-        
+
         let icon80 = VolumeIconHelper.hudIcon(for: 80)
         XCTAssertEqual(icon80.symbolName, "speaker.wave.3.fill")
     }
@@ -136,10 +136,10 @@ final class VolumeIconHelperExtendedTests: XCTestCase {
         for volume in [0, 20, 50, 80, 100] {
             let regular = VolumeIconHelper.icon(for: volume)
             let hud = VolumeIconHelper.hudIcon(for: volume)
-            
+
             let regularBase = regular.symbolName.replacingOccurrences(of: ".fill", with: "")
             let hudBase = hud.symbolName.replacingOccurrences(of: ".fill", with: "")
-            
+
             XCTAssertEqual(regularBase, hudBase)
         }
     }
@@ -148,7 +148,7 @@ final class VolumeIconHelperExtendedTests: XCTestCase {
         for volume in [0, 20, 50, 80, 100] {
             let regular = VolumeIconHelper.icon(for: volume)
             let hud = VolumeIconHelper.hudIcon(for: volume)
-            
+
             XCTAssert(hud.size > regular.size)
         }
     }
@@ -158,7 +158,7 @@ final class VolumeIconHelperExtendedTests: XCTestCase {
     func testIconWithExtremeValues() {
         let veryNegative = VolumeIconHelper.icon(for: -1000)
         XCTAssertEqual(veryNegative.symbolName, "speaker.slash")
-        
+
         let veryLarge = VolumeIconHelper.icon(for: 10000)
         XCTAssertEqual(veryLarge.symbolName, "speaker.wave.3")
     }
@@ -168,10 +168,10 @@ final class VolumeIconHelperExtendedTests: XCTestCase {
     func testVolumeLevelThresholdsFromConstants() {
         let low = VolumeGridConstants.Audio.volumeLevelLow
         let medium = VolumeGridConstants.Audio.volumeLevelMedium
-        
+
         XCTAssertEqual(VolumeIconHelper.icon(for: low - 1).symbolName, "speaker.wave.1")
         XCTAssertEqual(VolumeIconHelper.icon(for: low).symbolName, "speaker.wave.2")
-        
+
         XCTAssertEqual(VolumeIconHelper.icon(for: medium - 1).symbolName, "speaker.wave.2")
         XCTAssertEqual(VolumeIconHelper.icon(for: medium).symbolName, "speaker.wave.3")
     }

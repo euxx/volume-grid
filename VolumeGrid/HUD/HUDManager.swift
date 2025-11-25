@@ -113,7 +113,7 @@ class HUDManager {
         containerView.blendingMode = .behindWindow
         containerView.state = .active
         containerView.wantsLayer = true
-        let style = hudStyle(for: window.effectiveAppearance)
+        let style = hudStyle()
         containerView.layer?.cornerRadius = hudCornerRadius
         containerView.layer?.masksToBounds = true
         containerView.layer?.backgroundColor = NSColor.darkGray.withAlphaComponent(0.7).cgColor
@@ -350,7 +350,7 @@ class HUDManager {
             let hudWindow = context.window
             let isAlreadyVisible = hudWindow.isVisible && hudWindow.alphaValue > 0.1
 
-            let style = hudStyle(for: hudWindow.effectiveAppearance)
+            let style = hudStyle()
 
             let screenFrame = screen.frame
             let newWindowFrame = NSRect(
@@ -444,19 +444,13 @@ class HUDManager {
         DispatchQueue.main.asyncAfter(deadline: .now() + hudDisplayDuration, execute: workItem)
     }
 
-    private func hudStyle(for appearance: NSAppearance) -> HUDStyle {
-        let shadowColor = NSColor.white.withAlphaComponent(0.9)
-        let iconTintColor = NSColor.white.withAlphaComponent(0.9)
-        let primaryTextColor = NSColor.white.withAlphaComponent(0.9)
-        let secondaryTextColor = NSColor.white.withAlphaComponent(0.9)
-        let blockFillColor = NSColor.white.withAlphaComponent(0.9)
-
-        return HUDStyle(
-            shadowColor: shadowColor,
-            iconTintColor: iconTintColor,
-            primaryTextColor: primaryTextColor,
-            secondaryTextColor: secondaryTextColor,
-            blockFillColor: blockFillColor
+    private func hudStyle() -> HUDStyle {
+        HUDStyle(
+            shadowColor: NSColor.white.withAlphaComponent(0.9),
+            iconTintColor: NSColor.white.withAlphaComponent(0.9),
+            primaryTextColor: NSColor.white.withAlphaComponent(0.9),
+            secondaryTextColor: NSColor.white.withAlphaComponent(0.9),
+            blockFillColor: NSColor.white.withAlphaComponent(0.9)
         )
     }
 }

@@ -10,9 +10,20 @@
     0BE5742B2ECDF57B00D15640 /* VolumeGrid.icon in Resources */ = {isa = PBXBuildFile; fileRef = 0BE574272ECDF57B00D15640 /* VolumeGrid.icon */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+    A1B2C3D42F0A000000000001 /* PBXContainerItemProxy */ = {
+      isa = PBXContainerItemProxy;
+      containerPortal = 043089C32EA61F7A005D83F7 /* Project object */;
+      proxyType = 1;
+      remoteGlobalIDString = 043089CA2EA61F7A005D83F7;
+      remoteInfo = "Volume Grid";
+    };
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
     043089CB2EA61F7A005D83F7 /* Volume Grid.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Volume Grid.app"; sourceTree = BUILT_PRODUCTS_DIR; };
     0BE574272ECDF57B00D15640 /* VolumeGrid.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = VolumeGrid.icon; sourceTree = "<group>"; };
+    A1B2C3D42F0A000000000002 /* VolumeGridTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VolumeGridTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -21,10 +32,22 @@
       path = VolumeGrid;
       sourceTree = "<group>";
     };
+    A1B2C3D42F0A000000000003 /* VolumeGridTests */ = {
+      isa = PBXFileSystemSynchronizedRootGroup;
+      path = VolumeGridTests;
+      sourceTree = "<group>";
+    };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
     043089C82EA61F7A005D83F7 /* Frameworks */ = {
+      isa = PBXFrameworksBuildPhase;
+      buildActionMask = 2147483647;
+      files = (
+      );
+      runOnlyForDeploymentPostprocessing = 0;
+    };
+    A1B2C3D42F0A000000000004 /* Frameworks */ = {
       isa = PBXFrameworksBuildPhase;
       buildActionMask = 2147483647;
       files = (
@@ -39,6 +62,7 @@
       children = (
         0BE574272ECDF57B00D15640 /* VolumeGrid.icon */,
         043089CD2EA61F7A005D83F7 /* VolumeGrid */,
+        A1B2C3D42F0A000000000003 /* VolumeGridTests */,
         043089CC2EA61F7A005D83F7 /* Products */,
       );
       sourceTree = "<group>";
@@ -47,6 +71,7 @@
       isa = PBXGroup;
       children = (
         043089CB2EA61F7A005D83F7 /* Volume Grid.app */,
+        A1B2C3D42F0A000000000002 /* VolumeGridTests.xctest */,
       );
       name = Products;
       sourceTree = "<group>";
@@ -76,6 +101,29 @@
       productReference = 043089CB2EA61F7A005D83F7 /* Volume Grid.app */;
       productType = "com.apple.product-type.application";
     };
+    A1B2C3D42F0A000000000005 /* VolumeGridTests */ = {
+      isa = PBXNativeTarget;
+      buildConfigurationList = A1B2C3D42F0A000000000010 /* Build configuration list for PBXNativeTarget "VolumeGridTests" */;
+      buildPhases = (
+        A1B2C3D42F0A000000000006 /* Sources */,
+        A1B2C3D42F0A000000000004 /* Frameworks */,
+        A1B2C3D42F0A000000000007 /* Resources */,
+      );
+      buildRules = (
+      );
+      dependencies = (
+        A1B2C3D42F0A000000000008 /* PBXTargetDependency */,
+      );
+      fileSystemSynchronizedGroups = (
+        A1B2C3D42F0A000000000003 /* VolumeGridTests */,
+      );
+      name = VolumeGridTests;
+      packageProductDependencies = (
+      );
+      productName = VolumeGridTests;
+      productReference = A1B2C3D42F0A000000000002 /* VolumeGridTests.xctest */;
+      productType = "com.apple.product-type.bundle.unit-test";
+    };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -88,6 +136,10 @@
         TargetAttributes = {
           043089CA2EA61F7A005D83F7 = {
             CreatedOnToolsVersion = 26.0.1;
+          };
+          A1B2C3D42F0A000000000005 = {
+            CreatedOnToolsVersion = 26.0.1;
+            TestTargetID = 043089CA2EA61F7A005D83F7;
           };
         };
       };
@@ -106,6 +158,7 @@
       projectRoot = "";
       targets = (
         043089CA2EA61F7A005D83F7 /* Volume Grid */,
+        A1B2C3D42F0A000000000005 /* VolumeGridTests */,
       );
     };
 /* End PBXProject section */
@@ -119,6 +172,13 @@
       );
       runOnlyForDeploymentPostprocessing = 0;
     };
+    A1B2C3D42F0A000000000007 /* Resources */ = {
+      isa = PBXResourcesBuildPhase;
+      buildActionMask = 2147483647;
+      files = (
+      );
+      runOnlyForDeploymentPostprocessing = 0;
+    };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -129,7 +189,22 @@
       );
       runOnlyForDeploymentPostprocessing = 0;
     };
+    A1B2C3D42F0A000000000006 /* Sources */ = {
+      isa = PBXSourcesBuildPhase;
+      buildActionMask = 2147483647;
+      files = (
+      );
+      runOnlyForDeploymentPostprocessing = 0;
+    };
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+    A1B2C3D42F0A000000000008 /* PBXTargetDependency */ = {
+      isa = PBXTargetDependency;
+      target = 043089CA2EA61F7A005D83F7 /* Volume Grid */;
+      targetProxy = A1B2C3D42F0A000000000001 /* PBXContainerItemProxy */;
+    };
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
     043089D42EA61F7B005D83F7 /* Debug */ = {
@@ -313,6 +388,44 @@
       };
       name = Release;
     };
+    A1B2C3D42F0A000000000011 /* Debug */ = {
+      isa = XCBuildConfiguration;
+      buildSettings = {
+        BUNDLE_LOADER = "$(TEST_HOST)";
+        CODE_SIGN_STYLE = Automatic;
+        CURRENT_PROJECT_VERSION = 1;
+        GENERATE_INFOPLIST_FILE = YES;
+        MACOSX_DEPLOYMENT_TARGET = 14.0;
+        MARKETING_VERSION = 1.0;
+        PRODUCT_BUNDLE_IDENTIFIER = one.eux.volumegrid.tests;
+        PRODUCT_NAME = "$(TARGET_NAME)";
+        SWIFT_APPROACHABLE_CONCURRENCY = YES;
+        SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+        SWIFT_EMIT_LOC_STRINGS = NO;
+        SWIFT_VERSION = 5.0;
+        TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Volume Grid.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Volume Grid";
+      };
+      name = Debug;
+    };
+    A1B2C3D42F0A000000000012 /* Release */ = {
+      isa = XCBuildConfiguration;
+      buildSettings = {
+        BUNDLE_LOADER = "$(TEST_HOST)";
+        CODE_SIGN_STYLE = Automatic;
+        CURRENT_PROJECT_VERSION = 1;
+        GENERATE_INFOPLIST_FILE = YES;
+        MACOSX_DEPLOYMENT_TARGET = 14.0;
+        MARKETING_VERSION = 1.0;
+        PRODUCT_BUNDLE_IDENTIFIER = one.eux.volumegrid.tests;
+        PRODUCT_NAME = "$(TARGET_NAME)";
+        SWIFT_APPROACHABLE_CONCURRENCY = YES;
+        SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+        SWIFT_EMIT_LOC_STRINGS = NO;
+        SWIFT_VERSION = 5.0;
+        TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Volume Grid.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Volume Grid";
+      };
+      name = Release;
+    };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -330,6 +443,15 @@
       buildConfigurations = (
         043089D72EA61F7B005D83F7 /* Debug */,
         043089D82EA61F7B005D83F7 /* Release */,
+      );
+      defaultConfigurationIsVisible = 0;
+      defaultConfigurationName = Release;
+    };
+    A1B2C3D42F0A000000000010 /* Build configuration list for PBXNativeTarget "VolumeGridTests" */ = {
+      isa = XCConfigurationList;
+      buildConfigurations = (
+        A1B2C3D42F0A000000000011 /* Debug */,
+        A1B2C3D42F0A000000000012 /* Release */,
       );
       defaultConfigurationIsVisible = 0;
       defaultConfigurationName = Release;

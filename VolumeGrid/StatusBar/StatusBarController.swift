@@ -114,16 +114,14 @@ final class StatusBarController {
             let (volume, formatted) = volumeData
             self.latestVolume = volume
             self.latestDeviceName = deviceName
-            DispatchQueue.main.async {
-                self.statusBarVolumeView.update(percentage: volume)
-                self.updateVolumeInteraction(isSupported: isSupported)
-                self.volumeMenuView.update(
-                    percentage: volume,
-                    formattedVolume: formatted,
-                    deviceName: deviceName
-                )
-                self.menu.itemChanged(self.volumeMenuItem)
-            }
+            self.statusBarVolumeView.update(percentage: volume)
+            self.updateVolumeInteraction(isSupported: isSupported)
+            self.volumeMenuView.update(
+                percentage: volume,
+                formattedVolume: formatted,
+                deviceName: deviceName
+            )
+            self.menu.itemChanged(self.volumeMenuItem)
         }
         .store(in: &subscriptions)
     }

@@ -16,6 +16,11 @@ swift-format lint --recursive .
 swift-format format --recursive --in-place .
 ```
 
+Run unit tests:
+```sh
+xcodebuild test -scheme "Volume Grid"
+```
+
 Try building and running the project to verify correctness:
 ```sh
 xcodebuild -project VolumeGrid.xcodeproj -scheme "Volume Grid" -configuration Release -derivedDataPath ~/Downloads/volumegrid-build 2>&1 | grep -i warning

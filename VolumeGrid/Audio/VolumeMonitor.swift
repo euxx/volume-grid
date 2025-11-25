@@ -164,6 +164,7 @@ class VolumeMonitor: ObservableObject {
 
     private nonisolated let deviceManager = AudioDeviceManager()
     private nonisolated let state = VolumeStateStore()
+    private nonisolated let stateActor = VolumeStateActor()
     private let systemEventMonitor = SystemEventMonitor()
     private nonisolated let hudEventSubject = PassthroughSubject<HUDEvent, Never>()
     private var volumeChangeDebounceTask: Task<Void, Never>?
@@ -318,6 +319,13 @@ class VolumeMonitor: ObservableObject {
                 if clampedScalar > 0 {
                     self.state.setDeviceMuted(false)
                 }
+                // Update actor state for UI thread consistency
+                Task {
+                    await self.stateActor.updateVolumeState(
+                        scalar: uiScalar,
+                        isMuted: clampedScalar == 0
+                    )
+                }
             }
         }
     }
@@ -347,6 +355,10 @@ class VolumeMonitor: ObservableObject {
             if let volume = getCurrentVolume() {
                 volumePercentage = Int(round(volume * 100))
             }
+        }
+        // Update actor state
+        Task {
+            await stateActor.updateVolumeState(scalar: CGFloat(volumePercentage) / 100.0, isMuted: muted)
         }
         return muted ? true : nil
     }
@@ -378,6 +390,8 @@ class VolumeMonitor: ObservableObject {
             let capturedScalar = currentScalar
             let task = Task {
                 try? await Task.sleep(nanoseconds: UInt64(VolumeGridConstants.Audio.volumeChangeDebounceDelay * 1_000_000_000))
+                // Update actor before showing HUD
+                await self.stateActor.updateVolumeState(scalar: capturedScalar, isMuted: false)
                 self.showVolumeHUD(volumeScalar: capturedScalar)
             }
             self.volumeChangeDebounceTask = task

@@ -12,6 +12,10 @@ struct HUDEvent {
     let isUnsupported: Bool
 }
 
+/// Generic thread-safe property wrapper using OSAllocatedUnfairLock
+/// TODO: Consider replacing with Swift Actor for modern concurrency (5.5+)
+/// This provides lock-based thread-safety for closures and listeners that need to be
+/// stored and accessed from multiple threads, particularly from CoreAudio callbacks.
 private final class ThreadSafeProperty<T>: @unchecked Sendable {
     private let lock = OSAllocatedUnfairLock()
     private nonisolated(unsafe) var value: T
@@ -33,6 +37,8 @@ private final class ThreadSafeProperty<T>: @unchecked Sendable {
     }
 }
 
+/// Internal state for VolumeMonitor
+/// Contains mutable state that must be accessed safely from multiple threads
 private struct VolumeState {
     var defaultOutputDeviceID: AudioDeviceID = 0
     var listeningDeviceID: AudioDeviceID?
@@ -45,6 +51,20 @@ private struct VolumeState {
     var isListening = false
 }
 
+/// Thread-safe container for volume state using unfair lock
+/// TODO: Migrate to Swift Actor when @MainActor integration improves
+/// Currently uses manual locking because:
+/// - VolumeMonitor is @MainActor but needs background thread access
+/// - CoreAudio callbacks occur on arbitrary threads
+/// - Actor would require await at too many call sites
+///
+/// Once migration is feasible, this entire class can be replaced with:
+/// ```
+/// nonisolated(unsafe) private let volumeStateActor: VolumeStateActor = VolumeStateActor()
+/// actor VolumeStateActor {
+///     // ... properties and methods
+/// }
+/// ```
 private final class VolumeStateStore: @unchecked Sendable {
     private let lock = OSAllocatedUnfairLock()
     private nonisolated(unsafe) var state = VolumeState()

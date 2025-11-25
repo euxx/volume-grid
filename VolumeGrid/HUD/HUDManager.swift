@@ -68,7 +68,7 @@ struct HUDConstants {
 
 class HUDManager {
     private var hudWindows: [CGDirectDisplayID: HUDWindowContext] = [:]
-    private var hideHUDWorkItem: DispatchWorkItem?
+    private var hideHUDTask: Task<Void, Never>?
     private var screenChangeCancellable: AnyCancellable?
 
     @MainActor
@@ -83,7 +83,7 @@ class HUDManager {
     }
 
     deinit {
-        hideHUDWorkItem?.cancel()
+        hideHUDTask?.cancel()
         screenChangeCancellable?.cancel()
     }
 
@@ -438,10 +438,12 @@ class HUDManager {
             }
         }
 
-        hideHUDWorkItem?.cancel()
+        hideHUDTask?.cancel()
 
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
+        let task = Task {
+            try? await Task.sleep(nanoseconds: UInt64(HUDConstants.displayDuration * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+
             for (_, context) in self.hudWindows {
                 let hudWindow = context.window
                 NSAnimationContext.runAnimationGroup(
@@ -456,9 +458,7 @@ class HUDManager {
                     })
             }
         }
-        hideHUDWorkItem = workItem
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + HUDConstants.displayDuration, execute: workItem)
+        hideHUDTask = task
     }
 
     private static let defaultHUDStyle = HUDStyle(

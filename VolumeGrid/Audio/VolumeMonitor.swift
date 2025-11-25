@@ -145,9 +145,7 @@ class VolumeMonitor: ObservableObject {
     private nonisolated let deviceManager = AudioDeviceManager()
     private nonisolated let state = VolumeStateStore()
     private let systemEventMonitor = SystemEventMonitor()
-    private nonisolated let hudEventSubject: PassthroughSubject<HUDEvent, Never> = {
-        PassthroughSubject<HUDEvent, Never>()
-    }()
+    private nonisolated let hudEventSubject = PassthroughSubject<HUDEvent, Never>()
     private var volumeChangeDebouncer: DispatchWorkItem?
     private var deviceChangeDebouncer: DispatchWorkItem?
 

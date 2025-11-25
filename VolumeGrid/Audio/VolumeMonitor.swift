@@ -4,7 +4,7 @@ import Cocoa
 import os
 @preconcurrency import os.lock
 
-let logger = Logger(subsystem: "com.volumegrid", category: "VolumeMonitor")
+private let logger = Logger(subsystem: "com.volumegrid", category: "VolumeMonitor")
 
 struct HUDEvent {
     let volumeScalar: CGFloat
@@ -177,17 +177,6 @@ class VolumeMonitor: ObservableObject {
         ThreadSafeProperty<AudioObjectPropertyListenerBlock?> =
             ThreadSafeProperty(nil)
 
-    nonisolated private func makePropertyAddress(
-        _ selector: AudioObjectPropertySelector,
-        element: AudioObjectPropertyElement = kAudioObjectPropertyElementMain
-    ) -> AudioObjectPropertyAddress {
-        .init(
-            mSelector: selector,
-            mScope: kAudioDevicePropertyScopeOutput,
-            mElement: element
-        )
-    }
-
     init() {
         let deviceID = updateDefaultOutputDevice()
         isCurrentDeviceVolumeSupported =
@@ -211,10 +200,28 @@ class VolumeMonitor: ObservableObject {
         volumeChangeDebouncer?.cancel()
         deviceChangeDebouncer?.cancel()
 
-        // CRITICAL: Remove CoreAudio property listeners before deallocation
-        // Without this, CoreAudio holds strong references to listener blocks that capture self,
-        // leading to use-after-free crashes when callbacks fire after VolumeMonitor is deallocated
-        nonisolatedStopListening()
+        // CRITICAL: Ensure CoreAudio listeners are removed before deallocation
+        // Must use strong references to dependencies to guarantee cleanup even if deinit runs on background thread
+        let state = self.state
+        let deviceManager = self.deviceManager
+        let audioQueue = self.audioQueue
+        let systemEventMonitor = self.systemEventMonitor
+        let volumeListener = self.volumeListener
+        let muteListener = self.muteListener
+        let deviceListener = self.deviceListener
+
+        // Always dispatch to main thread for @MainActor performCleanup
+        DispatchQueue.main.async {
+            Self.performCleanup(
+                state: state,
+                deviceManager: deviceManager,
+                audioQueue: audioQueue,
+                systemEventMonitor: systemEventMonitor,
+                volumeListener: volumeListener,
+                muteListener: muteListener,
+                deviceListener: deviceListener
+            )
+        }
     }
 
     nonisolated var hudEvents: AnyPublisher<HUDEvent, Never> {
@@ -491,8 +498,8 @@ class VolumeMonitor: ObservableObject {
             var listenerRegistered = false
             let volumeElementsSnapshot = state.volumeElementsSnapshot()
             for element in volumeElementsSnapshot {
-                var volumeAddress = makePropertyAddress(
-                    kAudioDevicePropertyVolumeScalar, element: element)
+                var volumeAddress = deviceManager.makePropertyAddress(
+                    selector: kAudioDevicePropertyVolumeScalar, element: element)
 
                 let volumeStatus = AudioObjectAddPropertyListenerBlock(
                     deviceID, &volumeAddress, audioQueue, volumeListener)
@@ -519,8 +526,8 @@ class VolumeMonitor: ObservableObject {
                 if let muteListener = muteListener {
                     var validMuteElements: [AudioObjectPropertyElement] = []
                     for element in muteElementsSnapshot {
-                        var muteAddress = makePropertyAddress(
-                            kAudioDevicePropertyMute, element: element)
+                        var muteAddress = deviceManager.makePropertyAddress(
+                            selector: kAudioDevicePropertyMute, element: element)
 
                         if AudioObjectHasProperty(deviceID, &muteAddress) {
                             var muted: UInt32 = 0
@@ -581,29 +588,41 @@ class VolumeMonitor: ObservableObject {
         state.setListeningActive(true)
     }
 
-    private nonisolated func nonisolatedStopListening() {
-        assert(Thread.isMainThread, "nonisolatedStopListening must be called from main thread")
+    @MainActor
+    private static func performCleanup(
+        state: VolumeStateStore,
+        deviceManager: AudioDeviceManager,
+        audioQueue: DispatchQueue,
+        systemEventMonitor: SystemEventMonitor,
+        volumeListener: AudioObjectPropertyListenerBlock?,
+        muteListener: AudioObjectPropertyListenerBlock?,
+        deviceListener: AudioObjectPropertyListenerBlock?
+    ) {
+        // CRITICAL: This method uses strong references to all dependencies.
+        // Even if the VolumeMonitor instance has been deallocated, these strong references
+        // keep the required objects alive long enough to safely remove CoreAudio listeners.
+        // This prevents memory leaks when deinit runs on background threads.
 
-        // Disable listening flag first to prevent callbacks from executing
-        state.setListeningActive(false)
-
+        // Stop system event monitor on main thread
         MainActor.assumeIsolated {
             systemEventMonitor.stop()
         }
 
+        // Remove CoreAudio listeners
         var deviceAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: 0
         )
 
-        let removalDeviceID = state.listeningDeviceIDValue() ?? resolveDeviceID()
+        let removalDeviceID =
+            state.listeningDeviceIDValue() ?? deviceManager.getDefaultOutputDevice()
 
         if let volumeListener = volumeListener {
             let registeredVolumes = state.registeredVolumeElementsSnapshot()
             for element in registeredVolumes {
-                var volumeAddress = makePropertyAddress(
-                    kAudioDevicePropertyVolumeScalar, element: element)
+                var volumeAddress = deviceManager.makePropertyAddress(
+                    selector: kAudioDevicePropertyVolumeScalar, element: element)
                 if removalDeviceID != 0 {
                     AudioObjectRemovePropertyListenerBlock(
                         removalDeviceID, &volumeAddress, audioQueue, volumeListener)
@@ -614,7 +633,8 @@ class VolumeMonitor: ObservableObject {
         if let muteListener = muteListener {
             let registeredMutes = state.registeredMuteElementsSnapshot()
             for element in registeredMutes {
-                var muteAddress = makePropertyAddress(kAudioDevicePropertyMute, element: element)
+                var muteAddress = deviceManager.makePropertyAddress(
+                    selector: kAudioDevicePropertyMute, element: element)
                 if removalDeviceID != 0 {
                     AudioObjectRemovePropertyListenerBlock(
                         removalDeviceID, &muteAddress, audioQueue, muteListener)
@@ -627,9 +647,6 @@ class VolumeMonitor: ObservableObject {
                 AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
         }
 
-        volumeListener = nil
-        deviceListener = nil
-        muteListener = nil
         state.updateListeningDeviceID(nil)
         state.updateRegisteredVolumeElements([])
         state.updateRegisteredMuteElements([])
@@ -640,7 +657,35 @@ class VolumeMonitor: ObservableObject {
         volumeChangeDebouncer?.cancel()
         deviceChangeDebouncer?.cancel()
 
-        nonisolatedStopListening()
+        // Disable listening flag immediately to prevent race conditions
+        // This ensures startListening() called right after will be blocked by the guard check
+        state.setListeningActive(false)
+
+        // Capture dependencies strongly for cleanup
+        let state = self.state
+        let deviceManager = self.deviceManager
+        let audioQueue = self.audioQueue
+        let systemEventMonitor = self.systemEventMonitor
+        let volumeListener = self.volumeListener
+        let muteListener = self.muteListener
+        let deviceListener = self.deviceListener
+
+        // Dispatch cleanup to main thread with strong references
+        DispatchQueue.main.async { [weak self] in
+            Self.performCleanup(
+                state: state,
+                deviceManager: deviceManager,
+                audioQueue: audioQueue,
+                systemEventMonitor: systemEventMonitor,
+                volumeListener: volumeListener,
+                muteListener: muteListener,
+                deviceListener: deviceListener
+            )
+            // Clear instance listener properties to release closures
+            self?.volumeListener = nil
+            self?.muteListener = nil
+            self?.deviceListener = nil
+        }
     }
 
     private func emitHUDEvent(volumeScalar: CGFloat, isUnsupported: Bool) {

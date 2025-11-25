@@ -13,8 +13,6 @@ final class StatusBarController {
     private let launchAtLoginMenuItem: NSMenuItem
 
     private var subscriptions = Set<AnyCancellable>()
-    private var latestVolume: Int = 0
-    private var latestDeviceName: String = "Unknown Device"
     private var volumeChangeHandler: ((CGFloat) -> Void)?
     private var isVolumeControlAvailable = false
     private var aboutWindow: NSWindow?
@@ -84,8 +82,6 @@ final class StatusBarController {
 
         statusItem.menu = menu
 
-        latestVolume = initialVolume
-        latestDeviceName = initialDevice
         statusBarVolumeView.update(percentage: initialVolume)
     }
 
@@ -112,8 +108,6 @@ final class StatusBarController {
         .sink { [weak self] (volumeData, deviceName, isSupported) in
             guard let self = self else { return }
             let (volume, formatted) = volumeData
-            self.latestVolume = volume
-            self.latestDeviceName = deviceName
             self.statusBarVolumeView.update(percentage: volume)
             self.updateVolumeInteraction(isSupported: isSupported)
             self.volumeMenuView.update(

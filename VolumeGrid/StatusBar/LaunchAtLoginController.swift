@@ -14,8 +14,6 @@ enum LaunchAtLoginError: LocalizedError {
 }
 
 final class LaunchAtLoginController {
-    private let queue = DispatchQueue(label: "com.volumegrid.launchAtLogin", qos: .userInitiated)
-
     func isEnabled() -> Bool {
         SMAppService.mainApp.status == .enabled
     }
@@ -24,7 +22,7 @@ final class LaunchAtLoginController {
         _ enabled: Bool,
         completion: @escaping (Result<Bool, LaunchAtLoginError>) -> Void
     ) {
-        queue.async { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
 
             let result: Result<Bool, LaunchAtLoginError>

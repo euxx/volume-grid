@@ -42,7 +42,8 @@ final class AudioDeviceManager: Sendable {
     ) -> Bool {
         var size = UInt32(MemoryLayout<T>.size)
         return withUnsafeMutableBytes(of: &value) { buffer in
-            AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, buffer.baseAddress!)
+            guard let baseAddress = buffer.baseAddress else { return false }
+            return AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, baseAddress)
                 == noErr
         }
     }
@@ -55,7 +56,8 @@ final class AudioDeviceManager: Sendable {
         var mutableValue = value
         let size = UInt32(MemoryLayout<T>.size)
         return withUnsafeBytes(of: &mutableValue) { buffer in
-            AudioObjectSetPropertyData(deviceID, &address, 0, nil, size, buffer.baseAddress!)
+            guard let baseAddress = buffer.baseAddress else { return false }
+            return AudioObjectSetPropertyData(deviceID, &address, 0, nil, size, baseAddress)
                 == noErr
         }
     }

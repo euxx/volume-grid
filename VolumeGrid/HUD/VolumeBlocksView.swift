@@ -1,5 +1,6 @@
 import Cocoa
 
+@MainActor
 final class VolumeBlocksView: NSView {
     private let blockCount = 16
     private let blockWidth: CGFloat = 10
@@ -75,8 +76,8 @@ final class VolumeBlocksView: NSView {
 
         let clampedFraction = min(max(fillFraction, 0), 1)
         let totalBlocks = clampedFraction * CGFloat(blockCount)
-        let quarterStep: CGFloat = 0.25
-        let roundedTotalBlocks = (totalBlocks / quarterStep).rounded() * quarterStep
+        let roundedTotalBlocks =
+            (totalBlocks / VolumeFormatter.quarterStep).rounded() * VolumeFormatter.quarterStep
 
         for (index, fillLayer) in fillLayers.enumerated() {
             let blockFill = min(max((roundedTotalBlocks - CGFloat(index)), 0), 1)

@@ -12,7 +12,7 @@ extension Comparable {
 
 enum VolumeFormatter {
     private static let blocksCount: CGFloat = 16.0
-    private static let quarterStep: CGFloat = 0.25
+    static let quarterStep: CGFloat = 0.25
 
     static func formattedVolumeString(for percentage: Int) -> String {
         let clamped = percentage.clamped(to: 0...100)

@@ -2,11 +2,11 @@ import Cocoa
 
 @MainActor
 final class VolumeBlocksView: NSView {
-    private let blockCount = 16
+    private let blockCount = VolumeGridConstants.HUD.VolumeBlocksView.blockCount
     private let blockWidth: CGFloat = 10
-    private let blockHeight: CGFloat = 6
+    private let blockHeight = VolumeGridConstants.HUD.VolumeBlocksView.blockHeight
     private let blockSpacing: CGFloat = 1
-    private let cornerRadius: CGFloat = 0.5
+    private let cornerRadius = VolumeGridConstants.HUD.VolumeBlocksView.cornerRadius
     private var style: HUDStyle
     private var blockLayers: [CAShapeLayer] = []
     private var fillLayers: [CAShapeLayer] = []
@@ -21,7 +21,7 @@ final class VolumeBlocksView: NSView {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         layer?.backgroundColor =
-            NSColor(red: 30 / 255, green: 30 / 255, blue: 30 / 255, alpha: 0.5).cgColor
+            VolumeGridConstants.HUD.VolumeBlocksView.inactiveBlockColor.cgColor
         createBlockLayers()
     }
 

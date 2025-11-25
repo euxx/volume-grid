@@ -54,16 +54,16 @@ final class HUDWindowContext {
 }
 
 struct HUDConstants {
-    static let width: CGFloat = 240
-    static let height: CGFloat = 160
-    static let alpha: CGFloat = 0.97
-    static let displayDuration: TimeInterval = 1.4
-    static let cornerRadius: CGFloat = 20
-    static let marginX: CGFloat = 10
-    static let minVerticalPadding: CGFloat = 14
-    static let fadeInDuration: TimeInterval = 0.3
-    static let fadeOutDuration: TimeInterval = 0.6
-    static let textFont = NSFont.systemFont(ofSize: 12)
+    static let width = VolumeGridConstants.HUD.width
+    static let height = VolumeGridConstants.HUD.height
+    static let alpha = VolumeGridConstants.HUD.alpha
+    static let displayDuration = VolumeGridConstants.HUD.displayDuration
+    static let cornerRadius = VolumeGridConstants.HUD.cornerRadius
+    static let marginX = VolumeGridConstants.HUD.marginX
+    static let minVerticalPadding = VolumeGridConstants.HUD.minVerticalPadding
+    static let fadeInDuration = VolumeGridConstants.HUD.fadeInDuration
+    static let fadeOutDuration = VolumeGridConstants.HUD.fadeOutDuration
+    static let textFont = VolumeGridConstants.HUD.textFont
 }
 
 class HUDManager {
@@ -156,7 +156,7 @@ class HUDManager {
         bottomConstraint.priority = .defaultHigh
         bottomConstraint.isActive = true
 
-        let iconContainerSize: CGFloat = 40
+        let iconContainerSize = VolumeGridConstants.HUD.Layout.iconSize
         let iconContainer = NSView()
         iconContainer.translatesAutoresizingMaskIntoConstraints = false
 
@@ -186,11 +186,13 @@ class HUDManager {
         textStack.translatesAutoresizingMaskIntoConstraints = false
         textStack.orientation = .horizontal
         textStack.alignment = .centerY
-        textStack.spacing = 8
+        textStack.spacing = VolumeGridConstants.HUD.Layout.textStackSpacing
 
         let leadingSpacer = NSView()
         leadingSpacer.translatesAutoresizingMaskIntoConstraints = false
-        leadingSpacer.widthAnchor.constraint(equalToConstant: 30).isActive = true
+        leadingSpacer.widthAnchor.constraint(
+            equalToConstant: VolumeGridConstants.HUD.Layout.leadingSpacerWidth
+        ).isActive = true
 
         let deviceLabel = NSTextField(labelWithString: "")
         deviceLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -234,8 +236,8 @@ class HUDManager {
         contentStack.addArrangedSubview(blocksView)
         blocksView.update(style: style, fillFraction: 0)
 
-        let spacingIconToDevice: CGFloat = 16
-        let spacingDeviceToBlocks: CGFloat = 24
+        let spacingIconToDevice = VolumeGridConstants.HUD.Layout.spacingIconToDevice
+        let spacingDeviceToBlocks = VolumeGridConstants.HUD.Layout.spacingDeviceToBlocks
         contentStack.setCustomSpacing(spacingIconToDevice, after: iconContainer)
         contentStack.setCustomSpacing(spacingDeviceToBlocks, after: textStack)
 
@@ -316,7 +318,7 @@ class HUDManager {
             .size(withAttributes: [.font: HUDConstants.textFont]).width
         let effectiveStatusTextWidth = max(statusTextSize.width, maxVolumeSampleWidth)
 
-        let gapBetweenDeviceAndCount: CGFloat = 8
+        let gapBetweenDeviceAndCount = VolumeGridConstants.HUD.Layout.textStackSpacing
         let combinedWidth =
             deviceTextSize.width + gapBetweenDeviceAndCount + effectiveStatusTextWidth
         let dynamicHudWidth = max(HUDConstants.width, combinedWidth + HUDConstants.marginX)
@@ -328,12 +330,17 @@ class HUDManager {
     func showHUD(
         volumeScalar: CGFloat, deviceName: String?, isUnsupported: Bool = false
     ) {
+        let epsilon = VolumeGridConstants.Audio.volumeEpsilon
         let clampedScalar = volumeScalar.clamped(to: 0...1)
-        let isMutedForDisplay = clampedScalar <= volumeEpsilon
+        let isMutedForDisplay = clampedScalar <= epsilon
         let displayedScalar = isMutedForDisplay ? 0 : clampedScalar
 
-        let spacingIconToDevice: CGFloat = isUnsupported ? 20 : 14
-        let spacingDeviceToBlocks: CGFloat = isUnsupported ? 0 : 20
+        let spacingIconToDevice: CGFloat = isUnsupported
+            ? VolumeGridConstants.HUD.Layout.spacingIconToDeviceUnsupported
+            : VolumeGridConstants.HUD.Layout.spacingIconToDevice
+        let spacingDeviceToBlocks: CGFloat = isUnsupported
+            ? VolumeGridConstants.HUD.Layout.spacingDeviceToBlocksUnsupported
+            : VolumeGridConstants.HUD.Layout.spacingDeviceToBlocks
 
         let deviceName = deviceName ?? "Unknown Device"
         let statusString =
@@ -345,7 +352,7 @@ class HUDManager {
             deviceName: deviceName,
             statusString: statusString
         )
-        let gapBetweenDeviceAndCount: CGFloat = 8
+        let gapBetweenDeviceAndCount = VolumeGridConstants.HUD.Layout.textStackSpacing
 
         syncHUDWindowsWithScreens()
 
@@ -403,7 +410,7 @@ class HUDManager {
 
             context.views.volumeLabel.stringValue = statusString
             context.views.volumeLabel.textColor = style.primaryTextColor
-            let widthPadding: CGFloat = 6
+            let widthPadding = VolumeGridConstants.HUD.Layout.volumeLabelWidthPadding
             context.constraints.volumeLabelWidth.constant = effectiveStatusTextWidth + widthPadding
             context.views.textStack.spacing = gapBetweenDeviceAndCount
 

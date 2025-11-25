@@ -146,8 +146,8 @@ class VolumeMonitor: ObservableObject {
     private nonisolated let state = VolumeStateStore()
     private let systemEventMonitor = SystemEventMonitor()
     private nonisolated let hudEventSubject = PassthroughSubject<HUDEvent, Never>()
-    private var volumeChangeDebouncer: DispatchWorkItem?
-    private var deviceChangeDebouncer: DispatchWorkItem?
+    private var volumeChangeDebounceTask: Task<Void, Never>?
+    private var deviceChangeDebounceTask: Task<Void, Never>?
 
     nonisolated private var volumeListener: AudioObjectPropertyListenerBlock? {
         get { volumeListenerProperty.get() }
@@ -196,9 +196,9 @@ class VolumeMonitor: ObservableObject {
     }
 
     deinit {
-        // Cancel any pending UI update tasks to prevent them from executing after deinit
-        volumeChangeDebouncer?.cancel()
-        deviceChangeDebouncer?.cancel()
+        // Cancel any pending debounce tasks to prevent them from executing after deinit
+        volumeChangeDebounceTask?.cancel()
+        deviceChangeDebounceTask?.cancel()
 
         // CRITICAL: Ensure CoreAudio listeners are removed before deallocation
         // Must use strong references to dependencies to guarantee cleanup even if deinit runs on background thread
@@ -354,16 +354,13 @@ class VolumeMonitor: ObservableObject {
                 self.state.setDeviceMuted(false)
             }
 
-            self.volumeChangeDebouncer?.cancel()
+            self.volumeChangeDebounceTask?.cancel()
             let capturedScalar = currentScalar
-            let debouncer = DispatchWorkItem { [weak self] in
-                self?.showVolumeHUD(volumeScalar: capturedScalar)
+            let task = Task {
+                try? await Task.sleep(nanoseconds: UInt64(VolumeGridConstants.Audio.volumeChangeDebounceDelay * 1_000_000_000))
+                self.showVolumeHUD(volumeScalar: capturedScalar)
             }
-            self.volumeChangeDebouncer = debouncer
-            DispatchQueue.main.asyncAfter(
-                deadline: .now() + VolumeGridConstants.Audio.volumeChangeDebounceDelay,
-                execute: debouncer
-            )
+            self.volumeChangeDebounceTask = task
         }
     }
 
@@ -388,9 +385,11 @@ class VolumeMonitor: ObservableObject {
     }
 
     private func deviceChanged() {
-        deviceChangeDebouncer?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
+        deviceChangeDebounceTask?.cancel()
+        let task = Task {
+            try? await Task.sleep(nanoseconds: UInt64(VolumeGridConstants.Audio.deviceChangeDebounceDelay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+
             self.stopListening()
             self.updateDefaultOutputDevice()
             self.getAudioDevices()
@@ -431,11 +430,7 @@ class VolumeMonitor: ObservableObject {
                 self.showVolumeHUD(volumeScalar: 0, isUnsupported: true)
             }
         }
-        deviceChangeDebouncer = workItem
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + VolumeGridConstants.Audio.deviceChangeDebounceDelay,
-            execute: workItem
-        )
+        deviceChangeDebounceTask = task
     }
 
     private func showVolumeHUD(volumeScalar: CGFloat, isUnsupported: Bool = false) {
@@ -660,9 +655,9 @@ class VolumeMonitor: ObservableObject {
     }
 
     func stopListening() {
-        // Cancel pending UI updates to prevent them from firing after stopping
-        volumeChangeDebouncer?.cancel()
-        deviceChangeDebouncer?.cancel()
+        // Cancel pending debounce tasks to prevent them from firing after stopping
+        volumeChangeDebounceTask?.cancel()
+        deviceChangeDebounceTask?.cancel()
 
         // Disable listening flag immediately to prevent race conditions
         // This ensures startListening() called right after will be blocked by the guard check

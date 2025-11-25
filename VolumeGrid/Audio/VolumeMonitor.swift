@@ -338,17 +338,18 @@ class VolumeMonitor: ObservableObject {
         let clampedVolume = volume.clamped(to: 0...1)
         let percentage = Int(round(clampedVolume * 100))
         let currentScalar = CGFloat(clampedVolume)
+        let epsilon = VolumeGridConstants.Audio.volumeEpsilon
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let lastScalar = self.state.lastVolumeScalarSnapshot() ?? 0
-            let volumeActuallyChanged = abs(currentScalar - lastScalar) > volumeEpsilon
+            let volumeActuallyChanged = abs(currentScalar - lastScalar) > epsilon
             if !volumeActuallyChanged {
                 return
             }
             self.state.updateLastVolumeScalar(currentScalar)
             self.volumePercentage = percentage
-            if currentScalar > volumeEpsilon, self.state.deviceMuted() {
+            if currentScalar > epsilon, self.state.deviceMuted() {
                 logger.debug("volumeChanged: Volume > 0 but device is muted, unmuting")
                 self.state.setDeviceMuted(false)
             }
@@ -359,7 +360,10 @@ class VolumeMonitor: ObservableObject {
                 self?.showVolumeHUD(volumeScalar: capturedScalar)
             }
             self.volumeChangeDebouncer = debouncer
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: debouncer)
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + VolumeGridConstants.Audio.volumeChangeDebounceDelay,
+                execute: debouncer
+            )
         }
     }
 
@@ -428,7 +432,10 @@ class VolumeMonitor: ObservableObject {
             }
         }
         deviceChangeDebouncer = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: workItem)
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + VolumeGridConstants.Audio.deviceChangeDebounceDelay,
+            execute: workItem
+        )
     }
 
     private func showVolumeHUD(volumeScalar: CGFloat, isUnsupported: Bool = false) {

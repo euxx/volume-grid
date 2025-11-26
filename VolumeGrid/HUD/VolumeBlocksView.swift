@@ -2,7 +2,7 @@ import Cocoa
 
 @MainActor
 final class VolumeBlocksView: NSView {
-    private let blockCount = VolumeGridConstants.HUD.VolumeBlocksView.blockCount
+    private let blockCount = VolumeGridConstants.volumeBlocksCount
     private let blockWidth = VolumeGridConstants.HUD.VolumeBlocksView.blockWidth
     private let blockHeight = VolumeGridConstants.HUD.VolumeBlocksView.blockHeight
     private let blockSpacing = VolumeGridConstants.HUD.VolumeBlocksView.blockSpacing

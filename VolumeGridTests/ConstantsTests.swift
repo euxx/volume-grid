@@ -16,7 +16,7 @@ final class ConstantsTests: XCTestCase {
     }
 
     func testAudioBlocksCountValue() {
-        XCTAssertEqual(VolumeGridConstants.Audio.blocksCount, 16.0)
+        XCTAssertEqual(VolumeGridConstants.volumeBlocksCount, 16)
     }
 
     func testAudioVolumeChangeDebounceDelay() {
@@ -79,7 +79,7 @@ final class ConstantsTests: XCTestCase {
     // MARK: - Volume Blocks View Constants
 
     func testVolumeBlocksViewConfiguration() {
-        XCTAssertEqual(VolumeGridConstants.HUD.VolumeBlocksView.blockCount, 16)
+        XCTAssertEqual(VolumeGridConstants.volumeBlocksCount, 16)
         XCTAssertEqual(VolumeGridConstants.HUD.VolumeBlocksView.blockHeight, 6)
         XCTAssertEqual(VolumeGridConstants.HUD.VolumeBlocksView.cornerRadius, 0.5)
     }

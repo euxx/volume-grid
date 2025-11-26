@@ -9,7 +9,7 @@ extension Comparable {
 }
 
 enum VolumeFormatter {
-    private static let blocksCount = VolumeGridConstants.Audio.blocksCount
+    private static let blocksCount = CGFloat(VolumeGridConstants.volumeBlocksCount)
     static let quarterStep = VolumeGridConstants.Audio.quarterStep
 
     static func formattedVolumeString(for percentage: Int) -> String {
@@ -69,15 +69,15 @@ enum VolumeIconHelper {
         if isUnsupported {
             return VolumeIcon(
                 symbolName: "nosign",
-                size: VolumeGridConstants.HUD.Icons.sizeUnsupported
+                size: VolumeGridConstants.Icons.sizeUnsupported
             )
         }
 
         if clamped == 0 {
             let size: CGFloat =
                 forHUD
-                ? VolumeGridConstants.HUD.Icons.sizeHUDMuted
-                : VolumeGridConstants.HUD.Icons.sizeStatusBar
+                ? VolumeGridConstants.Icons.sizeHUDMuted
+                : VolumeGridConstants.Icons.sizeStatusBar
             let symbolName = forHUD ? "speaker.slash.fill" : "speaker.slash"
             return VolumeIcon(symbolName: symbolName, size: size)
         }
@@ -86,22 +86,22 @@ enum VolumeIconHelper {
         case 0..<lowThreshold:
             let size: CGFloat =
                 forHUD
-                ? VolumeGridConstants.HUD.Icons.sizeHUDLow
-                : VolumeGridConstants.HUD.Icons.sizeLow
+                ? VolumeGridConstants.Icons.sizeHUDLow
+                : VolumeGridConstants.Icons.sizeLow
             let symbolName = forHUD ? "speaker.wave.1.fill" : "speaker.wave.1"
             return VolumeIcon(symbolName: symbolName, size: size)
         case lowThreshold..<mediumThreshold:
             let size: CGFloat =
                 forHUD
-                ? VolumeGridConstants.HUD.Icons.sizeHUDMedium
-                : VolumeGridConstants.HUD.Icons.sizeMedium
+                ? VolumeGridConstants.Icons.sizeHUDMedium
+                : VolumeGridConstants.Icons.sizeMedium
             let symbolName = forHUD ? "speaker.wave.2.fill" : "speaker.wave.2"
             return VolumeIcon(symbolName: symbolName, size: size)
         default:
             let size: CGFloat =
                 forHUD
-                ? VolumeGridConstants.HUD.Icons.sizeHUDHigh
-                : VolumeGridConstants.HUD.Icons.sizeHigh
+                ? VolumeGridConstants.Icons.sizeHUDHigh
+                : VolumeGridConstants.Icons.sizeHigh
             let symbolName = forHUD ? "speaker.wave.3.fill" : "speaker.wave.3"
             return VolumeIcon(symbolName: symbolName, size: size)
         }

@@ -76,11 +76,9 @@ final class VolumeBlocksView: NSView {
 
         let clampedFraction = min(max(fillFraction, 0), 1)
         let totalBlocks = clampedFraction * CGFloat(blockCount)
-        let roundedTotalBlocks =
-            (totalBlocks / VolumeFormatter.quarterStep).rounded() * VolumeFormatter.quarterStep
 
         for (index, fillLayer) in fillLayers.enumerated() {
-            let blockFill = min(max((roundedTotalBlocks - CGFloat(index)), 0), 1)
+            let blockFill = min(max((totalBlocks - CGFloat(index)), 0), 1)
             fillLayer.isHidden = blockFill <= 0
 
             if blockFill > 0 {

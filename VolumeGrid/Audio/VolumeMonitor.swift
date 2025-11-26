@@ -158,6 +158,7 @@ class VolumeMonitor: ObservableObject {
     private nonisolated let hudEventSubject = PassthroughSubject<HUDEvent, Never>()
     private var volumeChangeDebounceTask: Task<Void, Never>?
     private var deviceChangeDebounceTask: Task<Void, Never>?
+    private var keyPressDebounceTask: Task<Void, Never>?
 
     nonisolated private var volumeListener: AudioObjectPropertyListenerBlock? {
         get { volumeListenerProperty.get() }
@@ -209,6 +210,7 @@ class VolumeMonitor: ObservableObject {
         // Cancel any pending debounce tasks to prevent them from executing after deinit
         volumeChangeDebounceTask?.cancel()
         deviceChangeDebounceTask?.cancel()
+        keyPressDebounceTask?.cancel()
 
         // CRITICAL: Ensure CoreAudio listeners are removed before deallocation
         // Must use strong references to dependencies to guarantee cleanup even if deinit runs on background thread
@@ -346,7 +348,6 @@ class VolumeMonitor: ObservableObject {
         guard let volume = getCurrentVolume() else { return }
 
         let clampedVolume = volume.clamped(to: 0...1)
-        let percentage = Int(round(clampedVolume * 100))
         let currentScalar = CGFloat(clampedVolume)
         let epsilon = VolumeGridConstants.Audio.volumeEpsilon
 
@@ -358,7 +359,7 @@ class VolumeMonitor: ObservableObject {
                 return
             }
             self.state.updateLastVolumeScalar(currentScalar)
-            self.volumePercentage = percentage
+            self.volumePercentage = Int(round(clampedVolume * 100))
             if currentScalar > epsilon, self.state.deviceMuted() {
                 logger.debug("volumeChanged: Volume > 0 but device is muted, unmuting")
                 self.state.setDeviceMuted(false)
@@ -370,8 +371,11 @@ class VolumeMonitor: ObservableObject {
                     nanoseconds: UInt64(
                         VolumeGridConstants.Audio.volumeChangeDebounceDelay * 1_000_000_000))
                 guard !Task.isCancelled else { return }
-                let finalScalar = self.state.lastVolumeScalarSnapshot() ?? currentScalar
-                self.showVolumeHUD(volumeScalar: finalScalar)
+                // Re-fetch current volume after debounce to ensure stable final value
+                if let finalVolume = self.getCurrentVolume() {
+                    let finalClamped = finalVolume.clamped(to: 0...1)
+                    self.showVolumeHUD(volumeScalar: CGFloat(finalClamped))
+                }
             }
             self.volumeChangeDebounceTask = task
         }
@@ -461,7 +465,7 @@ class VolumeMonitor: ObservableObject {
             let clamped = volume.clamped(to: 0...1)
             let isMuted = state.deviceMuted()
             scalar = isMuted ? 0 : CGFloat(clamped)
-            state.updateLastVolumeScalar(CGFloat(clamped))
+            // Don't update lastVolumeScalar here - let volumeChanged() handle state
             volumePercentage = isMuted ? 0 : Int(round(clamped * 100))
             isUnsupported = false
         } else {
@@ -570,15 +574,23 @@ class VolumeMonitor: ObservableObject {
         // Key press handler: always show HUD when user presses volume/mute keys
         systemEventMonitor.start { [weak self] in
             guard let self else { return }
-            if self.isCurrentDeviceVolumeSupported {
-                self.showHUDForCurrentVolume()
-            } else {
-                let fallbackScalar = self.state.lastVolumeScalarSnapshot() ?? 0
-                logger.debug(
-                    "startListening: Device doesn't support volume control, showing unsupported HUD"
-                )
-                self.showVolumeHUD(volumeScalar: fallbackScalar, isUnsupported: true)
+
+            // Debounce key press to merge with volumeChanged callbacks
+            self.keyPressDebounceTask?.cancel()
+            let task = Task {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(
+                        VolumeGridConstants.Audio.volumeChangeDebounceDelay * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+
+                if self.isCurrentDeviceVolumeSupported {
+                    self.showHUDForCurrentVolume()
+                } else {
+                    let fallbackScalar = self.state.lastVolumeScalarSnapshot() ?? 0
+                    self.showVolumeHUD(volumeScalar: fallbackScalar, isUnsupported: true)
+                }
             }
+            self.keyPressDebounceTask = task
         }
 
         var deviceAddress = AudioObjectPropertyAddress(

@@ -559,8 +559,6 @@ final class VolumeMenuItemView: NSView {
         let ratio = clampedX / bounds.width
 
         progressView.progress = ratio
-        DispatchQueue.global(qos: .userInitiated).async {
-            handler(ratio)
-        }
+        handler(ratio)
     }
 }

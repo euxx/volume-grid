@@ -1,6 +1,6 @@
 import AudioToolbox
-import Cocoa
 @preconcurrency import Combine
+import CoreGraphics
 import os
 @preconcurrency import os.lock
 

@@ -1,5 +1,5 @@
-import Cocoa
 import Combine
+import Foundation
 import XCTest
 
 @testable import Volume_Grid

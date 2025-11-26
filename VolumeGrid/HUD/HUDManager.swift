@@ -1,6 +1,9 @@
 import Cocoa
 import Combine
 import SwiftUI
+import os
+
+private let logger = Logger(subsystem: "com.volumegrid", category: "HUDManager")
 
 struct HUDStyle {
     let shadowColor: NSColor
@@ -57,9 +60,11 @@ class HUDManager {
     private var hudWindows: [CGDirectDisplayID: HUDWindowContext] = [:]
     private var hideHUDTask: Task<Void, Never>?
     private var screenChangeCancellable: AnyCancellable?
+    private var currentHUDCycleID: UInt64 = 0
 
     @MainActor
     init() {
+        logger.debug("HUDManager initialized")
         syncHUDWindowsWithScreens()
         screenChangeCancellable = NotificationCenter.default
             .publisher(for: NSApplication.didChangeScreenParametersNotification)
@@ -322,6 +327,10 @@ class HUDManager {
     func showHUD(
         volumeScalar: CGFloat, deviceName: String?, isUnsupported: Bool = false
     ) {
+        currentHUDCycleID &+= 1
+        let cycleID = currentHUDCycleID
+        logger.debug("showHUD: volume=\(volumeScalar, privacy: .public), cycleID=\(cycleID)")
+
         let epsilon = VolumeGridConstants.Audio.volumeEpsilon
         let clampedScalar = volumeScalar.clamped(to: 0...1)
         let isMutedForDisplay = clampedScalar <= epsilon
@@ -360,7 +369,6 @@ class HUDManager {
             let isAlreadyVisible = hudWindow.isVisible && hudWindow.alphaValue > 0.1
 
             let style = hudStyle()
-
             let screenFrame = screen.frame
             let newWindowFrame = NSRect(
                 x: screenFrame.midX - dynamicHudWidth / 2,
@@ -432,23 +440,40 @@ class HUDManager {
             }
         }
 
+        if hideHUDTask != nil {
+            logger.debug("Cancelling previous hideHUDTask")
+        }
         hideHUDTask?.cancel()
 
         let task = Task {
             try? await Task.sleep(
                 nanoseconds: UInt64(VolumeGridConstants.HUD.displayDuration * 1_000_000_000))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                return
+            }
 
             for (_, context) in self.hudWindows {
                 let hudWindow = context.window
+                let shouldHideWindowWhen: () -> Bool = { [weak self] in
+                    // Only hide window if this cycle is still current
+                    if let self = self {
+                        return cycleID == self.currentHUDCycleID
+                    }
+                    return true  // If manager is deallocated, allow hiding
+                }
+
                 NSAnimationContext.runAnimationGroup(
                     { context in
                         context.duration = VolumeGridConstants.HUD.fadeOutDuration
                         hudWindow.animator().alphaValue = 0
                     },
                     completionHandler: {
-                        if hudWindow.alphaValue == 0 {
+                        if shouldHideWindowWhen() {
                             hudWindow.orderOut(nil)
+                        } else {
+                            logger.debug(
+                                "HUD cycle interrupted: suppressing orderOut (newCycleID started)"
+                            )
                         }
                     })
             }

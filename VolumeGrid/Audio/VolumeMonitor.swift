@@ -143,6 +143,7 @@ private final class VolumeStateStore: @unchecked Sendable {
 @MainActor
 class VolumeMonitor: ObservableObject {
     @Published var volumePercentage: Int = 0
+    @Published var volumeScalar: CGFloat = 0
     @Published var audioDevices: [AudioDevice] = []
     @Published var currentDevice: AudioDevice?
     @Published var isCurrentDeviceVolumeSupported: Bool = false
@@ -197,8 +198,10 @@ class VolumeMonitor: ObservableObject {
         )
         if deviceID != 0 {
             if let volume = getCurrentVolume() {
-                volumePercentage = Int(volume * 100)
-                state.updateLastVolumeScalar(CGFloat(volume))
+                let scalar = CGFloat(volume)
+                volumeScalar = scalar
+                volumePercentage = Int(round(scalar * 100))
+                state.updateLastVolumeScalar(scalar)
             }
             _ = refreshMuteState()
         }
@@ -306,6 +309,7 @@ class VolumeMonitor: ObservableObject {
             let uiScalar = CGFloat(clampedScalar)
             DispatchQueue.main.async {
                 self.state.updateLastVolumeScalar(uiScalar)
+                self.volumeScalar = uiScalar
                 self.volumePercentage = Int(round(uiScalar * 100))
                 if clampedScalar > 0 {
                     self.state.setDeviceMuted(false)
@@ -333,11 +337,14 @@ class VolumeMonitor: ObservableObject {
         let muted = deviceManager.getMuteState(for: resolvedDeviceID, elements: elements) ?? false
         state.setDeviceMuted(muted)
         if muted {
+            volumeScalar = 0
             volumePercentage = 0
         } else {
             // When unmuting, set volumePercentage to the actual current volume
             if let volume = getCurrentVolume() {
-                volumePercentage = Int(round(volume * 100))
+                let scalar = CGFloat(volume)
+                volumeScalar = scalar
+                volumePercentage = Int(round(scalar * 100))
             }
         }
         return muted ? true : nil
@@ -359,7 +366,8 @@ class VolumeMonitor: ObservableObject {
                 return
             }
             self.state.updateLastVolumeScalar(currentScalar)
-            self.volumePercentage = Int(round(clampedVolume * 100))
+            let newPercentage = Int(round(clampedVolume * 100))
+            self.volumePercentage = newPercentage
             if currentScalar > epsilon, self.state.deviceMuted() {
                 logger.debug("volumeChanged: Volume > 0 but device is muted, unmuting")
                 self.state.setDeviceMuted(false)
@@ -466,6 +474,7 @@ class VolumeMonitor: ObservableObject {
             let isMuted = state.deviceMuted()
             scalar = isMuted ? 0 : CGFloat(clamped)
             // Don't update lastVolumeScalar here - let volumeChanged() handle state
+            volumeScalar = scalar
             volumePercentage = isMuted ? 0 : Int(round(clamped * 100))
             isUnsupported = false
         } else {

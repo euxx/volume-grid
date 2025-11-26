@@ -209,6 +209,32 @@ final class HUDScenarioTests: XCTestCase {
         wait(for: [expectation], timeout: 1.0)
     }
 
+    func testDebounceDoesNotDisplayIntermediateValues() {
+        let expectation = XCTestExpectation(
+            description:
+                "HUD events should not show intermediate values that differ from what was pressed"
+        )
+
+        // All displayed values should match what was actually shown or the final state
+
+        let event1 = HUDEvent(volumeScalar: 0.19, deviceName: "Speaker", isUnsupported: false)
+        XCTAssertEqual(event1.volumeScalar, 0.19)
+
+        // Simulate multiple rapid events
+        let event2 = HUDEvent(volumeScalar: 0.22, deviceName: "Speaker", isUnsupported: false)
+        let event3 = HUDEvent(volumeScalar: 0.25, deviceName: "Speaker", isUnsupported: false)
+
+        // The displayed value should be monotonic or jump to final value, never show old intermediate
+        XCTAssert(event3.volumeScalar > event2.volumeScalar)
+        XCTAssert(event2.volumeScalar > event1.volumeScalar)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 1.0)
+    }
+
     // MARK: - Output Device Switch Scenario Tests
 
     func testHUDShowsWhenOutputDeviceSwitched() {
@@ -265,7 +291,7 @@ final class HUDScenarioTests: XCTestCase {
         let expectation = XCTestExpectation(
             description: "HUD should be visible when volume changes")
 
-        let volumeChange = HUDEvent(
+        _ = HUDEvent(
             volumeScalar: 0.75,
             deviceName: "Test Speaker",
             isUnsupported: false

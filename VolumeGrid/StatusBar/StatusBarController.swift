@@ -3,7 +3,7 @@ import Combine
 
 final class StatusBarController {
     private let volumeMonitor: VolumeMonitor
-    private let launchAtLoginController: LaunchAtLoginController
+    private let launchAtLoginController: LaunchAtLoginServiceable
 
     private let statusItem: NSStatusItem
     private let statusBarVolumeView = StatusBarVolumeView()
@@ -19,7 +19,7 @@ final class StatusBarController {
     private var aboutWindowObserver: NSObjectProtocol?
 
     @MainActor
-    init(volumeMonitor: VolumeMonitor, launchAtLoginController: LaunchAtLoginController) {
+    init(volumeMonitor: VolumeMonitor, launchAtLoginController: LaunchAtLoginServiceable) {
         self.volumeMonitor = volumeMonitor
         self.launchAtLoginController = launchAtLoginController
 

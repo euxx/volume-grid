@@ -13,7 +13,15 @@ enum LaunchAtLoginError: LocalizedError {
     }
 }
 
-final class LaunchAtLoginController {
+protocol LaunchAtLoginServiceable {
+    func isEnabled() -> Bool
+    func setEnabled(
+        _ enabled: Bool,
+        completion: @escaping (Result<Bool, LaunchAtLoginError>) -> Void
+    )
+}
+
+final class LaunchAtLoginController: LaunchAtLoginServiceable {
     func isEnabled() -> Bool {
         SMAppService.mainApp.status == .enabled
     }

@@ -38,15 +38,12 @@ final class LaunchAtLoginControllerTests: XCTestCase {
     // MARK: - isEnabled() Tests
 
     func testIsEnabledReturnsBool() {
-        let result = mockController.isEnabled()
-        XCTAssertTrue(result is Bool)
+        let _ = mockController.isEnabled()
     }
 
     func testIsEnabledCallableMultipleTimes() {
-        let first = mockController.isEnabled()
-        let second = mockController.isEnabled()
-        XCTAssertTrue(first is Bool)
-        XCTAssertTrue(second is Bool)
+        let _ = mockController.isEnabled()
+        let _ = mockController.isEnabled()
     }
 
     func testIsEnabledReturnsInitialFalse() {

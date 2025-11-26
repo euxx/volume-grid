@@ -3,9 +3,9 @@ import Cocoa
 @MainActor
 final class VolumeBlocksView: NSView {
     private let blockCount = VolumeGridConstants.HUD.VolumeBlocksView.blockCount
-    private let blockWidth: CGFloat = 10
+    private let blockWidth = VolumeGridConstants.HUD.VolumeBlocksView.blockWidth
     private let blockHeight = VolumeGridConstants.HUD.VolumeBlocksView.blockHeight
-    private let blockSpacing: CGFloat = 1
+    private let blockSpacing = VolumeGridConstants.HUD.VolumeBlocksView.blockSpacing
     private let cornerRadius = VolumeGridConstants.HUD.VolumeBlocksView.cornerRadius
     private var style: HUDStyle
     private var blockLayers: [CAShapeLayer] = []

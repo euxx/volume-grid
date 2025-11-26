@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Volume_Grid
 
 /// HUDManager tests - focuses on logic rather than UI rendering
@@ -53,7 +54,7 @@ final class HUDManagerTests: XCTestCase {
             "",
             "Very Long Device Name With Many Characters",
             "🔊 Speaker",
-            "输出设备"
+            "输出设备",
         ]
         for name in names {
             let event = HUDEvent(volumeScalar: 0.5, deviceName: name, isUnsupported: false)
@@ -80,7 +81,7 @@ final class HUDManagerTests: XCTestCase {
     func testHUDDisplayDuration() {
         let duration = VolumeGridConstants.HUD.displayDuration
         XCTAssertGreaterThan(duration, 0)
-        XCTAssertLessThan(duration, 10) // Reasonable duration
+        XCTAssertLessThan(duration, 10)  // Reasonable duration
     }
 
     func testHUDAnimationDurations() {
@@ -126,7 +127,7 @@ final class HUDManagerTests: XCTestCase {
 
     func testBlockCountForVolume() {
         let blocksCount = VolumeGridConstants.Audio.blocksCount
-        XCTAssertEqual(blocksCount, 16) // 16 blocks total
+        XCTAssertEqual(blocksCount, 16)  // 16 blocks total
     }
 
     // MARK: - Edge Cases
@@ -168,7 +169,8 @@ final class HUDManagerTests: XCTestCase {
         var events: [HUDEvent] = []
         for i in 0..<50 {
             let scalar = CGFloat(i) / 50.0
-            let event = HUDEvent(volumeScalar: scalar, deviceName: "Device \(i)", isUnsupported: i % 2 == 0)
+            let event = HUDEvent(
+                volumeScalar: scalar, deviceName: "Device \(i)", isUnsupported: i % 2 == 0)
             events.append(event)
         }
         XCTAssertEqual(events.count, 50)
@@ -209,7 +211,7 @@ final class HUDManagerTests: XCTestCase {
             "Device #1",
             "Speakers @ 5V",
             "Dolby® Atmos",
-            "HDMI 🔊"
+            "HDMI 🔊",
         ]
         for name in specialNames {
             let event = HUDEvent(volumeScalar: 0.5, deviceName: name, isUnsupported: false)

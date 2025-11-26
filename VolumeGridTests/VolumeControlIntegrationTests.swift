@@ -57,11 +57,11 @@ final class VolumeControlIntegrationTests: XCTestCase {
 
     func testPercentageToIcon() {
         let testCases: [(percentage: Int, shouldHaveIcon: Bool)] = [
-            (0, true),     // Muted
-            (25, true),    // Low
-            (50, true),    // Medium
-            (75, true),    // High
-            (100, true),   // High
+            (0, true),  // Muted
+            (25, true),  // Low
+            (50, true),  // Medium
+            (75, true),  // High
+            (100, true),  // High
         ]
 
         for (percentage, shouldHaveIcon) in testCases {
@@ -187,13 +187,13 @@ final class VolumeControlIntegrationTests: XCTestCase {
 
     func testQuarterStepFormatting() {
         let testCases: [(scalar: CGFloat, shouldContainFraction: Bool)] = [
-            (0.0, false),    // "0"
-            (0.125, true),   // "1/4" or "0+1/4"
-            (0.25, true),    // "2/4"
-            (0.375, true),   // "3/4" or similar
-            (0.5, true),     // "2/4" or "4/8"
-            (0.75, true),    // "3/4"
-            (1.0, false),    // "8"
+            (0.0, false),  // "0"
+            (0.125, true),  // "1/4" or "0+1/4"
+            (0.25, true),  // "2/4"
+            (0.375, true),  // "3/4" or similar
+            (0.5, true),  // "2/4" or "4/8"
+            (0.75, true),  // "3/4"
+            (1.0, false),  // "8"
         ]
 
         for (scalar, shouldContainFraction) in testCases {

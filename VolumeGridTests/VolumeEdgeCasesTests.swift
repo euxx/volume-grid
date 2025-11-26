@@ -262,9 +262,10 @@ final class VolumeEdgeCasesTests: XCTestCase {
 
         // All calls should return same result
         let firstResult = calls.first!
-        XCTAssertTrue(calls.allSatisfy { icon in
-            icon.symbolName == firstResult.symbolName && icon.size == firstResult.size
-        })
+        XCTAssertTrue(
+            calls.allSatisfy { icon in
+                icon.symbolName == firstResult.symbolName && icon.size == firstResult.size
+            })
     }
 
     // MARK: - Type Safety

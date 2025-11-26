@@ -335,10 +335,12 @@ class HUDManager {
         let isMutedForDisplay = clampedScalar <= epsilon
         let displayedScalar = isMutedForDisplay ? 0 : clampedScalar
 
-        let spacingIconToDevice: CGFloat = isUnsupported
+        let spacingIconToDevice: CGFloat =
+            isUnsupported
             ? VolumeGridConstants.HUD.Layout.spacingIconToDeviceUnsupported
             : VolumeGridConstants.HUD.Layout.spacingIconToDevice
-        let spacingDeviceToBlocks: CGFloat = isUnsupported
+        let spacingDeviceToBlocks: CGFloat =
+            isUnsupported
             ? VolumeGridConstants.HUD.Layout.spacingDeviceToBlocksUnsupported
             : VolumeGridConstants.HUD.Layout.spacingDeviceToBlocks
 

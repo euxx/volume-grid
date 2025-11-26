@@ -74,7 +74,8 @@ enum VolumeIconHelper {
         }
 
         if clamped == 0 {
-            let size: CGFloat = forHUD
+            let size: CGFloat =
+                forHUD
                 ? VolumeGridConstants.HUD.Icons.sizeHUDMuted
                 : VolumeGridConstants.HUD.Icons.sizeStatusBar
             let symbolName = forHUD ? "speaker.slash.fill" : "speaker.slash"
@@ -83,19 +84,22 @@ enum VolumeIconHelper {
 
         switch clamped {
         case 0..<lowThreshold:
-            let size: CGFloat = forHUD
+            let size: CGFloat =
+                forHUD
                 ? VolumeGridConstants.HUD.Icons.sizeHUDLow
                 : VolumeGridConstants.HUD.Icons.sizeLow
             let symbolName = forHUD ? "speaker.wave.1.fill" : "speaker.wave.1"
             return VolumeIcon(symbolName: symbolName, size: size)
         case lowThreshold..<mediumThreshold:
-            let size: CGFloat = forHUD
+            let size: CGFloat =
+                forHUD
                 ? VolumeGridConstants.HUD.Icons.sizeHUDMedium
                 : VolumeGridConstants.HUD.Icons.sizeMedium
             let symbolName = forHUD ? "speaker.wave.2.fill" : "speaker.wave.2"
             return VolumeIcon(symbolName: symbolName, size: size)
         default:
-            let size: CGFloat = forHUD
+            let size: CGFloat =
+                forHUD
                 ? VolumeGridConstants.HUD.Icons.sizeHUDHigh
                 : VolumeGridConstants.HUD.Icons.sizeHigh
             let symbolName = forHUD ? "speaker.wave.3.fill" : "speaker.wave.3"

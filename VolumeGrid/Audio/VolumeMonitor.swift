@@ -365,12 +365,13 @@ class VolumeMonitor: ObservableObject {
             }
 
             self.volumeChangeDebounceTask?.cancel()
-            let capturedScalar = currentScalar
             let task = Task {
                 try? await Task.sleep(
                     nanoseconds: UInt64(
                         VolumeGridConstants.Audio.volumeChangeDebounceDelay * 1_000_000_000))
-                self.showVolumeHUD(volumeScalar: capturedScalar)
+                guard !Task.isCancelled else { return }
+                let finalScalar = self.state.lastVolumeScalarSnapshot() ?? currentScalar
+                self.showVolumeHUD(volumeScalar: finalScalar)
             }
             self.volumeChangeDebounceTask = task
         }
@@ -468,6 +469,7 @@ class VolumeMonitor: ObservableObject {
             isUnsupported = true
         }
 
+        // Always show HUD when mute/volume key is pressed, regardless of whether state changed
         showVolumeHUD(volumeScalar: scalar, isUnsupported: isUnsupported)
     }
 

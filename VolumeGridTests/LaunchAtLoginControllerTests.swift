@@ -1,17 +1,19 @@
 import XCTest
+
 @testable import Volume_Grid
 
-/// Tests for LaunchAtLoginController
+/// Tests for LaunchAtLoginServiceable protocol
+/// Uses MockLaunchAtLoginController to avoid system side effects
 final class LaunchAtLoginControllerTests: XCTestCase {
-    var controller: LaunchAtLoginController!
+    var mockController: MockLaunchAtLoginController!
 
     override func setUp() {
         super.setUp()
-        controller = LaunchAtLoginController()
+        mockController = MockLaunchAtLoginController()
     }
 
     override func tearDown() {
-        controller = nil
+        mockController = nil
         super.tearDown()
     }
 
@@ -36,15 +38,27 @@ final class LaunchAtLoginControllerTests: XCTestCase {
     // MARK: - isEnabled() Tests
 
     func testIsEnabledReturnsBool() {
-        let result = controller.isEnabled()
+        let result = mockController.isEnabled()
         XCTAssertTrue(result is Bool)
     }
 
     func testIsEnabledCallableMultipleTimes() {
-        let first = controller.isEnabled()
-        let second = controller.isEnabled()
+        let first = mockController.isEnabled()
+        let second = mockController.isEnabled()
         XCTAssertTrue(first is Bool)
         XCTAssertTrue(second is Bool)
+    }
+
+    func testIsEnabledReturnsInitialFalse() {
+        XCTAssertFalse(mockController.isEnabled())
+    }
+
+    func testIsEnabledReturnsSetValue() {
+        mockController.isEnabledValue = true
+        XCTAssertTrue(mockController.isEnabled())
+
+        mockController.isEnabledValue = false
+        XCTAssertFalse(mockController.isEnabled())
     }
 
     // MARK: - setEnabled() Tests
@@ -52,7 +66,7 @@ final class LaunchAtLoginControllerTests: XCTestCase {
     func testSetEnabledToTrueCallsCompletion() {
         let expectation = XCTestExpectation(description: "Enable completion")
 
-        controller.setEnabled(true) { result in
+        mockController.setEnabled(true) { result in
             switch result {
             case .success, .failure:
                 expectation.fulfill()
@@ -65,7 +79,7 @@ final class LaunchAtLoginControllerTests: XCTestCase {
     func testSetEnabledToFalseCallsCompletion() {
         let expectation = XCTestExpectation(description: "Disable completion")
 
-        controller.setEnabled(false) { result in
+        mockController.setEnabled(false) { result in
             switch result {
             case .success, .failure:
                 expectation.fulfill()
@@ -75,43 +89,54 @@ final class LaunchAtLoginControllerTests: XCTestCase {
         wait(for: [expectation], timeout: 5.0)
     }
 
-    func testSetEnabledReturnsResult() {
+    func testSetEnabledReturnsSuccess() {
         let expectation = XCTestExpectation(description: "Result returned")
 
-        controller.setEnabled(true) { result in
+        mockController.setEnabled(true) { result in
             switch result {
             case .success(let value):
-                XCTAssertTrue(value is Bool)
+                XCTAssertTrue(value)
                 expectation.fulfill()
-            case .failure(let error):
-                XCTAssertNotNil(error)
-                expectation.fulfill()
+            case .failure:
+                XCTFail("Expected success")
             }
         }
 
         wait(for: [expectation], timeout: 5.0)
     }
 
+    func testSetEnabledUpdatesState() {
+        let expectation = XCTestExpectation(description: "State updated")
+
+        mockController.setEnabled(true) { _ in
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 5.0)
+        XCTAssertTrue(mockController.isEnabled())
+    }
+
     func testSetEnabledMultipleTimesWithDifferentValues() {
         let expectation1 = XCTestExpectation(description: "First call")
         let expectation2 = XCTestExpectation(description: "Second call")
 
-        controller.setEnabled(true) { _ in
+        mockController.setEnabled(true) { _ in
             expectation1.fulfill()
         }
 
-        controller.setEnabled(false) { _ in
+        mockController.setEnabled(false) { _ in
             expectation2.fulfill()
         }
 
         wait(for: [expectation1, expectation2], timeout: 5.0)
+        XCTAssertFalse(mockController.isEnabled())
     }
 
     func testSetEnabledExecutesAsynchronously() {
         let expectation = XCTestExpectation(description: "Async execution")
         var callCount = 0
 
-        controller.setEnabled(true) { _ in
+        mockController.setEnabled(true) { _ in
             callCount += 1
             expectation.fulfill()
         }
@@ -125,7 +150,7 @@ final class LaunchAtLoginControllerTests: XCTestCase {
         let expectation = XCTestExpectation(description: "Main thread")
         var executedOnMainThread = false
 
-        controller.setEnabled(true) { _ in
+        mockController.setEnabled(true) { _ in
             executedOnMainThread = Thread.isMainThread
             expectation.fulfill()
         }
@@ -133,5 +158,57 @@ final class LaunchAtLoginControllerTests: XCTestCase {
         wait(for: [expectation], timeout: 5.0)
         XCTAssertTrue(executedOnMainThread)
     }
-}
 
+    func testSetEnabledWithCustomClosure() {
+        let expectation = XCTestExpectation(description: "Custom closure")
+        var customClosureCalled = false
+
+        mockController.setEnabledClosure = { enabled, completion in
+            customClosureCalled = true
+            XCTAssertTrue(enabled)
+            completion(.success(enabled))
+        }
+
+        mockController.setEnabled(true) { _ in
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 5.0)
+        XCTAssertTrue(customClosureCalled)
+    }
+
+    func testSetEnabledWithCustomErrorClosure() {
+        let expectation = XCTestExpectation(description: "Custom error closure")
+
+        mockController.setEnabledClosure = { enabled, completion in
+            completion(.failure(.message("Custom error")))
+        }
+
+        mockController.setEnabled(true) { result in
+            switch result {
+            case .success:
+                XCTFail("Expected failure")
+            case .failure(let error):
+                XCTAssertEqual(error.errorDescription, "Custom error")
+                expectation.fulfill()
+            }
+        }
+
+        wait(for: [expectation], timeout: 5.0)
+    }
+
+    func testSetEnabledExpectation() {
+        let expectation = XCTestExpectation(description: "Expectation called")
+        var enabledValue: Bool?
+
+        mockController.setEnabledExpectation = { enabled in
+            enabledValue = enabled
+            expectation.fulfill()
+        }
+
+        mockController.setEnabled(true) { _ in }
+
+        wait(for: [expectation], timeout: 5.0)
+        XCTAssertEqual(enabledValue, true)
+    }
+}

@@ -8,6 +8,12 @@
 - Remove unnecessary comments.
 - Check VSCode lint problems.
 
+## Always Show HUD Scenarios
+
+- When pressing volume keys or mute key
+- When switching output devices
+- When volume changes
+
 ## Development
 
 Run commands after code changes to ensure consistent formatting:

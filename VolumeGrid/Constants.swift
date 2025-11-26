@@ -2,15 +2,27 @@ import AppKit
 import CoreGraphics
 
 enum VolumeGridConstants {
+    /// Total number of volume blocks
+    static let volumeBlocksCount: Int = 16
+
+    enum Icons {
+        static let sizeStatusBar: CGFloat = 15
+        static let sizeLow: CGFloat = 17
+        static let sizeMedium: CGFloat = 19
+        static let sizeHigh: CGFloat = 21
+        static let sizeHUDMuted: CGFloat = 32
+        static let sizeHUDLow: CGFloat = 36
+        static let sizeHUDMedium: CGFloat = 41
+        static let sizeHUDHigh: CGFloat = 47
+        static let sizeUnsupported: CGFloat = 30
+    }
+
     enum Audio {
         /// Tolerance for comparing volume values to avoid floating-point precision issues
         static let volumeEpsilon: CGFloat = 0.001
 
         /// Volume step size (1/4 of a block)
         static let quarterStep: CGFloat = 0.25
-
-        /// Total number of volume blocks in HUD
-        static let blocksCount: CGFloat = 16.0
 
         /// Debounce delay for volume change events (in seconds)
         static let volumeChangeDebounceDelay: TimeInterval = 0.05
@@ -46,20 +58,7 @@ enum VolumeGridConstants {
             static let volumeLabelWidthPadding: CGFloat = 6
         }
 
-        enum Icons {
-            static let sizeStatusBar: CGFloat = 15
-            static let sizeLow: CGFloat = 17
-            static let sizeMedium: CGFloat = 19
-            static let sizeHigh: CGFloat = 21
-            static let sizeHUDMuted: CGFloat = 32
-            static let sizeHUDLow: CGFloat = 36
-            static let sizeHUDMedium: CGFloat = 41
-            static let sizeHUDHigh: CGFloat = 47
-            static let sizeUnsupported: CGFloat = 30
-        }
-
         enum VolumeBlocksView {
-            static let blockCount: Int = 16
             static let blockWidth: CGFloat = 10
             static let blockHeight: CGFloat = 6
             static let blockSpacing: CGFloat = 1

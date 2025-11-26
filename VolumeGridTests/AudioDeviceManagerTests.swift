@@ -1,5 +1,5 @@
-import XCTest
 import AudioToolbox
+import XCTest
 
 @testable import Volume_Grid
 
@@ -54,7 +54,7 @@ final class AudioDeviceManagerTests: XCTestCase {
     // MARK: - Safety Tests (Safe Unwrapping)
 
     func testGetCurrentVolumeSafety() {
-        let invalidDeviceID: AudioDeviceID = 0xFFFFFFFF
+        let invalidDeviceID: AudioDeviceID = 0xFFFF_FFFF
         let invalidElements: [AudioObjectPropertyElement] = []
 
         let volume = manager.getCurrentVolume(for: invalidDeviceID, elements: invalidElements)

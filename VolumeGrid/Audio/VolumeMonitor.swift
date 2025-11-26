@@ -358,7 +358,8 @@ class VolumeMonitor: ObservableObject {
         }
         // Update actor state
         Task {
-            await stateActor.updateVolumeState(scalar: CGFloat(volumePercentage) / 100.0, isMuted: muted)
+            await stateActor.updateVolumeState(
+                scalar: CGFloat(volumePercentage) / 100.0, isMuted: muted)
         }
         return muted ? true : nil
     }
@@ -389,7 +390,9 @@ class VolumeMonitor: ObservableObject {
             self.volumeChangeDebounceTask?.cancel()
             let capturedScalar = currentScalar
             let task = Task {
-                try? await Task.sleep(nanoseconds: UInt64(VolumeGridConstants.Audio.volumeChangeDebounceDelay * 1_000_000_000))
+                try? await Task.sleep(
+                    nanoseconds: UInt64(
+                        VolumeGridConstants.Audio.volumeChangeDebounceDelay * 1_000_000_000))
                 // Update actor before showing HUD
                 await self.stateActor.updateVolumeState(scalar: capturedScalar, isMuted: false)
                 self.showVolumeHUD(volumeScalar: capturedScalar)
@@ -421,7 +424,9 @@ class VolumeMonitor: ObservableObject {
     private func deviceChanged() {
         deviceChangeDebounceTask?.cancel()
         let task = Task {
-            try? await Task.sleep(nanoseconds: UInt64(VolumeGridConstants.Audio.deviceChangeDebounceDelay * 1_000_000_000))
+            try? await Task.sleep(
+                nanoseconds: UInt64(
+                    VolumeGridConstants.Audio.deviceChangeDebounceDelay * 1_000_000_000))
             guard !Task.isCancelled else { return }
 
             self.stopListening()

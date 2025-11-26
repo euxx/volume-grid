@@ -1,5 +1,5 @@
-import XCTest
 import AudioToolbox
+import XCTest
 
 @testable import Volume_Grid
 
@@ -252,7 +252,7 @@ final class DeviceEventFlowTests: XCTestCase {
     // MARK: - Edge Cases
 
     func testQueryInvalidDeviceID() {
-        let invalidID: AudioDeviceID = 0xFFFFFFFF
+        let invalidID: AudioDeviceID = 0xFFFF_FFFF
         let elements: [AudioObjectPropertyElement] = []
 
         // Should not crash
@@ -261,7 +261,7 @@ final class DeviceEventFlowTests: XCTestCase {
     }
 
     func testDetectElementsInvalidDevice() {
-        let invalidID: AudioDeviceID = 0xFFFFFFFF
+        let invalidID: AudioDeviceID = 0xFFFF_FFFF
 
         // Should not crash
         let elements = deviceManager.detectVolumeElements(for: invalidID)
@@ -269,7 +269,7 @@ final class DeviceEventFlowTests: XCTestCase {
     }
 
     func testGetDeviceNameInvalidID() {
-        let invalidID: AudioDeviceID = 0xFFFFFFFF
+        let invalidID: AudioDeviceID = 0xFFFF_FFFF
 
         // Should not crash
         let name = deviceManager.getDeviceName(invalidID)

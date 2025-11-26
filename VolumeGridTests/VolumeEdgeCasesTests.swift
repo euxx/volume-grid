@@ -381,7 +381,7 @@ final class VolumeEdgeCasesTests: XCTestCase {
     // MARK: - Constants Validation
 
     func testBlocksCountConstant() {
-        let blocksCount = VolumeGridConstants.Audio.blocksCount
+        let blocksCount = CGFloat(VolumeGridConstants.volumeBlocksCount)
 
         XCTAssertGreaterThan(blocksCount, 0)
         XCTAssertLessThanOrEqual(blocksCount, 100)

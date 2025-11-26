@@ -126,7 +126,7 @@ final class HUDManagerTests: XCTestCase {
     }
 
     func testBlockCountForVolume() {
-        let blocksCount = VolumeGridConstants.Audio.blocksCount
+        let blocksCount = CGFloat(VolumeGridConstants.volumeBlocksCount)
         XCTAssertEqual(blocksCount, 16)  // 16 blocks total
     }
 

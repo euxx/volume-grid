@@ -33,22 +33,22 @@ final class VolumeIconHelperExtendedTests: XCTestCase {
 
     func testIconSizesMuted() {
         let icon = VolumeIconHelper.icon(for: 0)
-        XCTAssertEqual(icon.size, VolumeGridConstants.HUD.Icons.sizeStatusBar)
+        XCTAssertEqual(icon.size, VolumeGridConstants.Icons.sizeStatusBar)
     }
 
     func testIconSizesLow() {
         let icon = VolumeIconHelper.icon(for: 20)
-        XCTAssertEqual(icon.size, VolumeGridConstants.HUD.Icons.sizeLow)
+        XCTAssertEqual(icon.size, VolumeGridConstants.Icons.sizeLow)
     }
 
     func testIconSizesMedium() {
         let icon = VolumeIconHelper.icon(for: 50)
-        XCTAssertEqual(icon.size, VolumeGridConstants.HUD.Icons.sizeMedium)
+        XCTAssertEqual(icon.size, VolumeGridConstants.Icons.sizeMedium)
     }
 
     func testIconSizesHigh() {
         let icon = VolumeIconHelper.icon(for: 80)
-        XCTAssertEqual(icon.size, VolumeGridConstants.HUD.Icons.sizeHigh)
+        XCTAssertEqual(icon.size, VolumeGridConstants.Icons.sizeHigh)
     }
 
     // MARK: - Unsupported Device Icons
@@ -56,7 +56,7 @@ final class VolumeIconHelperExtendedTests: XCTestCase {
     func testIconUnsupportedDevice() {
         let icon = VolumeIconHelper.icon(for: 50, isUnsupported: true)
         XCTAssertEqual(icon.symbolName, "nosign")
-        XCTAssertEqual(icon.size, VolumeGridConstants.HUD.Icons.sizeUnsupported)
+        XCTAssertEqual(icon.size, VolumeGridConstants.Icons.sizeUnsupported)
     }
 
     func testIconUnsupportedIgnoresVolume() {
@@ -86,22 +86,22 @@ final class VolumeIconHelperExtendedTests: XCTestCase {
 
     func testHUDIconSizesMuted() {
         let icon = VolumeIconHelper.hudIcon(for: 0)
-        XCTAssertEqual(icon.size, VolumeGridConstants.HUD.Icons.sizeHUDMuted)
+        XCTAssertEqual(icon.size, VolumeGridConstants.Icons.sizeHUDMuted)
     }
 
     func testHUDIconSizesLow() {
         let icon = VolumeIconHelper.hudIcon(for: 20)
-        XCTAssertEqual(icon.size, VolumeGridConstants.HUD.Icons.sizeHUDLow)
+        XCTAssertEqual(icon.size, VolumeGridConstants.Icons.sizeHUDLow)
     }
 
     func testHUDIconSizesMedium() {
         let icon = VolumeIconHelper.hudIcon(for: 50)
-        XCTAssertEqual(icon.size, VolumeGridConstants.HUD.Icons.sizeHUDMedium)
+        XCTAssertEqual(icon.size, VolumeGridConstants.Icons.sizeHUDMedium)
     }
 
     func testHUDIconSizesHigh() {
         let icon = VolumeIconHelper.hudIcon(for: 80)
-        XCTAssertEqual(icon.size, VolumeGridConstants.HUD.Icons.sizeHUDHigh)
+        XCTAssertEqual(icon.size, VolumeGridConstants.Icons.sizeHUDHigh)
     }
 
     // MARK: - Clamping Behavior

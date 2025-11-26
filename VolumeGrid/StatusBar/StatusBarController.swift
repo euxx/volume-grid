@@ -1,5 +1,8 @@
 import AppKit
 import Combine
+import os
+
+private let logger = Logger(subsystem: "com.volumegrid", category: "StatusBarController")
 
 final class StatusBarController {
     private let volumeMonitor: VolumeMonitor
@@ -48,16 +51,17 @@ final class StatusBarController {
 
     @MainActor
     private func setupMenu() {
-        let initialVolume = volumeMonitor.volumePercentage
+        let initialScalar = volumeMonitor.volumeScalar
+        let initialPercentage = Int(round(initialScalar * 100))
         let initialDevice = volumeMonitor.currentDevice?.name ?? "Unknown Device"
         isVolumeControlAvailable = volumeMonitor.isCurrentDeviceVolumeSupported
         volumeChangeHandler = { [weak volumeMonitor] ratio in
             volumeMonitor?.setVolume(scalar: Float32(ratio))
         }
-        let formattedVolume = formattedVolumeText(for: initialVolume)
+        let formattedVolume = VolumeFormatter.formattedVolumeString(forScalar: initialScalar)
 
         volumeMenuView.update(
-            percentage: initialVolume,
+            percentage: initialPercentage,
             formattedVolume: formattedVolume,
             deviceName: initialDevice
         )
@@ -82,16 +86,16 @@ final class StatusBarController {
 
         statusItem.menu = menu
 
-        statusBarVolumeView.update(percentage: initialVolume)
+        statusBarVolumeView.update(percentage: initialPercentage)
     }
 
     @MainActor
     private func bindVolumeUpdates() {
-        let volumeUpdates = volumeMonitor.$volumePercentage
-            .map { [weak self] volume -> (Int, String) in
-                guard let self = self else { return (0, "0") }
-                let formatted = self.formattedVolumeText(for: volume)
-                return (volume, formatted)
+        // Use volumeScalar for precise formatting to avoid intermediate values like "5 1/4"
+        let volumeUpdates = volumeMonitor.$volumeScalar
+            .map { scalar -> (CGFloat, String) in
+                let formatted = VolumeFormatter.formattedVolumeString(forScalar: scalar)
+                return (scalar, formatted)
             }
 
         let deviceUpdates = volumeMonitor.$currentDevice
@@ -107,11 +111,12 @@ final class StatusBarController {
         .receive(on: DispatchQueue.main)
         .sink { [weak self] (volumeData, deviceName, isSupported) in
             guard let self = self else { return }
-            let (volume, formatted) = volumeData
-            self.statusBarVolumeView.update(percentage: volume)
+            let (scalar, formatted) = volumeData
+            let percentage = Int(round(scalar * 100))
+            self.statusBarVolumeView.update(percentage: percentage)
             self.updateVolumeInteraction(isSupported: isSupported)
             self.volumeMenuView.update(
-                percentage: volume,
+                percentage: percentage,
                 formattedVolume: formatted,
                 deviceName: deviceName
             )
@@ -447,6 +452,11 @@ final class VolumeMenuItemView: NSView {
     private var onVolumeChange: ((CGFloat) -> Void)?
     private var isDragging = false
 
+    // Cycle ID mechanism to prevent race condition from rapid volume updates
+    // Similar to HUDManager's currentHUDCycleID
+    private var currentUpdateCycleID: UInt64 = 0
+    private var lastAppliedCycleID: UInt64 = 0
+
     override var intrinsicContentSize: NSSize {
         .init(width: 280, height: 56)
     }
@@ -508,6 +518,10 @@ final class VolumeMenuItemView: NSView {
     }
 
     func update(percentage: Int, formattedVolume: String, deviceName: String) {
+        // Increment cycle ID to mark this as a new update cycle
+        currentUpdateCycleID &+= 1
+        let cycleID = currentUpdateCycleID
+
         let clamped = percentage.clamped(to: 0...100)
         let icon = VolumeIconHelper.icon(for: clamped)
 
@@ -516,6 +530,11 @@ final class VolumeMenuItemView: NSView {
         iconView.image = image?.withSymbolConfiguration(config)
         label.stringValue = "\(deviceName) - \(formattedVolume)"
         progressView.progress = CGFloat(clamped) / 100.0
+
+        // Only update internal tracking if this cycle is current
+        if cycleID == currentUpdateCycleID {
+            lastAppliedCycleID = cycleID
+        }
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {

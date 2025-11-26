@@ -13,7 +13,6 @@ struct HUDEvent {
 }
 
 /// Generic thread-safe property wrapper using OSAllocatedUnfairLock
-/// TODO: Consider replacing with Swift Actor for modern concurrency (5.5+)
 /// This provides lock-based thread-safety for closures and listeners that need to be
 /// stored and accessed from multiple threads, particularly from CoreAudio callbacks.
 private final class ThreadSafeProperty<T>: @unchecked Sendable {
@@ -52,19 +51,10 @@ private struct VolumeState {
 }
 
 /// Thread-safe container for volume state using unfair lock
-/// TODO: Migrate to Swift Actor when @MainActor integration improves
-/// Currently uses manual locking because:
+/// Uses manual locking because:
 /// - VolumeMonitor is @MainActor but needs background thread access
 /// - CoreAudio callbacks occur on arbitrary threads
 /// - Actor would require await at too many call sites
-///
-/// Once migration is feasible, this entire class can be replaced with:
-/// ```
-/// nonisolated(unsafe) private let volumeStateActor: VolumeStateActor = VolumeStateActor()
-/// actor VolumeStateActor {
-///     // ... properties and methods
-/// }
-/// ```
 private final class VolumeStateStore: @unchecked Sendable {
     private let lock = OSAllocatedUnfairLock()
     private nonisolated(unsafe) var state = VolumeState()
@@ -164,7 +154,6 @@ class VolumeMonitor: ObservableObject {
 
     private nonisolated let deviceManager = AudioDeviceManager()
     private nonisolated let state = VolumeStateStore()
-    private nonisolated let stateActor = VolumeStateActor()
     private let systemEventMonitor = SystemEventMonitor()
     private nonisolated let hudEventSubject = PassthroughSubject<HUDEvent, Never>()
     private var volumeChangeDebounceTask: Task<Void, Never>?
@@ -319,13 +308,6 @@ class VolumeMonitor: ObservableObject {
                 if clampedScalar > 0 {
                     self.state.setDeviceMuted(false)
                 }
-                // Update actor state for UI thread consistency
-                Task {
-                    await self.stateActor.updateVolumeState(
-                        scalar: uiScalar,
-                        isMuted: clampedScalar == 0
-                    )
-                }
             }
         }
     }
@@ -355,11 +337,6 @@ class VolumeMonitor: ObservableObject {
             if let volume = getCurrentVolume() {
                 volumePercentage = Int(round(volume * 100))
             }
-        }
-        // Update actor state
-        Task {
-            await stateActor.updateVolumeState(
-                scalar: CGFloat(volumePercentage) / 100.0, isMuted: muted)
         }
         return muted ? true : nil
     }
@@ -393,8 +370,6 @@ class VolumeMonitor: ObservableObject {
                 try? await Task.sleep(
                     nanoseconds: UInt64(
                         VolumeGridConstants.Audio.volumeChangeDebounceDelay * 1_000_000_000))
-                // Update actor before showing HUD
-                await self.stateActor.updateVolumeState(scalar: capturedScalar, isMuted: false)
                 self.showVolumeHUD(volumeScalar: capturedScalar)
             }
             self.volumeChangeDebounceTask = task

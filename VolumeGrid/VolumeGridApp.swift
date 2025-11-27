@@ -56,8 +56,6 @@ struct VolumeGridApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        Settings {
-            EmptyView()
-        }
+        // No scenes needed for status bar app
     }
 }

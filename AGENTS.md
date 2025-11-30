@@ -1,10 +1,11 @@
 # Rules
 
+- Keep context window clear by using sub-agents for planning, research, and lengthy coding tasks.
+- Use TO-DOs and sub-agents to manage tasks efficiently and keep context window free.
 - Research #changes or #codebase extensively until fully understanding the issue.
-- Think hard to determine root cause and solution thoroughly.
-- Consider existing behaviors to understand side effects of fixes.
-- Present a few options and open questions when appropriate.
-- Don't say sentences that begin with perfect or similar.
+- Think deeply to determine the root cause and how to address it.
+- Ensure consideration of existing unit tests and behaviors to understand side effects of a potential fix.
+- Add temporary logs when debugging complex issues, then remove them after resolution.
 - Remove unnecessary comments.
 - Check VSCode lint problems.
 

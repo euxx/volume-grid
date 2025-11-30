@@ -42,39 +42,24 @@ final class LaunchAtLoginControllerTests: XCTestCase {
     }
 
     func testIsEnabledReturnsSetValue() {
-        mockController.isEnabledValue = true
-        XCTAssertTrue(mockController.isEnabled())
-
-        mockController.isEnabledValue = false
-        XCTAssertFalse(mockController.isEnabled())
+        for expected in [true, false] {
+            mockController.isEnabledValue = expected
+            XCTAssertEqual(mockController.isEnabled(), expected)
+        }
     }
 
     // MARK: - setEnabled() Tests
 
-    func testSetEnabledToTrueCallsCompletion() {
-        let expectation = XCTestExpectation(description: "Enable completion")
+    func testSetEnabledCallsCompletion() {
+        for enabled in [true, false] {
+            let expectation = XCTestExpectation(description: "Completion for \(enabled)")
 
-        mockController.setEnabled(true) { result in
-            switch result {
-            case .success, .failure:
+            mockController.setEnabled(enabled) { _ in
                 expectation.fulfill()
             }
+
+            wait(for: [expectation], timeout: 5.0)
         }
-
-        wait(for: [expectation], timeout: 5.0)
-    }
-
-    func testSetEnabledToFalseCallsCompletion() {
-        let expectation = XCTestExpectation(description: "Disable completion")
-
-        mockController.setEnabled(false) { result in
-            switch result {
-            case .success, .failure:
-                expectation.fulfill()
-            }
-        }
-
-        wait(for: [expectation], timeout: 5.0)
     }
 
     func testSetEnabledReturnsSuccess() {

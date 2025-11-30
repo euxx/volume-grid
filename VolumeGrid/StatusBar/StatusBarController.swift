@@ -287,11 +287,6 @@ final class StatusBarController {
         }
     }
 
-    private func formattedVolumeText(for percentage: Int) -> String {
-        isVolumeControlAvailable
-            ? VolumeFormatter.formattedVolumeString(for: percentage) : "Not Supported"
-    }
-
     private func showError(_ message: String) {
         let alert = NSAlert()
         alert.messageText = "Launch at Login"

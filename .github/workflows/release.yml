@@ -10,6 +10,10 @@ on:
         description: 'Tag version (e.g., v1.0.0 or leave empty to use git tag)'
         required: false
         default: ''
+      xcode_version:
+        description: 'Xcode version (e.g., latest-stable, 20.1)'
+        required: false
+        default: 'latest-stable'
 
 jobs:
   release:
@@ -46,6 +50,18 @@ jobs:
           echo "tag_version=${TAG_VERSION}" >> $GITHUB_OUTPUT
           echo "Tag version: ${TAG_VERSION}"
 
+      - name: Determine Xcode version
+        id: xcode
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.xcode_version }}" ]]; then
+            XCODE_VERSION="${{ github.event.inputs.xcode_version }}"
+          else
+            XCODE_VERSION="latest-stable"
+          fi
+          echo "xcode_version=${XCODE_VERSION}" >> $GITHUB_OUTPUT
+          echo "Xcode version: ${XCODE_VERSION}"
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -56,7 +72,7 @@ jobs:
       - name: Select Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: 26.2-beta
+          xcode-version: ${{ steps.xcode.outputs.xcode_version }}
 
       - name: Build VolumeGrid
         shell: bash

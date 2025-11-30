@@ -28,17 +28,44 @@ Run unit tests:
 xcodebuild test -scheme "Volume Grid"
 ```
 
-Try building and running the project to verify correctness:
+Try building the project to verify correctness:
 ```sh
-xcodebuild -project VolumeGrid.xcodeproj -scheme "Volume Grid" -configuration Release -derivedDataPath ~/Downloads/volumegrid-build 2>&1 | grep -i warning
+rm -rf .build
 
-xcodebuild clean -project VolumeGrid.xcodeproj -scheme "Volume Grid" -configuration Release -derivedDataPath ~/Downloads/volumegrid-build
+xcodebuild -project VolumeGrid.xcodeproj -scheme "Volume Grid" -configuration Release -derivedDataPath .build/volumegrid-build 2>&1 | grep -i warning
+```
 
-xcodebuild -project VolumeGrid.xcodeproj -scheme "Volume Grid" -configuration Release -derivedDataPath ~/Downloads/volumegrid-build
+## Build DMG Locally
 
-killall "Volume Grid"
+```sh
+VERSION="v1.0.0"
+TIMESTAMP="202511301130"
+TIMESTAMP_DATE="11/30/2025 11:30:00"
 
-open ~/Downloads/volumegrid-build/Build/Products/Release/Volume\ Grid.app
+xcodebuild -project VolumeGrid.xcodeproj -scheme "Volume Grid" -configuration Release \
+  -derivedDataPath build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+
+DMG_DIR="dmg-dir-temp"
+rm -rf "$DMG_DIR"
+mkdir -p "$DMG_DIR"
+cp -r "build/Build/Products/Release/Volume Grid.app" "$DMG_DIR/"
+find "$DMG_DIR/Volume Grid.app" -exec touch -t $TIMESTAMP {} + 2>/dev/null
+
+create-dmg \
+  --volname "Volume Grid" \
+  --window-pos 200 200 \
+  --window-size 600 400 \
+  --icon-size 100 \
+  --icon "Volume Grid.app" 200 200 \
+  --app-drop-link 400 200 \
+  "VolumeGrid-${VERSION}.dmg" \
+  "$DMG_DIR"
+
+touch -t $TIMESTAMP "VolumeGrid-${VERSION}.dmg"
+date -r "VolumeGrid-${VERSION}.dmg"
+stat "VolumeGrid-${VERSION}.dmg"
+
+rm -rf build "$DMG_DIR"
 ```
 
 ## Release

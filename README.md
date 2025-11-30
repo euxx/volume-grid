@@ -15,7 +15,7 @@
 - 🖥️ Shows volume HUD on all displays
 - 🔄 Shows volume HUD when switching sound output devices
 - 🔊 Menu bar icon with subtle progress bar that changes with volume
-- 🛠️ Native, minimal, lightweight implementation
+- 🛠️ Native, minimal, lightweight (~2MB app, ~20MB RAM)
 
 <img src=".github/assets/screen-recording.gif" alt="VolumeGrid Screenshot" style="width: 100%; max-width: 800px; margin-top: 20px; border: 1px solid #ccc; border-radius: 8px;">
 
@@ -25,7 +25,7 @@ macOS Tahoe 26 replaced the classic 16-tile volume HUD with a smaller one that a
 
 The new HUD is hard to read at a glance, especially on multiple displays where the active screen might not be the one in use.
 
-Due to varying volume levels across different websites, videos, and music, I frequently adjust the volume. I have been using VolumeGrid since day one, going through several iterations and fixing edge cases.
+Due to varying volume levels across different apps and websites, I frequently adjust the volume. So I built VolumeGrid and have been using it since day one. It should be stable after several iterations and edge case fixes.
 
 ## License
 

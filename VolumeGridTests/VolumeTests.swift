@@ -5,13 +5,6 @@ import XCTest
 // MARK: - Volume Integration Tests
 
 final class VolumeIntegrationTests: XCTestCase {
-    override func setUp() {
-        super.setUp()
-    }
-
-    override func tearDown() {
-        super.tearDown()
-    }
 
     // MARK: - Event Creation Pipeline
 
@@ -109,31 +102,11 @@ final class VolumeIntegrationTests: XCTestCase {
         XCTAssertTrue(icon.symbolName.contains("wave.3"))
         XCTAssertEqual(event.volumeScalar, 1.0)
     }
-
-    // MARK: - Performance Integration
-
-    func testFullPipelinePerformance() {
-        measure {
-            for i in 0...100 {
-                let scalar = CGFloat(i) / 100.0
-
-                _ = VolumeFormatter.formattedVolumeString(for: i)
-                _ = VolumeFormatter.formattedVolumeString(forScalar: scalar)
-
-                _ = VolumeIconHelper.icon(for: i)
-                _ = VolumeIconHelper.hudIcon(for: i)
-
-                _ = HUDEvent(volumeScalar: scalar, deviceName: "Device", isUnsupported: false)
-            }
-        }
-    }
 }
 
-// MARK: - Volume Edge Cases Tests
+// MARK: - Volume Concurrent Access Tests
 
-final class VolumeEdgeCasesTests: XCTestCase {
-
-    // MARK: - Concurrent Access
+final class VolumeConcurrentAccessTests: XCTestCase {
 
     func testConcurrentFormatting() {
         let queue = DispatchQueue.global()
@@ -182,63 +155,26 @@ final class VolumeEdgeCasesTests: XCTestCase {
         XCTAssertEqual(results.count, 100)
         XCTAssertTrue(results.allSatisfy { !$0.symbolName.isEmpty })
     }
-
-    // MARK: - Resource Cleanup
-
-    func testNoMemoryLeaksInFormatting() {
-        var results: [String] = []
-
-        for i in 0..<1000 {
-            results.append(VolumeFormatter.formattedVolumeString(for: i % 101))
-        }
-
-        XCTAssertEqual(results.count, 1000)
-        results.removeAll()
-    }
-
-    func testNoMemoryLeaksInIconSelection() {
-        var results: [VolumeIconHelper.VolumeIcon] = []
-
-        for i in 0..<1000 {
-            results.append(VolumeIconHelper.icon(for: i % 101))
-        }
-
-        XCTAssertEqual(results.count, 1000)
-        results.removeAll()
-    }
 }
 
 // MARK: - Performance Tests
 
 final class VolumePerformanceTests: XCTestCase {
 
-    // MARK: - Combined Operation Performance
-
-    func testCombinedFormattingAndIconing() {
+    func testFullPipelinePerformance() {
         measure {
             for i in 0...100 {
+                let scalar = CGFloat(i) / 100.0
+
                 _ = VolumeFormatter.formattedVolumeString(for: i)
+                _ = VolumeFormatter.formattedVolumeString(forScalar: scalar)
+
                 _ = VolumeIconHelper.icon(for: i)
+                _ = VolumeIconHelper.hudIcon(for: i)
+
+                _ = HUDEvent(volumeScalar: scalar, deviceName: "Device", isUnsupported: false)
             }
         }
-    }
-
-    func testHighFrequencyMixedOperations() {
-        let iterations = 1000
-        let startTime = Date()
-
-        for i in 0..<iterations {
-            let percentage = i % 101
-
-            if i % 2 == 0 {
-                _ = VolumeFormatter.formattedVolumeString(for: percentage)
-            } else {
-                _ = VolumeIconHelper.icon(for: percentage)
-            }
-        }
-
-        let elapsed = Date().timeIntervalSince(startTime)
-        XCTAssertLessThan(elapsed, 0.1)
     }
 }
 

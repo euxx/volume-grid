@@ -4,8 +4,8 @@
 
 <div>
   <p>Bringing back the classic volume HUD for macOS Tahoe 26 with more.</p>
-  <p>Install by cask: <code>brew tap euxx/casks ; brew install --cask volume-grid</code>,</p>
-  <p>or download from <a href="https://github.com/euxx/volume-grid/releases">Releases</a></p>
+  <p>Install by cask: <code>brew tap euxx/casks ; brew install --cask volume-grid</code>, or download</p>
+  <p>from <a href="https://github.com/euxx/volume-grid/releases">Releases</a>, then <code>xattr -rd com.apple.quarantine /Applications/Volume\ Grid.app</code>.</p>
 </div>
 
 ## Features
@@ -18,6 +18,10 @@
 - 🛠️ Native, minimal, lightweight (~2MB app, ~20MB RAM)
 
 <img src=".github/assets/screen-recording.gif" alt="VolumeGrid Screenshot" style="width: 100%; max-width: 800px; margin-top: 20px; border: 1px solid #ccc; border-radius: 8px;">
+
+## Plan
+
+- [ ] Switch sound output devices from the menu bar icon's menu
 
 ## Background
 

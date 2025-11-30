@@ -4,7 +4,7 @@
 
 <div>
   <p>Bringing back the classic volume HUD for macOS Tahoe 26 with more.</p>
-  <p>Recommended install by cask: <code>brew install --cask euxx/volume-grid/volume-grid</code></p>
+  <p>Recommended install by cask: <code>brew tap euxx/volume-grid https://github.com/euxx/volume-grid.git ; brew install --cask volume-grid</code></p>
   <p>Or download from <a href="https://github.com/euxx/volume-grid/releases">Releases</a></p>
 </div>
 

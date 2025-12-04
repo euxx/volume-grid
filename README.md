@@ -17,7 +17,9 @@
 - 🔊 Menu bar icon with subtle progress bar that changes with volume
 - 🛠️ Native, minimal, lightweight (~2MB app, ~20MB RAM)
 
-<img src=".github/assets/screen-recording.gif" alt="VolumeGrid Screenshot" style="width: 100%; max-width: 800px; margin-top: 20px; border: 1px solid #ccc; border-radius: 8px;">
+<img src=".github/assets/menubar-icon.png" alt="VolumeGrid Screenshot" style="width: 100%; max-width: 200px; margin-top: 20px; border-radius: 4px;">
+
+<img src=".github/assets/screen-recording.gif" alt="VolumeGrid Screenshot" style="width: 100%; max-width: 800px; margin-top: 20px; border-radius: 4px;">
 
 ## Plan
 

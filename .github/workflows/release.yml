@@ -1,62 +1,25 @@
-name: Build and Release
+name: Build DMG
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
-      tag_version:
-        description: 'Tag version (e.g., v1.0.0 or leave empty to use git tag)'
-        required: false
-        default: ''
       xcode_version:
         description: 'Xcode version (e.g., latest-stable, 20.1)'
         required: false
         default: 'latest-stable'
 
 jobs:
-  release:
-    name: Build VolumeGrid Release
+  build:
+    name: Build VolumeGrid DMG
     runs-on: macos-latest
-    permissions:
-      contents: write
-      pull-requests: write
 
     steps:
-      - name: Determine tag version
-        id: tag
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.tag_version }}" ]]; then
-            TAG_VERSION="${{ github.event.inputs.tag_version }}"
-            # Ensure tag starts with 'v'
-            if [[ ! "$TAG_VERSION" =~ ^v ]]; then
-              TAG_VERSION="v${TAG_VERSION}"
-            fi
-          elif [[ "${{ github.event_name }}" == "push" ]]; then
-            TAG_VERSION="${{ github.ref_name }}"
-          else
-            echo "Error: No tag version provided"
-            exit 1
-          fi
-
-          # Validate tag format (e.g., v1.0.0)
-          if [[ ! "$TAG_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: Invalid tag format. Expected vX.Y.Z, got $TAG_VERSION"
-            exit 1
-          fi
-
-          echo "tag_version=${TAG_VERSION}" >> $GITHUB_OUTPUT
-          echo "Tag version: ${TAG_VERSION}"
-
       - name: Determine Xcode version
         id: xcode
         shell: bash
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.xcode_version }}" ]]; then
-            XCODE_VERSION="${{ github.event.inputs.xcode_version }}"
-          else
+          XCODE_VERSION="${{ github.event.inputs.xcode_version }}"
+          if [[ -z "$XCODE_VERSION" ]]; then
             XCODE_VERSION="latest-stable"
           fi
           echo "xcode_version=${XCODE_VERSION}" >> $GITHUB_OUTPUT
@@ -96,7 +59,7 @@ jobs:
         shell: bash
         run: |
           set -eo pipefail
-          TAG_VERSION="${{ steps.tag.outputs.tag_version }}"
+          RUN_NUMBER="${{ github.run_number }}"
           APP_PATH="build/Build/Products/Release/Volume Grid.app"
           if [[ ! -d "${APP_PATH}" ]]; then
             echo "Expected app bundle not found at ${APP_PATH}"
@@ -112,106 +75,13 @@ jobs:
             --icon-size 100 \
             --icon "Volume Grid.app" 150 200 \
             --app-drop-link 450 200 \
-            "VolumeGrid-${TAG_VERSION}.dmg" \
+            "VolumeGrid-build-${RUN_NUMBER}.dmg" \
             "${TMP_DIR}"
 
           rm -rf "${TMP_DIR}"
 
-      - name: Calculate SHA256
-        shell: bash
-        run: |
-          TAG_VERSION="${{ steps.tag.outputs.tag_version }}"
-          SHA256=$(shasum -a 256 "VolumeGrid-${TAG_VERSION}.dmg" | awk '{print $1}')
-          echo "DMG_SHA256=${SHA256}" >> $GITHUB_ENV
-          echo "SHA256 Hash: ${SHA256}"
-
-      - name: Extract changelog
-        id: changelog
-        shell: bash
-        run: |
-          TAG_VERSION="${{ steps.tag.outputs.tag_version }}"
-          VERSION="${TAG_VERSION#v}"
-          echo "Extracting changelog for version: $VERSION"
-
-          # Extract changelog content for this version
-          CHANGELOG=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '1d;$d')
-
-          # Handle multi-line content for GitHub Actions output
-          echo "content<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-          # Debug output
-          echo "Extracted changelog:"
-          echo "$CHANGELOG"
-
-      - name: Create annotated tag with changelog
-        if: github.event_name == 'workflow_dispatch'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG_VERSION="${{ steps.tag.outputs.tag_version }}"
-          VERSION="${TAG_VERSION#v}"
-
-          # Get the changelog content
-          CHANGELOG=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '1d;$d')
-
-          # Configure git
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global url."https://${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
-
-          # Create annotated tag with changelog if it doesn't exist
-          if ! git rev-parse "$TAG_VERSION" >/dev/null 2>&1; then
-            git tag -a "$TAG_VERSION" -m "Release $TAG_VERSION" -m "$CHANGELOG"
-            git push origin "$TAG_VERSION"
-            echo "Annotated tag created and pushed with changelog"
-          else
-            echo "Tag $TAG_VERSION already exists, skipping tag creation"
-          fi
-
-      - name: Update cask file
-        shell: bash
-        run: |
-          TAG_VERSION="${{ steps.tag.outputs.tag_version }}"
-          VERSION="${TAG_VERSION#v}"
-          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/volume-grid.rb
-          sed -i '' "s/sha256 \".*\"/sha256 \"${DMG_SHA256}\"/" Casks/volume-grid.rb
-
-      - name: Commit and push cask updates
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG_VERSION="${{ steps.tag.outputs.tag_version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global url."https://${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
-          git fetch origin main
-          git checkout main
-          git add Casks/volume-grid.rb
-          if git diff-index --quiet HEAD --; then
-            echo "No changes to commit"
-          else
-            git commit -m "chore: update cask version and sha256 for ${TAG_VERSION}"
-            git push origin main
-          fi
-
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VolumeGrid-${{ steps.tag.outputs.tag_version }}-app
-          path: VolumeGrid-${{ steps.tag.outputs.tag_version }}.dmg
-
-      - name: Publish GitHub release
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.tag.outputs.tag_version }}
-          name: ${{ steps.tag.outputs.tag_version }}
-          body: ${{ steps.changelog.outputs.content }}
-          files: VolumeGrid-${{ steps.tag.outputs.tag_version }}.dmg
-          generate_release_notes: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: VolumeGrid-dmg
+          path: VolumeGrid-*.dmg

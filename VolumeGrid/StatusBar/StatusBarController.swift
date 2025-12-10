@@ -520,7 +520,7 @@ final class VolumeMenuItemView: NSView {
     private let iconView = NSImageView()
     private let label = NSTextField(labelWithString: "")
     private let progressView = LinearProgressView()
-    private let horizontalPadding: CGFloat = 16
+    private let horizontalPadding: CGFloat = 25
     private let verticalPadding: CGFloat = 12
     private let interItemSpacing: CGFloat = 8
     private let iconSize: CGFloat = 16
@@ -573,7 +573,7 @@ final class VolumeMenuItemView: NSView {
             iconView.centerYAnchor.constraint(equalTo: label.centerYAnchor),
 
             label.leadingAnchor.constraint(
-                equalTo: iconView.trailingAnchor, constant: horizontalPadding / 2),
+                equalTo: iconView.trailingAnchor, constant: horizontalPadding / 4),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -horizontalPadding),
             label.topAnchor.constraint(equalTo: topAnchor, constant: verticalPadding),
 
@@ -604,7 +604,7 @@ final class VolumeMenuItemView: NSView {
         let config = NSImage.SymbolConfiguration(pointSize: icon.size, weight: .regular)
         let image = NSImage(systemSymbolName: icon.symbolName, accessibilityDescription: "Volume")
         iconView.image = image?.withSymbolConfiguration(config)
-        label.stringValue = "\(deviceName) - \(formattedVolume)"
+        label.stringValue = "-  \(formattedVolume)"
         progressView.progress = CGFloat(clamped) / 100.0
 
         // Only update internal tracking if this cycle is current

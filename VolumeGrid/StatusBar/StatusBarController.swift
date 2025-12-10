@@ -1,4 +1,5 @@
 import AppKit
+import AudioToolbox
 import Combine
 import os
 
@@ -11,9 +12,10 @@ final class StatusBarController {
     private let statusItem: NSStatusItem
     private let statusBarVolumeView = StatusBarVolumeView()
     private let menu = NSMenu()
-    private let volumeMenuItem = NSMenuItem()
+    private let volumeDisplayMenuItem = NSMenuItem()
     private let volumeMenuView = VolumeMenuItemView()
     private let launchAtLoginMenuItem: NSMenuItem
+    private var deviceMenuItems: [AudioDevice: NSMenuItem] = [:]
 
     private var subscriptions = Set<AnyCancellable>()
     private var volumeChangeHandler: ((CGFloat) -> Void)?
@@ -67,10 +69,14 @@ final class StatusBarController {
         )
         applyVolumeInteractionState(isVolumeControlAvailable)
 
-        volumeMenuItem.view = volumeMenuView
-        volumeMenuItem.isEnabled = true
-        menu.addItem(volumeMenuItem)
+        volumeDisplayMenuItem.view = volumeMenuView
+        volumeDisplayMenuItem.isEnabled = true
+        menu.addItem(volumeDisplayMenuItem)
         menu.minimumWidth = max(menu.minimumWidth, volumeMenuView.intrinsicContentSize.width)
+
+        // Add device selection section
+        menu.addItem(NSMenuItem.separator())
+        updateDeviceMenu()
         menu.addItem(NSMenuItem.separator())
         menu.addItem(launchAtLoginMenuItem)
         menu.addItem(NSMenuItem.separator())
@@ -90,6 +96,44 @@ final class StatusBarController {
     }
 
     @MainActor
+    private func updateDeviceMenu() {
+        // Remove old device menu items
+        for deviceMenuItem in deviceMenuItems.values {
+            menu.removeItem(deviceMenuItem)
+        }
+        deviceMenuItems.removeAll()
+
+        guard !volumeMonitor.audioDevices.isEmpty,
+            let currentDevice = volumeMonitor.currentDevice
+        else {
+            return
+        }
+
+        // Find the first separator after volume display (where to insert devices)
+        guard let separatorIndex = menu.items.firstIndex(where: { $0.isSeparatorItem }) else {
+            return
+        }
+
+        // Add all devices as first-level menu items, maintaining order
+        var insertionIndex = separatorIndex + 1
+        for device in volumeMonitor.audioDevices {
+            let deviceItem = NSMenuItem(
+                title: device.name,
+                action: #selector(selectAudioDevice(_:)),
+                keyEquivalent: ""
+            )
+            deviceItem.target = self
+            deviceItem.representedObject = NSNumber(value: device.id)
+            if device.id == currentDevice.id {
+                deviceItem.state = .on
+            }
+            menu.insertItem(deviceItem, at: insertionIndex)
+            insertionIndex += 1
+            deviceMenuItems[device] = deviceItem
+        }
+    }
+
+    @MainActor
     private func bindVolumeUpdates() {
         // Use volumeScalar for precise formatting to avoid intermediate values like "5 1/4"
         let volumeUpdates = volumeMonitor.$volumeScalar
@@ -103,13 +147,17 @@ final class StatusBarController {
                 device?.name ?? "Unknown Device"
             }
 
-        Publishers.CombineLatest3(
+        let deviceListUpdates = volumeMonitor.$audioDevices
+            .map { _ in () }
+
+        Publishers.CombineLatest4(
             volumeUpdates,
             deviceUpdates,
-            volumeMonitor.$isCurrentDeviceVolumeSupported
+            volumeMonitor.$isCurrentDeviceVolumeSupported,
+            deviceListUpdates
         )
         .receive(on: DispatchQueue.main)
-        .sink { [weak self] (volumeData, deviceName, isSupported) in
+        .sink { [weak self] (volumeData, deviceName, isSupported, _) in
             guard let self = self else { return }
             let (scalar, formatted) = volumeData
             let percentage = Int(round(scalar * 100))
@@ -120,7 +168,8 @@ final class StatusBarController {
                 formattedVolume: formatted,
                 deviceName: deviceName
             )
-            self.menu.itemChanged(self.volumeMenuItem)
+            self.updateDeviceMenu()
+            self.menu.itemChanged(self.volumeDisplayMenuItem)
         }
         .store(in: &subscriptions)
     }
@@ -271,6 +320,18 @@ final class StatusBarController {
                     self.launchAtLoginController.isEnabled() ? .on : .off
                 self.showError(error.localizedDescription)
             }
+        }
+    }
+
+    @objc private func selectAudioDevice(_ sender: NSMenuItem) {
+        guard let deviceIDNumber = sender.representedObject as? NSNumber else { return }
+        let deviceID = AudioDeviceID(deviceIDNumber.uint32Value)
+
+        let deviceManager = AudioDeviceManager()
+        let success = deviceManager.setDefaultOutputDevice(deviceID)
+
+        if !success {
+            showError("Failed to switch audio device")
         }
     }
 
@@ -465,6 +526,7 @@ final class VolumeMenuItemView: NSView {
     private let iconSize: CGFloat = 16
     private var onVolumeChange: ((CGFloat) -> Void)?
     private var isDragging = false
+    private var deviceSelectionSubmenu: NSMenu?
 
     // Cycle ID mechanism to prevent race condition from rapid volume updates
     // Similar to HUDManager's currentHUDCycleID

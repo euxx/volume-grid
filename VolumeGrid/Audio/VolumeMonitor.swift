@@ -251,7 +251,7 @@ class VolumeMonitor: ObservableObject {
     }
 
     func getAudioDevices() {
-        let devices = deviceManager.getAllDevices()
+        let devices = deviceManager.getOutputDevices()
         let resolvedID = resolveDeviceID()
 
         DispatchQueue.main.async { [weak self] in

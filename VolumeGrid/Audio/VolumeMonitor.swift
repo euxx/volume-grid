@@ -367,6 +367,7 @@ class VolumeMonitor: ObservableObject {
             }
             self.state.updateLastVolumeScalar(currentScalar)
             let newPercentage = Int(round(clampedVolume * 100))
+            self.volumeScalar = currentScalar
             self.volumePercentage = newPercentage
             if currentScalar > epsilon, self.state.deviceMuted() {
                 logger.debug("volumeChanged: Volume > 0 but device is muted, unmuting")
@@ -448,10 +449,12 @@ class VolumeMonitor: ObservableObject {
             if let volume = self.getCurrentVolume() {
                 let clamped = volume.clamped(to: 0...1)
                 let percentage = Int(round(clamped * 100))
+                self.volumeScalar = CGFloat(clamped)
                 self.volumePercentage = percentage
                 self.state.updateLastVolumeScalar(CGFloat(clamped))
                 self.showVolumeHUD(volumeScalar: CGFloat(clamped))
             } else {
+                self.volumeScalar = 0
                 self.volumePercentage = 0
                 self.state.updateLastVolumeScalar(0)
                 self.showVolumeHUD(volumeScalar: 0, isUnsupported: true)
@@ -741,6 +744,9 @@ class VolumeMonitor: ObservableObject {
         isCurrentDeviceVolumeSupported = isSupported
         if !isSupported {
             state.updateLastVolumeScalar(0)
+            if volumeScalar != 0 {
+                volumeScalar = 0
+            }
             if volumePercentage != 0 {
                 volumePercentage = 0
             }

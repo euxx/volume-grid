@@ -225,11 +225,23 @@ final class AudioDeviceManager: Sendable {
         }
     }
 
+    nonisolated func getOutputDevices() -> [AudioDevice] {
+        getAllDevices().filter { device in
+            supportsVolumeControl(device.id) || supportsMute(device.id)
+        }
+    }
+
     nonisolated func getDeviceName(_ deviceID: AudioDeviceID) -> String? {
         var address = deviceNameAddress
         var unmanagedName: Unmanaged<CFString>?
         return getPropertyData(deviceID: deviceID, address: &address, value: &unmanagedName)
             && unmanagedName != nil
             ? unmanagedName!.takeRetainedValue() as String : nil
+    }
+
+    nonisolated func setDefaultOutputDevice(_ deviceID: AudioDeviceID) -> Bool {
+        var address = defaultOutputDeviceAddress
+        return setPropertyData(
+            deviceID: AudioObjectID(kAudioObjectSystemObject), address: &address, value: deviceID)
     }
 }

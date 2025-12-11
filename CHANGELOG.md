@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-12-12
+
+### Features
+
+- Add ability to switch sound output devices from the menu bar icon's menu
+
+### Improvements
+
+- Enhance progress bar appearance with dynamic colors for light/dark modes
+
+### Fixes
+
+- Update volumeScalar handling in VolumeMonitor for accurate state management
+
 ## [1.0.0] - 2025-11-30
 
 - 🔲 Classic 16-tile volume HUD with quarter-tile precision

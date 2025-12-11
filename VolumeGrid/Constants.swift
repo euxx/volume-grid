@@ -70,12 +70,12 @@ enum VolumeGridConstants {
     }
 
     enum StatusBar {
-        /// Maximum width for the progress bar in the status bar icon
         static let maxProgressBarWidth: CGFloat = 6
+        static let progressBarBackgroundColor = NSColor.systemGray.withAlphaComponent(0.6)
+        static let progressBarFillColor = NSColor.gray
     }
 
     enum System {
-        /// Minimum macOS version
         static let minimumMacOSVersion = "14.0"
     }
 }

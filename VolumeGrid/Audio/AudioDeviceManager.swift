@@ -1,10 +1,13 @@
 import AudioToolbox
 import Foundation
+import os.log
 
 struct AudioDevice: Identifiable, Hashable, Sendable {
     let id: AudioDeviceID
     let name: String
 }
+
+private let logger = Logger(subsystem: "one.eux.volumegrid", category: "AudioDevice")
 
 final class AudioDeviceManager: Sendable {
     private nonisolated let defaultOutputDeviceAddress = AudioObjectPropertyAddress(
@@ -226,8 +229,15 @@ final class AudioDeviceManager: Sendable {
     }
 
     nonisolated func getOutputDevices() -> [AudioDevice] {
-        getAllDevices().filter { device in
-            supportsVolumeControl(device.id) || supportsMute(device.id)
+        let allDevices = getAllDevices()
+        return allDevices.filter { device in
+            let supportsAudio = supportsVolumeControl(device.id) || supportsMute(device.id)
+            let transportType = getDeviceTransportType(device.id)
+            let isNotVirtual = transportType != "Virtual"
+            logger.debug(
+                "'\(device.name)' (ID: \(device.id), Type: \(transportType), Audio: \(supportsAudio))"
+            )
+            return supportsAudio && isNotVirtual
         }
     }
 
@@ -237,6 +247,29 @@ final class AudioDeviceManager: Sendable {
         return getPropertyData(deviceID: deviceID, address: &address, value: &unmanagedName)
             && unmanagedName != nil
             ? unmanagedName!.takeRetainedValue() as String : nil
+    }
+
+    nonisolated func getDeviceTransportType(_ deviceID: AudioDeviceID) -> String {
+        var address = makePropertyAddress(
+            selector: kAudioDevicePropertyTransportType,
+            scope: kAudioObjectPropertyScopeGlobal
+        )
+        var transportType: UInt32 = 0
+        if getPropertyData(deviceID: deviceID, address: &address, value: &transportType) {
+            switch transportType {
+            case kAudioDeviceTransportTypeBuiltIn:
+                return "BuiltIn"
+            case kAudioDeviceTransportTypeUSB:
+                return "USB"
+            case kAudioDeviceTransportTypeFireWire:
+                return "FireWire"
+            case kAudioDeviceTransportTypeVirtual:
+                return "Virtual"
+            default:
+                return "Unknown(\(transportType))"
+            }
+        }
+        return "Unknown"
     }
 
     nonisolated func setDefaultOutputDevice(_ deviceID: AudioDeviceID) -> Bool {

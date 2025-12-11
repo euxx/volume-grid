@@ -63,9 +63,7 @@ enum VolumeGridConstants {
             static let blockHeight: CGFloat = 6
             static let blockSpacing: CGFloat = 1
             static let cornerRadius: CGFloat = 0.5
-            static let inactiveBlockColor = NSColor(
-                red: 30 / 255, green: 30 / 255, blue: 30 / 255, alpha: 0.5
-            )
+            static let inactiveBlockColor: NSColor = NSColor.black.withAlphaComponent(0.3)
         }
     }
 

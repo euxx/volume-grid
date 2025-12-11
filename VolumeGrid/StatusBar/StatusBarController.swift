@@ -366,6 +366,9 @@ private final class LinearProgressView: NSView {
     var fillColor: NSColor = NSColor.systemGray {
         didSet { needsDisplay = true }
     }
+    var thumbColor: NSColor = NSColor.systemGray {
+        didSet { needsDisplay = true }
+    }
     var cornerRadius: CGFloat = 2 {
         didSet { needsDisplay = true }
     }
@@ -416,6 +419,21 @@ private final class LinearProgressView: NSView {
             fillColor.setFill()
             fillPath.fill()
         }
+
+        // Draw thumb
+        let thumbDiameter: CGFloat = 10
+        let thumbRadius = thumbDiameter / 2
+        let thumbCenterX = bounds.width * storedProgress
+        let thumbCenterY = bounds.midY
+        let thumbRect = NSRect(
+            x: thumbCenterX - thumbRadius,
+            y: thumbCenterY - thumbRadius,
+            width: thumbDiameter,
+            height: thumbDiameter
+        )
+        let thumbPath = NSBezierPath(ovalIn: thumbRect)
+        thumbColor.setFill()
+        thumbPath.fill()
     }
 }
 
@@ -558,8 +576,9 @@ final class VolumeMenuItemView: NSView {
         label.textColor = NSColor.labelColor
         label.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
 
-        progressView.trackColor = NSColor.controlBackgroundColor
-        progressView.fillColor = NSColor.systemGray
+        progressView.trackColor = VolumeGridConstants.StatusBar.menuProgressBarBackgroundColor
+        progressView.fillColor = VolumeGridConstants.StatusBar.menuProgressBarFillColor
+        progressView.thumbColor = VolumeGridConstants.StatusBar.menuProgressBarThumbColor
         progressView.cornerRadius = 2
 
         addSubview(iconView)

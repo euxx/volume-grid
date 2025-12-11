@@ -83,6 +83,9 @@ enum VolumeGridConstants {
                 return NSColor.black.withAlphaComponent(0.6)
             }
         }
+        static let menuProgressBarBackgroundColor: NSColor = NSColor.controlBackgroundColor
+        static let menuProgressBarFillColor: NSColor = NSColor.white.withAlphaComponent(0.6)
+        static let menuProgressBarThumbColor: NSColor = NSColor.white
     }
 
     enum System {

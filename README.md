@@ -15,6 +15,7 @@
 - 🖥️ Shows volume HUD on all displays
 - 🔄 Shows volume HUD when switching sound output devices
 - 🔊 Menu bar icon with subtle progress bar that changes with volume
+- 🎧 Switch sound output devices from the menu bar icon's menu
 - 🛠️ Native, minimal, lightweight (~2MB app, ~20MB RAM)
 
 <img src=".github/assets/screenshot.png" alt="VolumeGrid Screenshot" style="width: 100%; max-width: 400px; margin-top: 20px; border-radius: 4px;">
@@ -23,7 +24,7 @@
 
 ## Plan
 
-- [ ] Switch sound output devices from the menu bar icon's menu
+- [x] Switch sound output devices from the menu bar icon's menu
 
 ## Background
 

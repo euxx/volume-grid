@@ -360,8 +360,8 @@ private final class LinearProgressView: NSView {
 
 final class StatusBarVolumeView: NSView {
     private let iconView = NSImageView()
-    private let progressBackgroundView = NSView()
-    private let progressView = NSView()
+    private let progressBackgroundView = ProgressBarBackgroundView()
+    private let progressView = ProgressBarFillView()
     private var progressWidthConstraint: NSLayoutConstraint!
     private var iconWidthConstraint: NSLayoutConstraint!
     private var iconHeightConstraint: NSLayoutConstraint!
@@ -379,22 +379,22 @@ final class StatusBarVolumeView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        progressBackgroundView.needsDisplay = true
+        progressView.needsDisplay = true
+    }
+
     private func setupSubviews() {
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.imageScaling = .scaleProportionallyUpOrDown
         iconView.contentTintColor = NSColor.controlTextColor
 
         progressBackgroundView.translatesAutoresizingMaskIntoConstraints = false
-        progressBackgroundView.wantsLayer = true
-        progressBackgroundView.layer?.backgroundColor =
-            VolumeGridConstants.StatusBar.progressBarBackgroundColor.cgColor
-        progressBackgroundView.layer?.cornerRadius = 1
+        progressBackgroundView.wantsLayer = false
 
         progressView.translatesAutoresizingMaskIntoConstraints = false
-        progressView.wantsLayer = true
-        progressView.layer?.backgroundColor =
-            VolumeGridConstants.StatusBar.progressBarFillColor.cgColor
-        progressView.layer?.cornerRadius = 1
+        progressView.wantsLayer = false
 
         addSubview(iconView)
         addSubview(progressBackgroundView)
@@ -434,6 +434,24 @@ final class StatusBarVolumeView: NSView {
         iconWidthConstraint.constant = icon.size
         iconHeightConstraint.constant = icon.size
         progressWidthConstraint.constant = CGFloat(clamped) / 100.0 * progressWidth
+    }
+}
+
+// MARK: - Progress Bar Views
+
+private class ProgressBarBackgroundView: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        let path = NSBezierPath(roundedRect: bounds, xRadius: 1, yRadius: 1)
+        VolumeGridConstants.StatusBar.progressBarBackgroundColor.setFill()
+        path.fill()
+    }
+}
+
+private class ProgressBarFillView: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        let path = NSBezierPath(roundedRect: bounds, xRadius: 1, yRadius: 1)
+        VolumeGridConstants.StatusBar.progressBarFillColor.setFill()
+        path.fill()
     }
 }
 

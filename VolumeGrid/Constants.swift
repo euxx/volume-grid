@@ -71,8 +71,20 @@ enum VolumeGridConstants {
 
     enum StatusBar {
         static let maxProgressBarWidth: CGFloat = 6
-        static let progressBarBackgroundColor = NSColor.systemGray.withAlphaComponent(0.6)
-        static let progressBarFillColor = NSColor.gray
+        static let progressBarBackgroundColor: NSColor = NSColor(name: nil) { appearance in
+            if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+                return NSColor.systemGray.withAlphaComponent(0.6)
+            } else {
+                return NSColor.systemGray.withAlphaComponent(0.6)
+            }
+        }
+        static let progressBarFillColor: NSColor = NSColor(name: nil) { appearance in
+            if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+                return NSColor.white.withAlphaComponent(0.6)
+            } else {
+                return NSColor.black.withAlphaComponent(0.6)
+            }
+        }
     }
 
     enum System {

@@ -8,7 +8,7 @@
 - Add temporary logs when debugging complex issues, then remove them after resolution.
 - Remove unnecessary comments.
 - Check VSCode lint problems.
-- 
+- Pay attention to memory management to avoid memory leaks.
 
 ## Always Show HUD Scenarios
 

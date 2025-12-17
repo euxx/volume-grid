@@ -234,9 +234,11 @@ final class AudioDeviceManager: Sendable {
             let supportsAudio = supportsVolumeControl(device.id) || supportsMute(device.id)
             let transportType = getDeviceTransportType(device.id)
             let isNotVirtual = transportType != "Virtual"
-            logger.debug(
-                "'\(device.name)' (ID: \(device.id), Type: \(transportType), Audio: \(supportsAudio))"
-            )
+            Task { @MainActor in
+                logger.debug(
+                    "'\(device.name)' (ID: \(device.id), Type: \(transportType), Audio: \(supportsAudio))"
+                )
+            }
             return supportsAudio && isNotVirtual
         }
     }
@@ -244,9 +246,14 @@ final class AudioDeviceManager: Sendable {
     nonisolated func getDeviceName(_ deviceID: AudioDeviceID) -> String? {
         var address = deviceNameAddress
         var unmanagedName: Unmanaged<CFString>?
-        return getPropertyData(deviceID: deviceID, address: &address, value: &unmanagedName)
-            && unmanagedName != nil
-            ? unmanagedName!.takeRetainedValue() as String : nil
+        guard getPropertyData(deviceID: deviceID, address: &address, value: &unmanagedName),
+            let unmanaged = unmanagedName
+        else {
+            return nil
+        }
+        // CoreAudio returns an autoreleased CFString, so use takeUnretainedValue()
+        // DO NOT use takeRetainedValue() as that would cause a double-free
+        return unmanaged.takeUnretainedValue() as String
     }
 
     nonisolated func getDeviceTransportType(_ deviceID: AudioDeviceID) -> String {

@@ -4,7 +4,7 @@ import CoreGraphics
 import os
 @preconcurrency import os.lock
 
-private let logger = Logger(subsystem: "com.volumegrid", category: "VolumeMonitor")
+private let logger = Logger(subsystem: "one.eux.volumegrid", category: "VolumeMonitor")
 
 struct HUDEvent {
     let volumeScalar: CGFloat
@@ -177,7 +177,7 @@ class VolumeMonitor: ObservableObject {
     }
 
     private nonisolated let audioQueue: DispatchQueue = DispatchQueue(
-        label: "com.volumegrid.audio", qos: .userInitiated
+        label: "one.eux.volumegrid.audio", qos: .userInitiated
     )
     private nonisolated let volumeListenerProperty:
         ThreadSafeProperty<AudioObjectPropertyListenerBlock?> =

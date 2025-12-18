@@ -3,7 +3,7 @@ import Combine
 import SwiftUI
 import os
 
-private let logger = Logger(subsystem: "com.volumegrid", category: "HUDManager")
+private let logger = Logger(subsystem: "one.eux.volumegrid", category: "HUDManager")
 
 struct HUDStyle {
     let shadowColor: NSColor

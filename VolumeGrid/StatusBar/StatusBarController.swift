@@ -3,7 +3,7 @@ import AudioToolbox
 import Combine
 import os
 
-private let logger = Logger(subsystem: "com.volumegrid", category: "StatusBarController")
+private let logger = Logger(subsystem: "one.eux.volumegrid", category: "StatusBarController")
 
 final class StatusBarController {
     private let volumeMonitor: VolumeMonitor

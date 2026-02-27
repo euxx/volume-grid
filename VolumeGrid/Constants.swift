@@ -87,8 +87,4 @@ enum VolumeGridConstants {
         static let menuProgressBarFillColor: NSColor = NSColor.white.withAlphaComponent(0.6)
         static let menuProgressBarThumbColor: NSColor = NSColor.white
     }
-
-    enum System {
-        static let minimumMacOSVersion = "14.0"
-    }
 }

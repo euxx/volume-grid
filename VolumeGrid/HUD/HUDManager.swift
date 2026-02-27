@@ -98,6 +98,7 @@ class HUDManager {
         )
         window.level = .screenSaver
         window.backgroundColor = .clear
+        window.isReleasedWhenClosed = false
         window.isOpaque = false
         window.collectionBehavior = [
             .transient,

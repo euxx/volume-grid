@@ -70,6 +70,10 @@ final class VolumeBlocksView: NSView {
 
     func update(style: HUDStyle, fillFraction: CGFloat) {
         self.style = style
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+
         for fillLayer in fillLayers {
             fillLayer.fillColor = style.blockFillColor.cgColor
         }
@@ -92,5 +96,7 @@ final class VolumeBlocksView: NSView {
                 fillLayer.frame = frame
             }
         }
+
+        CATransaction.commit()
     }
 }

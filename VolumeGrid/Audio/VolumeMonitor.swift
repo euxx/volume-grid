@@ -215,26 +215,29 @@ class VolumeMonitor: ObservableObject {
         deviceChangeDebounceTask?.cancel()
         keyPressDebounceTask?.cancel()
 
-        // CRITICAL: Ensure CoreAudio listeners are removed before deallocation
-        // Must use strong references to dependencies to guarantee cleanup even if deinit runs on background thread
-        let state = self.state
+        // Capture all state synchronously during deinit before dispatching to main thread.
+        let capturedDeviceID = state.listeningDeviceIDValue()
+        let capturedVolumeElements = state.registeredVolumeElementsSnapshot()
+        let capturedMuteElements = state.registeredMuteElementsSnapshot()
         let deviceManager = self.deviceManager
         let audioQueue = self.audioQueue
         let systemEventMonitor = self.systemEventMonitor
-        let volumeListener = self.volumeListener
-        let muteListener = self.muteListener
-        let deviceListener = self.deviceListener
+        let capturedVolumeListener = self.volumeListener
+        let capturedMuteListener = self.muteListener
+        let capturedDeviceListener = self.deviceListener
 
         // Always dispatch to main thread for @MainActor performCleanup
         DispatchQueue.main.async {
             Self.performCleanup(
-                state: state,
+                capturedDeviceID: capturedDeviceID,
+                capturedVolumeElements: capturedVolumeElements,
+                capturedMuteElements: capturedMuteElements,
                 deviceManager: deviceManager,
                 audioQueue: audioQueue,
                 systemEventMonitor: systemEventMonitor,
-                volumeListener: volumeListener,
-                muteListener: muteListener,
-                deviceListener: deviceListener
+                volumeListener: capturedVolumeListener,
+                muteListener: capturedMuteListener,
+                deviceListener: capturedDeviceListener
             )
         }
     }
@@ -632,7 +635,9 @@ class VolumeMonitor: ObservableObject {
 
     @MainActor
     private static func performCleanup(
-        state: VolumeStateStore,
+        capturedDeviceID: AudioDeviceID?,
+        capturedVolumeElements: [AudioObjectPropertyElement],
+        capturedMuteElements: [AudioObjectPropertyElement],
         deviceManager: AudioDeviceManager,
         audioQueue: DispatchQueue,
         systemEventMonitor: SystemEventMonitor,
@@ -657,12 +662,10 @@ class VolumeMonitor: ObservableObject {
             mElement: 0
         )
 
-        let removalDeviceID =
-            state.listeningDeviceIDValue() ?? deviceManager.getDefaultOutputDevice()
+        let removalDeviceID = capturedDeviceID ?? deviceManager.getDefaultOutputDevice()
 
         if let volumeListener = volumeListener {
-            let registeredVolumes = state.registeredVolumeElementsSnapshot()
-            for element in registeredVolumes {
+            for element in capturedVolumeElements {
                 var volumeAddress = deviceManager.makePropertyAddress(
                     selector: kAudioDevicePropertyVolumeScalar, element: element)
                 if removalDeviceID != 0 {
@@ -673,8 +676,7 @@ class VolumeMonitor: ObservableObject {
         }
 
         if let muteListener = muteListener {
-            let registeredMutes = state.registeredMuteElementsSnapshot()
-            for element in registeredMutes {
+            for element in capturedMuteElements {
                 var muteAddress = deviceManager.makePropertyAddress(
                     selector: kAudioDevicePropertyMute, element: element)
                 if removalDeviceID != 0 {
@@ -688,10 +690,7 @@ class VolumeMonitor: ObservableObject {
             AudioObjectRemovePropertyListenerBlock(
                 AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
         }
-
-        state.updateListeningDeviceID(nil)
-        state.updateRegisteredVolumeElements([])
-        state.updateRegisteredMuteElements([])
+        // State and listener properties are already cleared synchronously in stopListening()/deinit.
     }
 
     func stopListening() {
@@ -703,30 +702,41 @@ class VolumeMonitor: ObservableObject {
         // This ensures startListening() called right after will be blocked by the guard check
         state.setListeningActive(false)
 
-        // Capture dependencies strongly for cleanup
-        let state = self.state
+        // Synchronously capture and clear all state before dispatching async cleanup.
+        // Clearing here (not in the async block) ensures that startListening()'s subsequent
+        // writes are never overwritten by a delayed cleanup dispatch.
+        let capturedDeviceID = state.listeningDeviceIDValue()
+        let capturedVolumeElements = state.registeredVolumeElementsSnapshot()
+        let capturedMuteElements = state.registeredMuteElementsSnapshot()
+        let capturedVolumeListener = self.volumeListener
+        let capturedMuteListener = self.muteListener
+        let capturedDeviceListener = self.deviceListener
+
+        state.updateListeningDeviceID(nil)
+        state.updateRegisteredVolumeElements([])
+        state.updateRegisteredMuteElements([])
+        self.volumeListener = nil
+        self.muteListener = nil
+        self.deviceListener = nil
+
+        // Capture strong dependencies for async cleanup
         let deviceManager = self.deviceManager
         let audioQueue = self.audioQueue
         let systemEventMonitor = self.systemEventMonitor
-        let volumeListener = self.volumeListener
-        let muteListener = self.muteListener
-        let deviceListener = self.deviceListener
 
         // Dispatch cleanup to main thread with strong references
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.async {
             Self.performCleanup(
-                state: state,
+                capturedDeviceID: capturedDeviceID,
+                capturedVolumeElements: capturedVolumeElements,
+                capturedMuteElements: capturedMuteElements,
                 deviceManager: deviceManager,
                 audioQueue: audioQueue,
                 systemEventMonitor: systemEventMonitor,
-                volumeListener: volumeListener,
-                muteListener: muteListener,
-                deviceListener: deviceListener
+                volumeListener: capturedVolumeListener,
+                muteListener: capturedMuteListener,
+                deviceListener: capturedDeviceListener
             )
-            // Clear instance listener properties to release closures
-            self?.volumeListener = nil
-            self?.muteListener = nil
-            self?.deviceListener = nil
         }
     }
 

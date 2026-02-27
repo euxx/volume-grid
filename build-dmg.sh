@@ -2,16 +2,18 @@
 
 set -e
 
-VERSION="v1.1.0"
-TIMESTAMP="202512121212"
-TIMESTAMP_DATE="12/12/2025 12:12:12"
+VERSION="v1.1.1"
+TIMESTAMP="202602272222.22"
+TIMESTAMP_DATE="02/27/2026 22:22:22"
 
 IDENTITY=$(security find-identity -p codesigning -v | grep "Apple Development" | head -n 1 | awk -F\" '{print $2}')
 
 echo "Using code signing identity: $IDENTITY"
 
 xcodebuild -project VolumeGrid.xcodeproj -scheme "Volume Grid" -configuration Release \
-  -derivedDataPath build CODE_SIGN_IDENTITY="$IDENTITY" CODE_SIGN_STYLE=Manual CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES
+  -derivedDataPath build \
+  CODE_SIGN_IDENTITY="$IDENTITY" CODE_SIGN_STYLE=Manual CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES \
+  SWIFT_OPTIMIZATION_LEVEL="-Onone"
 
 DMG_DIR="dmg-dir-temp"
 rm -rf "$DMG_DIR"

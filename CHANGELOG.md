@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-02-27
+
+### Fixes
+
+- Fix HUD window double-release crash on screen configuration changes
+- Fix race condition in VolumeMonitor listener cleanup causing listener leaks on device switch
+- Disable implicit CALayer animations in volume blocks for instant visual updates
+- Cancel in-flight fade-out animation when showing HUD to prevent flicker
+- Sort output devices by name length (shortest first)
+
+### Improvements
+
+- Add `@MainActor` to StatusBarController for stricter concurrency safety
+- Reuse VolumeMonitor's AudioDeviceManager for device switching
+
 ## [1.1.0] - 2025-12-12
 
 ### Features

@@ -238,7 +238,7 @@ final class AudioDeviceManager: Sendable {
                 "'\(device.name)' (ID: \(device.id), Type: \(transportType), Audio: \(supportsAudio))"
             )
             return supportsAudio && isNotVirtual
-        }
+        }.sorted { $0.name.count < $1.name.count }
     }
 
     nonisolated func getDeviceName(_ deviceID: AudioDeviceID) -> String? {

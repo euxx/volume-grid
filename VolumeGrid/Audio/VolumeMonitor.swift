@@ -257,12 +257,9 @@ class VolumeMonitor: ObservableObject {
         let devices = deviceManager.getOutputDevices()
         let resolvedID = resolveDeviceID()
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.audioDevices = devices
-            if resolvedID != 0, let currentDevice = devices.first(where: { $0.id == resolvedID }) {
-                self.currentDevice = currentDevice
-            }
+        self.audioDevices = devices
+        if resolvedID != 0, let currentDevice = devices.first(where: { $0.id == resolvedID }) {
+            self.currentDevice = currentDevice
         }
     }
 

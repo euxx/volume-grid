@@ -5,6 +5,7 @@ import os
 
 private let logger = Logger(subsystem: "one.eux.volumegrid", category: "StatusBarController")
 
+@MainActor
 final class StatusBarController {
     private let volumeMonitor: VolumeMonitor
     private let launchAtLoginController: LaunchAtLoginServiceable
@@ -23,7 +24,6 @@ final class StatusBarController {
     private var aboutWindow: NSWindow?
     private var aboutWindowObserver: NSObjectProtocol?
 
-    @MainActor
     init(volumeMonitor: VolumeMonitor, launchAtLoginController: LaunchAtLoginServiceable) {
         self.volumeMonitor = volumeMonitor
         self.launchAtLoginController = launchAtLoginController
@@ -51,7 +51,6 @@ final class StatusBarController {
         ])
     }
 
-    @MainActor
     private func setupMenu() {
         let initialScalar = volumeMonitor.volumeScalar
         let initialPercentage = Int(round(initialScalar * 100))
@@ -95,7 +94,6 @@ final class StatusBarController {
         statusBarVolumeView.update(percentage: initialPercentage)
     }
 
-    @MainActor
     private func updateDeviceMenu() {
         // Remove old device menu items
         for deviceMenuItem in deviceMenuItems.values {
@@ -133,7 +131,6 @@ final class StatusBarController {
         }
     }
 
-    @MainActor
     private func bindVolumeUpdates() {
         // Use volumeScalar for precise formatting to avoid intermediate values like "5 1/4"
         let volumeUpdates = volumeMonitor.$volumeScalar

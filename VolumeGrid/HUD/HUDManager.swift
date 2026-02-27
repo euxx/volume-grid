@@ -436,8 +436,13 @@ class HUDManager {
                         hudWindow.animator().alphaValue = VolumeGridConstants.HUD.alpha
                     }, completionHandler: nil)
             } else {
+                // Cancel any in-flight fade-out animation before setting alpha
+                NSAnimationContext.runAnimationGroup(
+                    { context in
+                        context.duration = 0
+                        hudWindow.animator().alphaValue = VolumeGridConstants.HUD.alpha
+                    }, completionHandler: nil)
                 hudWindow.orderFrontRegardless()
-                hudWindow.alphaValue = VolumeGridConstants.HUD.alpha
             }
         }
 

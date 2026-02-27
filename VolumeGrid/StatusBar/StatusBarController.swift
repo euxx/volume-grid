@@ -324,8 +324,7 @@ final class StatusBarController {
         guard let deviceIDNumber = sender.representedObject as? NSNumber else { return }
         let deviceID = AudioDeviceID(deviceIDNumber.uint32Value)
 
-        let deviceManager = AudioDeviceManager()
-        let success = deviceManager.setDefaultOutputDevice(deviceID)
+        let success = volumeMonitor.setDefaultOutputDevice(deviceID)
 
         if !success {
             showError("Failed to switch audio device")

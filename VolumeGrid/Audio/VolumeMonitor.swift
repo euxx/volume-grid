@@ -747,6 +747,10 @@ class VolumeMonitor: ObservableObject {
         hudEventSubject.send(event)
     }
 
+    nonisolated func setDefaultOutputDevice(_ deviceID: AudioDeviceID) -> Bool {
+        deviceManager.setDefaultOutputDevice(deviceID)
+    }
+
     private func updateVolumeSupportState(_ isSupported: Bool) {
         isCurrentDeviceVolumeSupported = isSupported
         if !isSupported {

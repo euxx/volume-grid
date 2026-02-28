@@ -315,7 +315,7 @@ final class StatusBarController {
             case .failure(let error):
                 self.launchAtLoginMenuItem.state =
                     self.launchAtLoginController.isEnabled() ? .on : .off
-                self.showError(error.localizedDescription)
+                self.showError(title: "Launch at Login", error.localizedDescription)
             }
         }
     }
@@ -344,9 +344,9 @@ final class StatusBarController {
         }
     }
 
-    private func showError(_ message: String) {
+    private func showError(title: String = "Volume Grid", _ message: String) {
         let alert = NSAlert()
-        alert.messageText = "Launch at Login"
+        alert.messageText = title
         alert.informativeText = message
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")

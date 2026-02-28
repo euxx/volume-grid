@@ -186,11 +186,11 @@ final class StatusBarController {
         let bundle = Bundle.main
         let appName =
             bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Volume Grid"
-        let appVersion = [
+        let shortVersion =
             bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-                ?? "Unknown",
-            bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown",
-        ]
+            ?? "Unknown"
+        let buildVersion =
+            bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 320, height: 280),
@@ -215,7 +215,7 @@ final class StatusBarController {
         appNameLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let versionLabel = NSTextField(
-            labelWithString: "Version: \(appVersion[0]) (Build \(appVersion[1]))"
+            labelWithString: "Version: \(shortVersion) (Build \(buildVersion))"
         )
         versionLabel.alignment = .center
         versionLabel.font = NSFont.systemFont(ofSize: 12)

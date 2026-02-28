@@ -352,8 +352,6 @@ class HUDManager {
         )
         let gapBetweenDeviceAndCount = VolumeGridConstants.HUD.Layout.textStackSpacing
 
-        syncHUDWindowsWithScreens()
-
         for screen in NSScreen.screens {
             guard
                 let screenID = screenID(for: screen),

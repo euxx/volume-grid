@@ -529,7 +529,7 @@ class VolumeMonitor: ObservableObject {
 
             guard let volumeListener = volumeListener else { return }
 
-            var listenerRegistered = false
+            var validVolumeElements: [AudioObjectPropertyElement] = []
             let volumeElementsSnapshot = state.volumeElementsSnapshot()
             for element in volumeElementsSnapshot {
                 var volumeAddress = deviceManager.makePropertyAddress(
@@ -538,15 +538,15 @@ class VolumeMonitor: ObservableObject {
                 let volumeStatus = AudioObjectAddPropertyListenerBlock(
                     deviceID, &volumeAddress, audioQueue, volumeListener)
                 if volumeStatus == noErr {
-                    listenerRegistered = true
+                    validVolumeElements.append(element)
                 }
             }
 
-            guard listenerRegistered else {
+            guard !validVolumeElements.isEmpty else {
                 logger.debug("startListening: No volume listeners were registered")
                 return
             }
-            state.updateRegisteredVolumeElements(volumeElementsSnapshot)
+            state.updateRegisteredVolumeElements(validVolumeElements)
 
             let muteElementsSnapshot = state.muteElementsSnapshot()
             if !muteElementsSnapshot.isEmpty {

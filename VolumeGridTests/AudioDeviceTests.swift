@@ -273,13 +273,8 @@ final class AudioDeviceManagerTests: XCTestCase {
 
             var set = Set<AudioDevice>()
             set.insert(device)
-
-            DispatchQueue.global().async {
-                _ = device.name
-            }
+            XCTAssertTrue(set.contains(device))
         }
-
-        XCTAssert(true)
     }
 
     // MARK: - Edge Cases

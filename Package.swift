@@ -13,6 +13,11 @@ let package = Package(
             name: "VolumeGrid",
             path: "VolumeGrid",
             resources: [.copy("Assets/icon.png")]
-        )
+        ),
+        .testTarget(
+            name: "VolumeGridTests",
+            dependencies: ["VolumeGrid"],
+            path: "VolumeGridTests"
+        ),
     ]
 )

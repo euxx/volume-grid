@@ -1,6 +1,6 @@
 import Foundation
 
-@testable import Volume_Grid
+@testable import VolumeGrid
 
 /// Mock implementation of LaunchAtLoginServiceable for testing
 /// Allows tests to control behavior without affecting system settings

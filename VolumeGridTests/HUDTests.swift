@@ -1,7 +1,7 @@
 import Foundation
 import XCTest
 
-@testable import Volume_Grid
+@testable import VolumeGrid
 
 // MARK: - HUDEvent Structure Tests
 

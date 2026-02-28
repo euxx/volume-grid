@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Volume_Grid
+@testable import VolumeGrid
 
 /// Tests for LaunchAtLoginServiceable protocol
 /// Uses MockLaunchAtLoginController to avoid system side effects

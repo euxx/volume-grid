@@ -1,7 +1,7 @@
 import AudioToolbox
 import XCTest
 
-@testable import Volume_Grid
+@testable import VolumeGrid
 
 // MARK: - AudioDeviceManager Initialization & Basic Tests
 

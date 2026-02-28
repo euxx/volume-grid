@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Volume_Grid
+@testable import VolumeGrid
 
 /// Tests for VolumeGridConstants to verify logical constraints and consistency
 /// Note: Direct constant value tests are intentionally omitted as they require

@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Volume_Grid
+@testable import VolumeGrid
 
 // MARK: - Volume Integration Tests
 

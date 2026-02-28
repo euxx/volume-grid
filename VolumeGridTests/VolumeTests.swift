@@ -178,12 +178,3 @@ final class VolumePerformanceTests: XCTestCase {
     }
 }
 
-// MARK: - Helper Extension
-
-extension NSLock {
-    func withLock<T>(_ body: () -> T) -> T {
-        lock()
-        defer { unlock() }
-        return body()
-    }
-}

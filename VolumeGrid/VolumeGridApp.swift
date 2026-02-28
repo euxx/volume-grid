@@ -11,7 +11,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var hudSubscription: AnyCancellable?
 
     private var isRunningTests: Bool {
-        NSClassFromString("XCTestCase") != nil
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

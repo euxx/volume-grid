@@ -540,12 +540,6 @@ final class VolumeMenuItemView: NSView {
     private let iconSize: CGFloat = 16
     private var onVolumeChange: ((CGFloat) -> Void)?
     private var isDragging = false
-    private var deviceSelectionSubmenu: NSMenu?
-
-    // Cycle ID mechanism to prevent race condition from rapid volume updates
-    // Similar to HUDManager's currentHUDCycleID
-    private var currentUpdateCycleID: UInt64 = 0
-    private var lastAppliedCycleID: UInt64 = 0
 
     override var intrinsicContentSize: NSSize {
         .init(width: 280, height: 56)
@@ -609,10 +603,6 @@ final class VolumeMenuItemView: NSView {
     }
 
     func update(percentage: Int, formattedVolume: String, deviceName: String) {
-        // Increment cycle ID to mark this as a new update cycle
-        currentUpdateCycleID &+= 1
-        let cycleID = currentUpdateCycleID
-
         let clamped = percentage.clamped(to: 0...100)
         let icon = VolumeIconHelper.icon(for: clamped)
 
@@ -621,11 +611,6 @@ final class VolumeMenuItemView: NSView {
         iconView.image = image?.withSymbolConfiguration(config)
         label.stringValue = "-  \(formattedVolume)"
         progressView.progress = CGFloat(clamped) / 100.0
-
-        // Only update internal tracking if this cycle is current
-        if cycleID == currentUpdateCycleID {
-            lastAppliedCycleID = cycleID
-        }
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {

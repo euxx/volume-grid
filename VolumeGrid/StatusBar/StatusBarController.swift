@@ -54,7 +54,6 @@ final class StatusBarController {
     private func setupMenu() {
         let initialScalar = volumeMonitor.volumeScalar
         let initialPercentage = Int(round(initialScalar * 100))
-        let initialDevice = volumeMonitor.currentDevice?.name ?? "Unknown Device"
         isVolumeControlAvailable = volumeMonitor.isCurrentDeviceVolumeSupported
         volumeChangeHandler = { [weak volumeMonitor] ratio in
             volumeMonitor?.setVolume(scalar: Float32(ratio))
@@ -63,8 +62,7 @@ final class StatusBarController {
 
         volumeMenuView.update(
             percentage: initialPercentage,
-            formattedVolume: formattedVolume,
-            deviceName: initialDevice
+            formattedVolume: formattedVolume
         )
         applyVolumeInteractionState(isVolumeControlAvailable)
 
@@ -154,7 +152,7 @@ final class StatusBarController {
             deviceListUpdates
         )
         .receive(on: DispatchQueue.main)
-        .sink { [weak self] (volumeData, deviceName, isSupported, _) in
+        .sink { [weak self] (volumeData, _, isSupported, _) in
             guard let self = self else { return }
             let (scalar, formatted) = volumeData
             let percentage = Int(round(scalar * 100))
@@ -162,8 +160,7 @@ final class StatusBarController {
             self.updateVolumeInteraction(isSupported: isSupported)
             self.volumeMenuView.update(
                 percentage: percentage,
-                formattedVolume: formatted,
-                deviceName: deviceName
+                formattedVolume: formatted
             )
             self.updateDeviceMenu()
             self.menu.itemChanged(self.volumeDisplayMenuItem)
@@ -545,7 +542,7 @@ final class VolumeMenuItemView: NSView {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
         setupSubviews()
-        update(percentage: 0, formattedVolume: "0", deviceName: "Unknown Device")
+        update(percentage: 0, formattedVolume: "0")
     }
 
     required init?(coder: NSCoder) {
@@ -598,7 +595,7 @@ final class VolumeMenuItemView: NSView {
         onVolumeChange = handler
     }
 
-    func update(percentage: Int, formattedVolume: String, deviceName: String) {
+    func update(percentage: Int, formattedVolume: String) {
         let clamped = percentage.clamped(to: 0...100)
         let icon = VolumeIconHelper.icon(for: clamped)
 

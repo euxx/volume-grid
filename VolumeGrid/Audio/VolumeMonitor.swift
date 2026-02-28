@@ -437,12 +437,13 @@ class VolumeMonitor: ObservableObject {
             }
             self.updateVolumeSupportState(
                 currentOutputID != 0 && self.deviceManager.supportsVolumeControl(currentOutputID))
+            let supportsVolume = self.isCurrentDeviceVolumeSupported
             let deviceName = self.currentDevice?.name ?? "Unknown"
             logger.debug(
                 "deviceChanged: New device - id=\(currentOutputID, privacy: .public), name=\(deviceName, privacy: .public), supportsVolume=\(self.isCurrentDeviceVolumeSupported, privacy: .public)"
             )
 
-            if currentOutputID != 0 && self.deviceManager.supportsVolumeControl(currentOutputID) {
+            if supportsVolume {
                 _ = self.refreshMuteState()
             }
 

@@ -406,7 +406,6 @@ private final class LinearProgressView: NSView {
         if storedProgress > 0 {
             var fillRect = bounds
             fillRect.size.width = bounds.width * storedProgress
-            fillRect.size.width = min(fillRect.width, bounds.width)
             let fillPath = NSBezierPath(
                 roundedRect: fillRect,
                 xRadius: cornerRadius,

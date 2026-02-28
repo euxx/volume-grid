@@ -14,6 +14,15 @@ final class SystemEventMonitor {
 
     init() {}
 
+    deinit {
+        if let monitor = globalMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if let monitor = localMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+    }
+
     func start(handler: @escaping @MainActor () -> Void) {
         stop()
 

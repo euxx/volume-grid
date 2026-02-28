@@ -695,6 +695,7 @@ class VolumeMonitor: ObservableObject {
         // Cancel pending debounce tasks to prevent them from firing after stopping
         volumeChangeDebounceTask?.cancel()
         deviceChangeDebounceTask?.cancel()
+        keyPressDebounceTask?.cancel()
 
         // Disable listening flag immediately to prevent race conditions
         // This ensures startListening() called right after will be blocked by the guard check

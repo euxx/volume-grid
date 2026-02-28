@@ -587,7 +587,11 @@ class VolumeMonitor: ObservableObject {
         systemEventMonitor.start { [weak self] in
             guard let self else { return }
 
-            // Debounce key press to merge with volumeChanged callbacks
+            // Stage 2 debounce: the key press and CoreAudio volumeChanged callback
+            // arrive nearly simultaneously. This 50 ms delay lets CoreAudio finish
+            // processing so the HUD shows the final volume, not the pre-change value.
+            // Stage 1 (100 ms in SystemEventMonitor) has already deduplicated the
+            // global/local event pair before this point.
             self.keyPressDebounceTask?.cancel()
             let task = Task {
                 try? await Task.sleep(

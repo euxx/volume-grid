@@ -6,6 +6,10 @@ final class SystemEventMonitor {
     private var localMonitor: Any?
     private var lastEventData: Int?
     private var lastEventTime: Date?
+    // Stage 1 debounce: global + local NSEvent monitors both fire for the same
+    // key press. This interval deduplicates them so each press is handled once.
+    // The 50 ms key-press debounce in VolumeMonitor (Stage 2) is shorter and
+    // always fires after this filter has already removed duplicates.
     private let debounceInterval: TimeInterval = 0.1
 
     init() {}

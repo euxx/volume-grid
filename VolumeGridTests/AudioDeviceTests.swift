@@ -9,6 +9,10 @@ final class AudioDeviceManagerTests: XCTestCase {
 
     var manager: AudioDeviceManager!
 
+    private var hasAudioDevice: Bool {
+        manager.getDefaultOutputDevice() != 0
+    }
+
     override func setUp() {
         super.setUp()
         manager = AudioDeviceManager()
@@ -55,7 +59,8 @@ final class AudioDeviceManagerTests: XCTestCase {
         XCTAssert(deviceID >= 0)
     }
 
-    func testDefaultDeviceAlwaysAvailable() {
+    func testDefaultDeviceAlwaysAvailable() throws {
+        try XCTSkipUnless(hasAudioDevice, "No audio device available")
         let defaultID = manager.getDefaultOutputDevice()
         XCTAssertGreaterThan(defaultID, 0)
     }
@@ -105,7 +110,8 @@ final class AudioDeviceManagerTests: XCTestCase {
         }
     }
 
-    func testDefaultDeviceInEnumeration() {
+    func testDefaultDeviceInEnumeration() throws {
+        try XCTSkipUnless(hasAudioDevice, "No audio device available")
         let defaultID = manager.getDefaultOutputDevice()
         let devices = manager.getAllDevices()
 
@@ -157,14 +163,16 @@ final class AudioDeviceManagerTests: XCTestCase {
 
     // MARK: - Volume Control Support
 
-    func testDeviceSupportsVolumeControl() {
+    func testDeviceSupportsVolumeControl() throws {
+        try XCTSkipUnless(hasAudioDevice, "No audio device available")
         let defaultID = manager.getDefaultOutputDevice()
         let supportsVolume = manager.supportsVolumeControl(defaultID)
 
         XCTAssertTrue(supportsVolume, "Default device should support volume control")
     }
 
-    func testDeviceSupportsMute() {
+    func testDeviceSupportsMute() throws {
+        try XCTSkipUnless(hasAudioDevice, "No audio device available")
         let defaultID = manager.getDefaultOutputDevice()
         let supportsMute = manager.supportsMute(defaultID)
 
@@ -203,7 +211,8 @@ final class AudioDeviceManagerTests: XCTestCase {
 
     // MARK: - Device State Transitions
 
-    func testGetDeviceNameByID() {
+    func testGetDeviceNameByID() throws {
+        try XCTSkipUnless(hasAudioDevice, "No audio device available")
         let defaultID = manager.getDefaultOutputDevice()
         let name = manager.getDeviceName(defaultID)
 

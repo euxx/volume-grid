@@ -239,7 +239,8 @@ final class AudioDeviceManager: Sendable {
                 "'\(device.name)' (ID: \(device.id), Type: \(transportType), Audio: \(supportsAudio))"
             )
             return supportsAudio && isNotVirtual
-        // Sort by name length (ascending) so shorter device names appear first in the menu
+        // Sort by name length so built-in/short-named devices (e.g. "TV") appear before
+        // longer peripheral names. This keeps the most common output near the top of the menu.
         }.sorted { $0.name.count < $1.name.count }
     }
 

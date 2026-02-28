@@ -197,7 +197,7 @@ class VolumeMonitor: ObservableObject {
             "VolumeMonitor initialized: deviceID=\(deviceID, privacy: .public), supportsVolume=\(self.isCurrentDeviceVolumeSupported, privacy: .public)"
         )
         if deviceID != 0 {
-            if let volume = getCurrentVolume() {
+            if let volume = fetchCurrentVolume() {
                 let scalar = CGFloat(volume)
                 volumeScalar = scalar
                 volumePercentage = Int(round(scalar * 100))
@@ -263,7 +263,7 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
-    nonisolated func getCurrentVolume() -> Float32? {
+    nonisolated func fetchCurrentVolume() -> Float32? {
         let deviceID = resolveDeviceID()
         guard deviceID != 0 else { return nil }
 
@@ -341,7 +341,7 @@ class VolumeMonitor: ObservableObject {
             volumePercentage = 0
         } else {
             // When unmuting, set volumePercentage to the actual current volume
-            if let volume = getCurrentVolume() {
+            if let volume = fetchCurrentVolume() {
                 let scalar = CGFloat(volume)
                 volumeScalar = scalar
                 volumePercentage = Int(round(scalar * 100))
@@ -352,7 +352,7 @@ class VolumeMonitor: ObservableObject {
 
     private func volumeChanged(address _: AudioObjectPropertyAddress) {
         // Only show HUD when volume actually changes (triggered by volume key press or real API change)
-        guard let volume = getCurrentVolume() else { return }
+        guard let volume = fetchCurrentVolume() else { return }
 
         let clampedVolume = volume.clamped(to: 0...1)
         let currentScalar = CGFloat(clampedVolume)
@@ -381,7 +381,7 @@ class VolumeMonitor: ObservableObject {
                         VolumeGridConstants.Audio.volumeChangeDebounceDelay * 1_000_000_000))
                 guard !Task.isCancelled else { return }
                 // Re-fetch current volume after debounce to ensure stable final value
-                if let finalVolume = self.getCurrentVolume() {
+                if let finalVolume = self.fetchCurrentVolume() {
                     let finalClamped = finalVolume.clamped(to: 0...1)
                     self.showVolumeHUD(volumeScalar: CGFloat(finalClamped))
                 }
@@ -446,7 +446,7 @@ class VolumeMonitor: ObservableObject {
                 _ = self.refreshMuteState()
             }
 
-            if let volume = self.getCurrentVolume() {
+            if let volume = self.fetchCurrentVolume() {
                 let clamped = volume.clamped(to: 0...1)
                 let percentage = Int(round(clamped * 100))
                 self.volumeScalar = CGFloat(clamped)
@@ -472,7 +472,7 @@ class VolumeMonitor: ObservableObject {
         let scalar: CGFloat
         let isUnsupported: Bool
 
-        if let volume = getCurrentVolume() {
+        if let volume = fetchCurrentVolume() {
             let clamped = volume.clamped(to: 0...1)
             let isMuted = state.deviceMuted()
             scalar = isMuted ? 0 : CGFloat(clamped)

@@ -114,34 +114,3 @@ final class HUDConstantsTests: XCTestCase {
         XCTAssert(height > 50 && height < 500, "HUD height should be reasonable")
     }
 }
-
-// MARK: - Mock Helpers
-
-class MockSystemEventMonitor {
-    var volumeKeyPressHandler: (() -> Void)?
-
-    func simulateVolumeKeyPress(keyCode: Int) {
-        volumeKeyPressHandler?()
-    }
-}
-
-class MockAudioDeviceManager {
-    private var devices: [String: AudioDevice] = [:]
-    private var currentDevice: String?
-
-    func addDevice(name: String) {
-        devices[name] = AudioDevice(id: UInt32(devices.count), name: name)
-    }
-
-    func setDefaultOutputDevice(name: String) {
-        currentDevice = name
-    }
-
-    func switchToDevice(name: String) {
-        currentDevice = name
-    }
-
-    func getCurrentDevice() -> String? {
-        currentDevice
-    }
-}

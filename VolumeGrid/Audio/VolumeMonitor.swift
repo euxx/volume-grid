@@ -443,10 +443,6 @@ class VolumeMonitor: ObservableObject {
                 "deviceChanged: New device - id=\(currentOutputID, privacy: .public), name=\(deviceName, privacy: .public), supportsVolume=\(self.isCurrentDeviceVolumeSupported, privacy: .public)"
             )
 
-            if supportsVolume {
-                _ = self.refreshMuteState()
-            }
-
             if let volume = self.fetchCurrentVolume() {
                 let clamped = volume.clamped(to: 0...1)
                 let percentage = Int(round(clamped * 100))

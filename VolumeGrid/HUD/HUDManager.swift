@@ -308,10 +308,7 @@ class HUDManager {
         let statusTextSize = statusNSString.size(withAttributes: [
             .font: VolumeGridConstants.HUD.textFont
         ])
-        let maxVolumeSampleString = VolumeFormatter.formatVolumeCount(quarterBlocks: 15.75)
-        let maxVolumeSampleWidth = NSString(string: maxVolumeSampleString)
-            .size(withAttributes: [.font: VolumeGridConstants.HUD.textFont]).width
-        let effectiveStatusTextWidth = max(statusTextSize.width, maxVolumeSampleWidth)
+        let effectiveStatusTextWidth = max(statusTextSize.width, Self.maxVolumeLabelWidth)
 
         let gapBetweenDeviceAndCount = VolumeGridConstants.HUD.Layout.textStackSpacing
         let combinedWidth =
@@ -491,6 +488,13 @@ class HUDManager {
         secondaryTextColor: NSColor.white.withAlphaComponent(0.9),
         blockFillColor: NSColor.white.withAlphaComponent(0.9)
     )
+
+    // Maximum possible volume label width (e.g. "15+3/4"), computed once.
+    private static let maxVolumeLabelWidth: CGFloat = {
+        let sample = VolumeFormatter.formatVolumeCount(quarterBlocks: 15.75)
+        return NSString(string: sample)
+            .size(withAttributes: [.font: VolumeGridConstants.HUD.textFont]).width
+    }()
 
 }
 

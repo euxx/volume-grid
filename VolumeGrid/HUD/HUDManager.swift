@@ -114,7 +114,7 @@ class HUDManager {
         containerView.blendingMode = .behindWindow
         containerView.state = .active
         containerView.wantsLayer = true
-        let style = hudStyle()
+        let style = Self.defaultHUDStyle
         containerView.layer?.cornerRadius = VolumeGridConstants.HUD.cornerRadius
         containerView.layer?.masksToBounds = true
         containerView.layer?.backgroundColor = NSColor.darkGray.withAlphaComponent(0.7).cgColor
@@ -366,7 +366,7 @@ class HUDManager {
             let hudWindow = context.window
             let isAlreadyVisible = hudWindow.isVisible && hudWindow.alphaValue > 0.1
 
-            let style = hudStyle()
+            let style = Self.defaultHUDStyle
             let screenFrame = screen.frame
             let newWindowFrame = NSRect(
                 x: screenFrame.midX - dynamicHudWidth / 2,
@@ -492,7 +492,5 @@ class HUDManager {
         blockFillColor: NSColor.white.withAlphaComponent(0.9)
     )
 
-    private func hudStyle() -> HUDStyle {
-        Self.defaultHUDStyle
-    }
 }
+

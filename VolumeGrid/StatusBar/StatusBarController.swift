@@ -145,14 +145,13 @@ final class StatusBarController {
         let deviceListUpdates = volumeMonitor.$audioDevices
             .map { _ in () }
 
-        Publishers.CombineLatest4(
+        Publishers.CombineLatest3(
             volumeUpdates,
             deviceUpdates,
-            volumeMonitor.$isCurrentDeviceVolumeSupported,
-            deviceListUpdates
+            volumeMonitor.$isCurrentDeviceVolumeSupported
         )
         .receive(on: DispatchQueue.main)
-        .sink { [weak self] (volumeData, _, isSupported, _) in
+        .sink { [weak self] (volumeData, _, isSupported) in
             guard let self = self else { return }
             let (scalar, formatted) = volumeData
             let percentage = Int(round(scalar * 100))
@@ -162,8 +161,18 @@ final class StatusBarController {
                 percentage: percentage,
                 formattedVolume: formatted
             )
-            self.updateDeviceMenu()
             self.menu.itemChanged(self.volumeDisplayMenuItem)
+        }
+        .store(in: &subscriptions)
+
+        // Rebuild device menu only when devices or current device change
+        Publishers.CombineLatest(
+            deviceListUpdates,
+            volumeMonitor.$currentDevice
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] _ in
+            self?.updateDeviceMenu()
         }
         .store(in: &subscriptions)
     }

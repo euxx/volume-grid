@@ -56,13 +56,13 @@ final class HUDWindowContext {
     }
 }
 
+@MainActor
 class HUDManager {
     private var hudWindows: [CGDirectDisplayID: HUDWindowContext] = [:]
     private var hideHUDTask: Task<Void, Never>?
     private var screenChangeCancellable: AnyCancellable?
     private var currentHUDCycleID: UInt64 = 0
 
-    @MainActor
     init() {
         logger.debug("HUDManager initialized")
         syncHUDWindowsWithScreens()
@@ -84,7 +84,6 @@ class HUDManager {
             .map { CGDirectDisplayID($0.uint32Value) }
     }
 
-    @MainActor
     private func makeHUDWindow(for screen: NSScreen, screenID: CGDirectDisplayID)
         -> HUDWindowContext
     {
@@ -275,7 +274,6 @@ class HUDManager {
         )
     }
 
-    @MainActor
     private func syncHUDWindowsWithScreens() {
         var remaining = hudWindows
         var updated: [CGDirectDisplayID: HUDWindowContext] = [:]
@@ -324,7 +322,6 @@ class HUDManager {
         return (dynamicHudWidth, effectiveStatusTextWidth)
     }
 
-    @MainActor
     func showHUD(
         volumeScalar: CGFloat, deviceName: String?, isUnsupported: Bool = false
     ) {

@@ -110,7 +110,8 @@ final class AudioDeviceManager: Sendable {
     nonisolated func detectVolumeElements(for deviceID: AudioDeviceID)
         -> [AudioObjectPropertyElement]
     {
-        detectElements(for: deviceID, selector: kAudioDevicePropertyVolumeScalar)
+        detectElements(
+            for: deviceID, selector: kAudioDevicePropertyVolumeScalar, verifyReadable: true)
     }
 
     @discardableResult

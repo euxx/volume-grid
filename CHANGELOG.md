@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixes
+
+- Fix key-press debounce race condition, volume element detection, SystemEventMonitor cleanup, device menu unnecessary rebuilds, and device switch error alert title
+- Fix SystemEventMonitor data race: global monitor callback dispatched to MainActor
+- Fix SystemEventMonitor deinit: synchronize monitor removal on main thread
+- Eliminate all MainActor.assumeIsolated: use Task { @MainActor in } for completion handlers and animation callbacks
+
+### Improvements
+
+- Upgrade to Swift 6 language mode with strict concurrency checking
+- Refactoring: consolidate ThreadSafeProperty, remove redundant code paths and unused abstractions, improve naming
+- Concurrency: enable warnings-as-errors, mark pure types Sendable/nonisolated, use OSAllocatedUnfairLock(initialState:) for compiler-checked locking
+- Tests: add SPM test target, skip hardware-dependent tests, clean up mocks, add dispatchPrecondition and assertForOverFulfill
+- Formatting and documentation
+
 ## [1.1.1] - 2026-02-27
 
 ### Fixes

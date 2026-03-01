@@ -2,9 +2,20 @@ import AudioToolbox
 import Foundation
 import os.log
 
-struct AudioDevice: Identifiable, Hashable, Sendable {
-    let id: AudioDeviceID
-    let name: String
+struct AudioDevice: Identifiable, Sendable {
+    nonisolated let id: AudioDeviceID
+    nonisolated let name: String
+}
+
+nonisolated extension AudioDevice: Hashable {
+    static func == (lhs: AudioDevice, rhs: AudioDevice) -> Bool {
+        lhs.id == rhs.id && lhs.name == rhs.name
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(name)
+    }
 }
 
 private nonisolated let logger = Logger(

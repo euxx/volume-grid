@@ -2,27 +2,27 @@ import CoreGraphics
 import Foundation
 
 extension Comparable {
-    func clamped(to range: ClosedRange<Self>) -> Self {
+    nonisolated func clamped(to range: ClosedRange<Self>) -> Self {
         min(max(self, range.lowerBound), range.upperBound)
     }
 }
 
 enum VolumeFormatter {
-    private static let blocksCount = CGFloat(VolumeGridConstants.volumeBlocksCount)
-    static let quarterStep = VolumeGridConstants.Audio.quarterStep
+    nonisolated private static let blocksCount = CGFloat(VolumeGridConstants.volumeBlocksCount)
+    nonisolated static let quarterStep = VolumeGridConstants.Audio.quarterStep
 
-    static func formattedVolumeString(for percentage: Int) -> String {
+    nonisolated static func formattedVolumeString(for percentage: Int) -> String {
         let clamped = percentage.clamped(to: 0...100)
         return formattedVolumeString(forScalar: CGFloat(clamped) / 100.0)
     }
 
-    static func formattedVolumeString(forScalar scalar: CGFloat) -> String {
+    nonisolated static func formattedVolumeString(forScalar scalar: CGFloat) -> String {
         let totalBlocks = scalar.clamped(to: 0...1) * blocksCount
         let quarterBlocks = (totalBlocks / quarterStep).rounded() * quarterStep
         return formatVolumeCount(quarterBlocks: quarterBlocks)
     }
 
-    static func formatVolumeCount(quarterBlocks value: CGFloat) -> String {
+    nonisolated static func formatVolumeCount(quarterBlocks value: CGFloat) -> String {
         let integerPart = Int(value)
         let fractionalPart = value - CGFloat(integerPart)
         let epsilon = VolumeGridConstants.Audio.volumeEpsilon
@@ -51,12 +51,12 @@ enum VolumeFormatter {
 }
 
 enum VolumeIconHelper {
-    struct VolumeIcon {
-        let symbolName: String
-        let size: CGFloat
+    struct VolumeIcon: Sendable {
+        nonisolated let symbolName: String
+        nonisolated let size: CGFloat
     }
 
-    static func icon(
+    nonisolated static func icon(
         for percentage: Int,
         isUnsupported: Bool = false,
         forHUD: Bool = false
@@ -106,7 +106,7 @@ enum VolumeIconHelper {
         }
     }
 
-    static func hudIcon(
+    nonisolated static func hudIcon(
         for percentage: Int,
         isUnsupported: Bool = false
     ) -> VolumeIcon {

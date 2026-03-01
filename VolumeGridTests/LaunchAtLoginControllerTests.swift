@@ -1,4 +1,5 @@
 import XCTest
+import os.lock
 
 @testable import VolumeGrid
 
@@ -106,30 +107,31 @@ final class LaunchAtLoginControllerTests: XCTestCase {
     }
 
     func testSetEnabledExecutesAsynchronously() {
-        let expectation = XCTestExpectation(description: "Async execution")
-        var callCount = 0
+        let completed = XCTestExpectation(description: "Completion called")
+        completed.assertForOverFulfill = true
+        let completionFired = OSAllocatedUnfairLock(initialState: false)
 
         mockController.setEnabled(true) { _ in
-            callCount += 1
-            expectation.fulfill()
+            completionFired.withLock { $0 = true }
+            completed.fulfill()
         }
 
-        XCTAssertEqual(callCount, 0)
-        wait(for: [expectation], timeout: 5.0)
-        XCTAssertEqual(callCount, 1)
+        // Completion dispatched via main.async — hasn't fired before runloop yields.
+        // This test must run on the main thread for the assertion to hold.
+        dispatchPrecondition(condition: .onQueue(.main))
+        XCTAssertFalse(completionFired.withLock { $0 })
+        wait(for: [completed], timeout: 5.0)
     }
 
     func testSetEnabledCallsCompletionOnMainThread() {
         let expectation = XCTestExpectation(description: "Main thread")
-        var executedOnMainThread = false
 
         mockController.setEnabled(true) { _ in
-            executedOnMainThread = Thread.isMainThread
+            XCTAssertTrue(Thread.isMainThread)
             expectation.fulfill()
         }
 
         wait(for: [expectation], timeout: 5.0)
-        XCTAssertTrue(executedOnMainThread)
     }
 
     func testSetEnabledWithCustomClosure() {

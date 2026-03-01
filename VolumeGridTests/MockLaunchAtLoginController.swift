@@ -1,21 +1,29 @@
 import Foundation
+import os.lock
 
 @testable import VolumeGrid
 
 /// Mock implementation of LaunchAtLoginServiceable for testing
 /// Allows tests to control behavior without affecting system settings
 final class MockLaunchAtLoginController: LaunchAtLoginServiceable {
-    var isEnabledValue: Bool = false
-    var setEnabledExpectation: ((Bool) -> Void)?
-    var setEnabledClosure: ((Bool, @escaping (Result<Bool, LaunchAtLoginError>) -> Void) -> Void)?
+    private let _isEnabled = OSAllocatedUnfairLock(initialState: false)
+    var isEnabledValue: Bool {
+        get { _isEnabled.withLock { $0 } }
+        set { _isEnabled.withLock { $0 = newValue } }
+    }
 
-    func isEnabled() -> Bool {
+    // Configured during test setUp only — no concurrent access
+    nonisolated(unsafe) var setEnabledExpectation: ((Bool) -> Void)?
+    nonisolated(unsafe) var setEnabledClosure:
+        ((Bool, @escaping @Sendable (Result<Bool, LaunchAtLoginError>) -> Void) -> Void)?
+
+    nonisolated func isEnabled() -> Bool {
         isEnabledValue
     }
 
-    func setEnabled(
+    nonisolated func setEnabled(
         _ enabled: Bool,
-        completion: @escaping (Result<Bool, LaunchAtLoginError>) -> Void
+        completion: @escaping @Sendable (Result<Bool, LaunchAtLoginError>) -> Void
     ) {
         setEnabledExpectation?(enabled)
 

@@ -290,7 +290,7 @@ final class StatusBarController {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated {
+            Task { @MainActor in
                 self?.aboutWindow = nil
                 if let observer = self?.aboutWindowObserver {
                     NotificationCenter.default.removeObserver(observer)
@@ -311,16 +311,18 @@ final class StatusBarController {
         launchAtLoginMenuItem.isEnabled = false
 
         launchAtLoginController.setEnabled(targetState) { [weak self] result in
-            guard let self else { return }
-            self.launchAtLoginMenuItem.isEnabled = true
+            Task { @MainActor in
+                guard let self else { return }
+                self.launchAtLoginMenuItem.isEnabled = true
 
-            switch result {
-            case .success(let enabled):
-                self.launchAtLoginMenuItem.state = enabled ? .on : .off
-            case .failure(let error):
-                self.launchAtLoginMenuItem.state =
-                    self.launchAtLoginController.isEnabled() ? .on : .off
-                self.showError(title: "Launch at Login", error.localizedDescription)
+                switch result {
+                case .success(let enabled):
+                    self.launchAtLoginMenuItem.state = enabled ? .on : .off
+                case .failure(let error):
+                    self.launchAtLoginMenuItem.state =
+                        self.launchAtLoginController.isEnabled() ? .on : .off
+                    self.showError(title: "Launch at Login", error.localizedDescription)
+                }
             }
         }
     }

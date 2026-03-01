@@ -1,9 +1,9 @@
 import Cocoa
-import Combine
+@preconcurrency import Combine
 import SwiftUI
 import os
 
-private let logger = Logger(subsystem: "one.eux.volumegrid", category: "HUDManager")
+private nonisolated let logger = Logger(subsystem: "one.eux.volumegrid", category: "HUDManager")
 
 struct HUDStyle {
     let shadowColor: NSColor
@@ -452,26 +452,22 @@ class HUDManager {
 
             for (_, context) in self.hudWindows {
                 let hudWindow = context.window
-                let shouldHideWindowWhen: () -> Bool = { [weak self] in
-                    // Only hide window if this cycle is still current
-                    if let self = self {
-                        return cycleID == self.currentHUDCycleID
-                    }
-                    return true  // If manager is deallocated, allow hiding
-                }
 
                 NSAnimationContext.runAnimationGroup(
                     { context in
                         context.duration = VolumeGridConstants.HUD.fadeOutDuration
                         hudWindow.animator().alphaValue = 0
                     },
-                    completionHandler: {
-                        if shouldHideWindowWhen() {
-                            hudWindow.orderOut(nil)
-                        } else {
-                            logger.debug(
-                                "HUD cycle interrupted: suppressing orderOut (newCycleID started)"
-                            )
+                    completionHandler: { [weak self] in
+                        Task { @MainActor in
+                            let shouldHide = self.map { cycleID == $0.currentHUDCycleID } ?? true
+                            if shouldHide {
+                                hudWindow.orderOut(nil)
+                            } else {
+                                logger.debug(
+                                    "HUD cycle interrupted: suppressing orderOut (newCycleID started)"
+                                )
+                            }
                         }
                     })
             }

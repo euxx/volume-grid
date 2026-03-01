@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import ServiceManagement
 
-enum LaunchAtLoginError: LocalizedError {
+enum LaunchAtLoginError: LocalizedError, Sendable {
     case message(String)
 
     var errorDescription: String? {
@@ -14,30 +14,28 @@ enum LaunchAtLoginError: LocalizedError {
 }
 
 protocol LaunchAtLoginServiceable {
-    func isEnabled() -> Bool
-    func setEnabled(
+    nonisolated func isEnabled() -> Bool
+    nonisolated func setEnabled(
         _ enabled: Bool,
-        completion: @escaping (Result<Bool, LaunchAtLoginError>) -> Void
+        completion: @escaping @Sendable (Result<Bool, LaunchAtLoginError>) -> Void
     )
 }
 
 final class LaunchAtLoginController: LaunchAtLoginServiceable {
-    func isEnabled() -> Bool {
+    nonisolated func isEnabled() -> Bool {
         SMAppService.mainApp.status == .enabled
     }
 
-    func setEnabled(
+    nonisolated func setEnabled(
         _ enabled: Bool,
-        completion: @escaping (Result<Bool, LaunchAtLoginError>) -> Void
+        completion: @escaping @Sendable (Result<Bool, LaunchAtLoginError>) -> Void
     ) {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-
+        DispatchQueue.global(qos: .userInitiated).async {
             let result: Result<Bool, LaunchAtLoginError>
             if enabled {
-                result = self.enable()
+                result = Self.enable()
             } else {
-                result = self.disable()
+                result = Self.disable()
             }
 
             DispatchQueue.main.async {
@@ -46,7 +44,7 @@ final class LaunchAtLoginController: LaunchAtLoginServiceable {
         }
     }
 
-    private func enable() -> Result<Bool, LaunchAtLoginError> {
+    private nonisolated static func enable() -> Result<Bool, LaunchAtLoginError> {
         do {
             try SMAppService.mainApp.register()
             return .success(true)
@@ -56,7 +54,7 @@ final class LaunchAtLoginController: LaunchAtLoginServiceable {
         }
     }
 
-    private func disable() -> Result<Bool, LaunchAtLoginError> {
+    private nonisolated static func disable() -> Result<Bool, LaunchAtLoginError> {
         do {
             try SMAppService.mainApp.unregister()
             return .success(false)

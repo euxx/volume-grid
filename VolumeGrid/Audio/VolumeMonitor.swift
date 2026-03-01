@@ -4,17 +4,17 @@ import CoreGraphics
 import os
 @preconcurrency import os.lock
 
-private let logger = Logger(subsystem: "one.eux.volumegrid", category: "VolumeMonitor")
+private nonisolated let logger = Logger(subsystem: "one.eux.volumegrid", category: "VolumeMonitor")
 
-struct HUDEvent {
-    let volumeScalar: CGFloat
-    let deviceName: String?
-    let isUnsupported: Bool
+struct HUDEvent: Sendable {
+    nonisolated let volumeScalar: CGFloat
+    nonisolated let deviceName: String?
+    nonisolated let isUnsupported: Bool
 }
 
 /// Internal state for VolumeMonitor
 /// Contains mutable state that must be accessed safely from multiple threads
-private struct VolumeState {
+private struct VolumeState: Sendable {
     var defaultOutputDeviceID: AudioDeviceID = 0
     var listeningDeviceID: AudioDeviceID?
     var volumeElements: [AudioObjectPropertyElement] = []
@@ -32,18 +32,18 @@ private struct VolumeState {
 /// - CoreAudio callbacks occur on arbitrary threads
 /// - Actor would require await at too many call sites
 private final class VolumeStateStore: @unchecked Sendable {
-    private let lock = OSAllocatedUnfairLock()
-    private nonisolated(unsafe) var state = VolumeState()
+    private let stateLock = OSAllocatedUnfairLock(initialState: VolumeState())
+    private let listenerLock = OSAllocatedUnfairLock()
+    // Protected by listenerLock; non-Sendable AudioObjectPropertyListenerBlock
+    // cannot be stored inside OSAllocatedUnfairLock(initialState:)
     private nonisolated(unsafe) var volumeListenerStorage: AudioObjectPropertyListenerBlock?
     private nonisolated(unsafe) var muteListenerStorage: AudioObjectPropertyListenerBlock?
     private nonisolated(unsafe) var deviceListenerStorage: AudioObjectPropertyListenerBlock?
 
     nonisolated init() {}
 
-    nonisolated func withLock<T>(_ body: (inout VolumeState) -> T) -> T {
-        lock.withLock {
-            body(&state)
-        }
+    nonisolated func withLock<T: Sendable>(_ body: @Sendable (inout VolumeState) -> T) -> T {
+        stateLock.withLock { body(&$0) }
     }
 
     nonisolated func defaultOutputDeviceIDValue() -> AudioDeviceID {
@@ -119,27 +119,27 @@ private final class VolumeStateStore: @unchecked Sendable {
     }
 
     nonisolated func volumeListenerValue() -> AudioObjectPropertyListenerBlock? {
-        lock.withLock { volumeListenerStorage }
+        listenerLock.withLockUnchecked { volumeListenerStorage }
     }
 
     nonisolated func updateVolumeListener(_ listener: AudioObjectPropertyListenerBlock?) {
-        lock.withLock { volumeListenerStorage = listener }
+        listenerLock.withLockUnchecked { volumeListenerStorage = listener }
     }
 
     nonisolated func muteListenerValue() -> AudioObjectPropertyListenerBlock? {
-        lock.withLock { muteListenerStorage }
+        listenerLock.withLockUnchecked { muteListenerStorage }
     }
 
     nonisolated func updateMuteListener(_ listener: AudioObjectPropertyListenerBlock?) {
-        lock.withLock { muteListenerStorage = listener }
+        listenerLock.withLockUnchecked { muteListenerStorage = listener }
     }
 
     nonisolated func deviceListenerValue() -> AudioObjectPropertyListenerBlock? {
-        lock.withLock { deviceListenerStorage }
+        listenerLock.withLockUnchecked { deviceListenerStorage }
     }
 
     nonisolated func updateDeviceListener(_ listener: AudioObjectPropertyListenerBlock?) {
-        lock.withLock { deviceListenerStorage = listener }
+        listenerLock.withLockUnchecked { deviceListenerStorage = listener }
     }
 }
 
@@ -626,9 +626,7 @@ class VolumeMonitor: ObservableObject {
         // This prevents memory leaks when deinit runs on background threads.
 
         // Stop system event monitor on main thread
-        MainActor.assumeIsolated {
-            systemEventMonitor.stop()
-        }
+        systemEventMonitor.stop()
 
         // Remove CoreAudio listeners
         var deviceAddress = AudioObjectPropertyAddress(

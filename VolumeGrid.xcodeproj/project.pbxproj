@@ -355,7 +355,7 @@
         SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
         SWIFT_EMIT_LOC_STRINGS = YES;
         SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-        SWIFT_VERSION = 5.0;
+        SWIFT_VERSION = 6.0;
       };
       name = Debug;
     };
@@ -388,7 +388,7 @@
         SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
         SWIFT_EMIT_LOC_STRINGS = YES;
         SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-        SWIFT_VERSION = 5.0;
+        SWIFT_VERSION = 6.0;
       };
       name = Release;
     };
@@ -404,9 +404,8 @@
         PRODUCT_BUNDLE_IDENTIFIER = one.eux.volumegrid.tests;
         PRODUCT_NAME = "$(TARGET_NAME)";
         SWIFT_APPROACHABLE_CONCURRENCY = YES;
-        SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
         SWIFT_EMIT_LOC_STRINGS = NO;
-        SWIFT_VERSION = 5.0;
+        SWIFT_VERSION = 6.0;
         TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Volume Grid.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Volume Grid";
       };
       name = Debug;
@@ -423,9 +422,8 @@
         PRODUCT_BUNDLE_IDENTIFIER = one.eux.volumegrid.tests;
         PRODUCT_NAME = "$(TARGET_NAME)";
         SWIFT_APPROACHABLE_CONCURRENCY = YES;
-        SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
         SWIFT_EMIT_LOC_STRINGS = NO;
-        SWIFT_VERSION = 5.0;
+        SWIFT_VERSION = 6.0;
         TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Volume Grid.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Volume Grid";
       };
       name = Release;

@@ -1,4 +1,5 @@
 import XCTest
+import os.lock
 
 @testable import VolumeGrid
 
@@ -112,48 +113,44 @@ final class VolumeConcurrentAccessTests: XCTestCase {
         let queue = DispatchQueue.global()
         let group = DispatchGroup()
 
-        var results: [String] = []
-        let lock = NSLock()
+        let results = OSAllocatedUnfairLock(initialState: [String]())
 
         for i in 0..<100 {
             group.enter()
             queue.async {
                 let formatted = VolumeFormatter.formattedVolumeString(for: i % 101)
-                lock.withLock {
-                    results.append(formatted)
-                }
+                results.withLock { $0.append(formatted) }
                 group.leave()
             }
         }
 
         group.wait()
 
-        XCTAssertEqual(results.count, 100)
-        XCTAssertTrue(results.allSatisfy { !$0.isEmpty })
+        let snapshot = results.withLock { $0 }
+        XCTAssertEqual(snapshot.count, 100)
+        XCTAssertTrue(snapshot.allSatisfy { !$0.isEmpty })
     }
 
     func testConcurrentIconSelection() {
         let queue = DispatchQueue.global()
         let group = DispatchGroup()
 
-        var results: [VolumeIconHelper.VolumeIcon] = []
-        let lock = NSLock()
+        let results = OSAllocatedUnfairLock(initialState: [VolumeIconHelper.VolumeIcon]())
 
         for i in 0..<100 {
             group.enter()
             queue.async {
                 let icon = VolumeIconHelper.icon(for: i % 101)
-                lock.withLock {
-                    results.append(icon)
-                }
+                results.withLock { $0.append(icon) }
                 group.leave()
             }
         }
 
         group.wait()
 
-        XCTAssertEqual(results.count, 100)
-        XCTAssertTrue(results.allSatisfy { !$0.symbolName.isEmpty })
+        let snapshot = results.withLock { $0 }
+        XCTAssertEqual(snapshot.count, 100)
+        XCTAssertTrue(snapshot.allSatisfy { !$0.symbolName.isEmpty })
     }
 }
 

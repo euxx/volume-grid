@@ -2,8 +2,9 @@ import Cocoa
 
 @MainActor
 final class SystemEventMonitor {
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
+    // Only mutated on MainActor (start/stop); read in deinit after last reference released
+    private nonisolated(unsafe) var globalMonitor: Any?
+    private nonisolated(unsafe) var localMonitor: Any?
     private var lastEventData: Int?
     private var lastEventTime: Date?
     // Stage 1 debounce: global + local NSEvent monitors both fire for the same
@@ -15,20 +16,29 @@ final class SystemEventMonitor {
     init() {}
 
     deinit {
-        if let monitor = globalMonitor {
-            NSEvent.removeMonitor(monitor)
+        let global = globalMonitor
+        let local = localMonitor
+        let removeMonitors = {
+            if let monitor = global { NSEvent.removeMonitor(monitor) }
+            if let monitor = local { NSEvent.removeMonitor(monitor) }
         }
-        if let monitor = localMonitor {
-            NSEvent.removeMonitor(monitor)
+        if Thread.isMainThread {
+            removeMonitors()
+        } else {
+            DispatchQueue.main.async { removeMonitors() }
         }
     }
 
     func start(handler: @escaping @MainActor () -> Void) {
         stop()
 
+        // Global monitor fires on a background thread — dispatch to MainActor
+        // to safely access lastEventData/lastEventTime.
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .systemDefined) {
             [weak self] event in
-            self?.process(event: event, handler: handler)
+            Task { @MainActor in
+                self?.process(event: event, handler: handler)
+            }
         }
 
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .systemDefined) {

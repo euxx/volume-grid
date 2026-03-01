@@ -203,7 +203,7 @@ class VolumeMonitor: ObservableObject {
                 volumePercentage = Int(round(scalar * 100))
                 state.updateLastVolumeScalar(scalar)
             }
-            _ = refreshMuteState()
+            refreshMuteState()
         }
 
         getAudioDevices()
@@ -318,19 +318,18 @@ class VolumeMonitor: ObservableObject {
         }
     }
 
-    @discardableResult
-    private func refreshMuteState(for deviceID: AudioDeviceID? = nil) -> Bool? {
+    private func refreshMuteState(for deviceID: AudioDeviceID? = nil) {
         let resolvedDeviceID = deviceID ?? resolveDeviceID()
 
         guard resolvedDeviceID != 0 else {
             state.setDeviceMuted(false)
-            return nil
+            return
         }
 
         let elements = deviceManager.detectMuteElements(for: resolvedDeviceID)
         guard !elements.isEmpty else {
             state.setDeviceMuted(false)
-            return nil
+            return
         }
 
         state.updateMuteElements(elements)
@@ -347,7 +346,6 @@ class VolumeMonitor: ObservableObject {
                 volumePercentage = Int(round(scalar * 100))
             }
         }
-        return muted ? true : nil
     }
 
     private func volumeChanged(address _: AudioObjectPropertyAddress) {
@@ -398,7 +396,7 @@ class VolumeMonitor: ObservableObject {
             let wasMuted = self.state.deviceMuted()
             let previousVolumeScalar =
                 self.state.lastVolumeScalarSnapshot() ?? CGFloat(self.volumePercentage) / 100.0
-            _ = self.refreshMuteState()
+            self.refreshMuteState()
             let isNowMuted = self.state.deviceMuted()
 
             // Only display HUD if mute state actually changed
@@ -465,7 +463,7 @@ class VolumeMonitor: ObservableObject {
     }
 
     private func showHUDForCurrentVolume() {
-        _ = refreshMuteState()
+        refreshMuteState()
         let scalar: CGFloat
         let isUnsupported: Bool
 
@@ -516,7 +514,7 @@ class VolumeMonitor: ObservableObject {
             state.updateVolumeElements(volumeElements)
             let muteElements = deviceManager.detectMuteElements(for: deviceID)
             state.updateMuteElements(muteElements)
-            _ = refreshMuteState(for: deviceID)
+            refreshMuteState(for: deviceID)
 
             volumeListener = {
                 [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in

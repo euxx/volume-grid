@@ -266,6 +266,7 @@
         SDKROOT = macosx;
         SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
         SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+        SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
       };
       name = Debug;
     };
@@ -324,6 +325,7 @@
         );
         SDKROOT = macosx;
         SWIFT_COMPILATION_MODE = wholemodule;
+        SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
       };
       name = Release;
     };

@@ -7,7 +7,8 @@ struct AudioDevice: Identifiable, Hashable, Sendable {
     let name: String
 }
 
-private let logger = Logger(subsystem: "one.eux.volumegrid", category: "AudioDevice")
+private let logger = Logger(
+    subsystem: "one.eux.volumegrid", category: "AudioDevice")
 
 final class AudioDeviceManager: Sendable {
     private nonisolated let defaultOutputDeviceAddress = AudioObjectPropertyAddress(

@@ -24,9 +24,6 @@ private struct VolumeState {
     var lastVolumeScalar: CGFloat?
     var isDeviceMuted = false
     var isListening = false
-    var volumeListener: AudioObjectPropertyListenerBlock?
-    var muteListener: AudioObjectPropertyListenerBlock?
-    var deviceListener: AudioObjectPropertyListenerBlock?
 }
 
 /// Thread-safe container for volume state using unfair lock
@@ -37,10 +34,13 @@ private struct VolumeState {
 private final class VolumeStateStore: @unchecked Sendable {
     private let lock = OSAllocatedUnfairLock()
     private nonisolated(unsafe) var state = VolumeState()
+    private nonisolated(unsafe) var volumeListenerStorage: AudioObjectPropertyListenerBlock?
+    private nonisolated(unsafe) var muteListenerStorage: AudioObjectPropertyListenerBlock?
+    private nonisolated(unsafe) var deviceListenerStorage: AudioObjectPropertyListenerBlock?
 
     nonisolated init() {}
 
-    nonisolated func withLock<T>(_ body: @Sendable (inout VolumeState) -> T) -> T {
+    nonisolated func withLock<T>(_ body: (inout VolumeState) -> T) -> T {
         lock.withLock {
             body(&state)
         }
@@ -119,27 +119,27 @@ private final class VolumeStateStore: @unchecked Sendable {
     }
 
     nonisolated func volumeListenerValue() -> AudioObjectPropertyListenerBlock? {
-        withLock { $0.volumeListener }
+        lock.withLock { volumeListenerStorage }
     }
 
     nonisolated func updateVolumeListener(_ listener: AudioObjectPropertyListenerBlock?) {
-        withLock { $0.volumeListener = listener }
+        lock.withLock { volumeListenerStorage = listener }
     }
 
     nonisolated func muteListenerValue() -> AudioObjectPropertyListenerBlock? {
-        withLock { $0.muteListener }
+        lock.withLock { muteListenerStorage }
     }
 
     nonisolated func updateMuteListener(_ listener: AudioObjectPropertyListenerBlock?) {
-        withLock { $0.muteListener = listener }
+        lock.withLock { muteListenerStorage = listener }
     }
 
     nonisolated func deviceListenerValue() -> AudioObjectPropertyListenerBlock? {
-        withLock { $0.deviceListener }
+        lock.withLock { deviceListenerStorage }
     }
 
     nonisolated func updateDeviceListener(_ listener: AudioObjectPropertyListenerBlock?) {
-        withLock { $0.deviceListener = listener }
+        lock.withLock { deviceListenerStorage = listener }
     }
 }
 
@@ -414,7 +414,6 @@ class VolumeMonitor: ObservableObject {
             }
             self.updateVolumeSupportState(
                 currentOutputID != 0 && self.deviceManager.supportsVolumeControl(currentOutputID))
-            let supportsVolume = self.isCurrentDeviceVolumeSupported
             let deviceName = self.currentDevice?.name ?? "Unknown"
             logger.debug(
                 "deviceChanged: New device - id=\(currentOutputID, privacy: .public), name=\(deviceName, privacy: .public), supportsVolume=\(self.isCurrentDeviceVolumeSupported, privacy: .public)"

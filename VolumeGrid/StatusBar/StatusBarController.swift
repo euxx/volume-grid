@@ -290,10 +290,12 @@ final class StatusBarController {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            self?.aboutWindow = nil
-            if let observer = self?.aboutWindowObserver {
-                NotificationCenter.default.removeObserver(observer)
-                self?.aboutWindowObserver = nil
+            MainActor.assumeIsolated {
+                self?.aboutWindow = nil
+                if let observer = self?.aboutWindowObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                    self?.aboutWindowObserver = nil
+                }
             }
         }
 

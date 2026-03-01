@@ -2,9 +2,9 @@
 
 set -e
 
-VERSION="v1.1.1"
-TIMESTAMP="202602272222.22"
-TIMESTAMP_DATE="02/27/2026 22:22:22"
+VERSION="v1.2.0"
+TIMESTAMP="202603011616.16"
+TIMESTAMP_DATE="03/01/2026 16:16:16"
 
 IDENTITY=$(security find-identity -p codesigning -v | grep "Apple Development" | head -n 1 | awk -F\" '{print $2}')
 

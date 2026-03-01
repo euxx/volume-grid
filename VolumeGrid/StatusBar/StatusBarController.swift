@@ -199,7 +199,7 @@ final class StatusBarController {
             bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 280),
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: true

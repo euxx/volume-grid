@@ -12,30 +12,6 @@ struct HUDEvent {
     let isUnsupported: Bool
 }
 
-/// Generic thread-safe property wrapper using OSAllocatedUnfairLock
-/// This provides lock-based thread-safety for closures and listeners that need to be
-/// stored and accessed from multiple threads, particularly from CoreAudio callbacks.
-private final class ThreadSafeProperty<T>: @unchecked Sendable {
-    private let lock = OSAllocatedUnfairLock()
-    private nonisolated(unsafe) var value: T
-
-    nonisolated init(_ initialValue: T) {
-        self.value = initialValue
-    }
-
-    nonisolated func get() -> T {
-        lock.withLock {
-            value
-        }
-    }
-
-    nonisolated func set(_ newValue: T) {
-        lock.withLock {
-            value = newValue
-        }
-    }
-}
-
 /// Internal state for VolumeMonitor
 /// Contains mutable state that must be accessed safely from multiple threads
 private struct VolumeState {
@@ -48,6 +24,9 @@ private struct VolumeState {
     var lastVolumeScalar: CGFloat?
     var isDeviceMuted = false
     var isListening = false
+    var volumeListener: AudioObjectPropertyListenerBlock?
+    var muteListener: AudioObjectPropertyListenerBlock?
+    var deviceListener: AudioObjectPropertyListenerBlock?
 }
 
 /// Thread-safe container for volume state using unfair lock
@@ -138,6 +117,30 @@ private final class VolumeStateStore: @unchecked Sendable {
     nonisolated func setListeningActive(_ active: Bool) {
         withLock { $0.isListening = active }
     }
+
+    nonisolated func volumeListenerValue() -> AudioObjectPropertyListenerBlock? {
+        withLock { $0.volumeListener }
+    }
+
+    nonisolated func updateVolumeListener(_ listener: AudioObjectPropertyListenerBlock?) {
+        withLock { $0.volumeListener = listener }
+    }
+
+    nonisolated func muteListenerValue() -> AudioObjectPropertyListenerBlock? {
+        withLock { $0.muteListener }
+    }
+
+    nonisolated func updateMuteListener(_ listener: AudioObjectPropertyListenerBlock?) {
+        withLock { $0.muteListener = listener }
+    }
+
+    nonisolated func deviceListenerValue() -> AudioObjectPropertyListenerBlock? {
+        withLock { $0.deviceListener }
+    }
+
+    nonisolated func updateDeviceListener(_ listener: AudioObjectPropertyListenerBlock?) {
+        withLock { $0.deviceListener = listener }
+    }
 }
 
 @MainActor
@@ -161,33 +164,9 @@ class VolumeMonitor: ObservableObject {
     private var deviceChangeDebounceTask: Task<Void, Never>?
     private var keyPressDebounceTask: Task<Void, Never>?
 
-    nonisolated private var volumeListener: AudioObjectPropertyListenerBlock? {
-        get { volumeListenerProperty.get() }
-        set { volumeListenerProperty.set(newValue) }
-    }
-
-    nonisolated private var deviceListener: AudioObjectPropertyListenerBlock? {
-        get { deviceListenerProperty.get() }
-        set { deviceListenerProperty.set(newValue) }
-    }
-
-    nonisolated private var muteListener: AudioObjectPropertyListenerBlock? {
-        get { muteListenerProperty.get() }
-        set { muteListenerProperty.set(newValue) }
-    }
-
     private nonisolated let audioQueue: DispatchQueue = DispatchQueue(
         label: "one.eux.volumegrid.audio", qos: .userInitiated
     )
-    private nonisolated let volumeListenerProperty:
-        ThreadSafeProperty<AudioObjectPropertyListenerBlock?> =
-            ThreadSafeProperty(nil)
-    private nonisolated let deviceListenerProperty:
-        ThreadSafeProperty<AudioObjectPropertyListenerBlock?> =
-            ThreadSafeProperty(nil)
-    private nonisolated let muteListenerProperty:
-        ThreadSafeProperty<AudioObjectPropertyListenerBlock?> =
-            ThreadSafeProperty(nil)
 
     init() {
         let deviceID = updateDefaultOutputDevice()
@@ -222,9 +201,9 @@ class VolumeMonitor: ObservableObject {
         let deviceManager = self.deviceManager
         let audioQueue = self.audioQueue
         let systemEventMonitor = self.systemEventMonitor
-        let capturedVolumeListener = self.volumeListener
-        let capturedMuteListener = self.muteListener
-        let capturedDeviceListener = self.deviceListener
+        let capturedVolumeListener = self.state.volumeListenerValue()
+        let capturedMuteListener = self.state.muteListenerValue()
+        let capturedDeviceListener = self.state.deviceListenerValue()
 
         // Always dispatch to main thread for @MainActor performCleanup
         DispatchQueue.main.async {
@@ -516,13 +495,13 @@ class VolumeMonitor: ObservableObject {
             state.updateMuteElements(muteElements)
             refreshMuteState(for: deviceID)
 
-            volumeListener = {
+            state.updateVolumeListener({
                 [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>) in
                 guard let self = self, self.state.isListeningActive() else { return }
                 self.volumeChanged(address: inAddresses.pointee)
-            }
+            })
 
-            guard let volumeListener = volumeListener else { return }
+            guard let volumeListener = state.volumeListenerValue() else { return }
 
             var validVolumeElements: [AudioObjectPropertyElement] = []
             let volumeElementsSnapshot = state.volumeElementsSnapshot()
@@ -545,14 +524,14 @@ class VolumeMonitor: ObservableObject {
 
             let muteElementsSnapshot = state.muteElementsSnapshot()
             if !muteElementsSnapshot.isEmpty {
-                muteListener = {
+                state.updateMuteListener({
                     [weak self] (_: UInt32, inAddresses: UnsafePointer<AudioObjectPropertyAddress>)
                     in
                     guard let self = self, self.state.isListeningActive() else { return }
                     self.muteChanged(address: inAddresses.pointee)
-                }
+                })
 
-                if let muteListener = muteListener {
+                if let muteListener = state.muteListenerValue() {
                     var validMuteElements: [AudioObjectPropertyElement] = []
                     for element in muteElementsSnapshot {
                         var muteAddress = deviceManager.makePropertyAddress(
@@ -610,14 +589,15 @@ class VolumeMonitor: ObservableObject {
             mElement: 0
         )
 
-        deviceListener = { [weak self] (_: UInt32, _: UnsafePointer<AudioObjectPropertyAddress>) in
+        state.updateDeviceListener({
+            [weak self] (_: UInt32, _: UnsafePointer<AudioObjectPropertyAddress>) in
             guard let self = self, self.state.isListeningActive() else { return }
             DispatchQueue.main.async {
                 self.deviceChanged()
             }
-        }
+        })
 
-        guard let deviceListener = deviceListener else { return }
+        guard let deviceListener = state.deviceListenerValue() else { return }
 
         let deviceStatus = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
@@ -705,16 +685,16 @@ class VolumeMonitor: ObservableObject {
         let capturedDeviceID = state.listeningDeviceIDValue()
         let capturedVolumeElements = state.registeredVolumeElementsSnapshot()
         let capturedMuteElements = state.registeredMuteElementsSnapshot()
-        let capturedVolumeListener = self.volumeListener
-        let capturedMuteListener = self.muteListener
-        let capturedDeviceListener = self.deviceListener
+        let capturedVolumeListener = self.state.volumeListenerValue()
+        let capturedMuteListener = self.state.muteListenerValue()
+        let capturedDeviceListener = self.state.deviceListenerValue()
 
         state.updateListeningDeviceID(nil)
         state.updateRegisteredVolumeElements([])
         state.updateRegisteredMuteElements([])
-        self.volumeListener = nil
-        self.muteListener = nil
-        self.deviceListener = nil
+        state.updateVolumeListener(nil)
+        state.updateMuteListener(nil)
+        state.updateDeviceListener(nil)
 
         // Capture strong dependencies for async cleanup
         let deviceManager = self.deviceManager

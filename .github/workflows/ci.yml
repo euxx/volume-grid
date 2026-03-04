@@ -13,7 +13,7 @@ concurrency:
 jobs:
   lint:
     name: Lint
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,12 +23,15 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      - name: Install swift-format
+        run: brew install swift-format
+
       - name: swift-format lint
         run: swift-format lint --recursive --strict .
 
   test:
     name: Test
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v4

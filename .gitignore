@@ -19,6 +19,7 @@ Carthage/
 
 # macOS
 .DS_Store
+*.log
 
 # IDE
 .vscode/

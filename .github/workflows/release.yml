@@ -26,7 +26,7 @@ jobs:
           echo "Xcode version: ${XCODE_VERSION}"
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 

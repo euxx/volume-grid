@@ -1,3 +1,4 @@
+import AVFoundation
 import Accelerate
 import AudioToolbox
 import CoreAudio
@@ -23,6 +24,22 @@ final class AudioTapMonitor: @unchecked Sendable {
     // Prevents coordinator from acting on stale data when the stream is quiet or paused.
     private nonisolated(unsafe) var _hasFreshData: Bool = false
 
+    // MARK: - Classification sample accumulator
+    //
+    // Accumulates mono Float32 samples from channel 0 so the coordinator can feed
+    // AVAudioPCMBuffer chunks to SoundSceneClassifier.
+    //
+    // Written inside the real-time IO proc while rmsLock is held; any mutation outside
+    // the IO proc must also hold rmsLock.  [Float32] element access (subscript mutation)
+    // is real-time safe: no ARC, no heap allocation for a pre-sized array whose count
+    // never changes.
+    //
+    // Buffer size: ~0.5 s at 48 kHz = 24000 samples.
+    private let classifCapacity: Int = 24000
+    private nonisolated(unsafe) var classifBuf: [Float32] = [Float32](repeating: 0, count: 24000)
+    private nonisolated(unsafe) var classifWritePos: Int = 0
+    private nonisolated(unsafe) var classifReady: Bool = false
+
     /// Atomically read the latest RMS and frame size.
     /// Returns nil if no new audio data has arrived since the last call (IO proc not invoked).
     nonisolated func drainMetrics() -> (rms: Float, frameSize: Int)? {
@@ -31,6 +48,23 @@ final class AudioTapMonitor: @unchecked Sendable {
         guard _hasFreshData else { return nil }
         _hasFreshData = false
         return (_latestRMS, _tapFrameSize)
+    }
+
+    /// Atomically drain the accumulated classification buffer if a full chunk is ready.
+    ///
+    /// Returns a mono Float32 array of `classifCapacity` samples, or nil if the buffer
+    /// is not yet full.  The caller is responsible for wrapping it in an AVAudioPCMBuffer.
+    ///
+    /// - Note: Briefly holds `rmsLock`, blocking the IO proc for the duration of an
+    ///         array copy (~5 μs for 96 KB on modern hardware).  This is acceptable given
+    ///         the 10 ms IO proc interval.
+    nonisolated func drainClassificationSamples() -> [Float32]? {
+        os_unfair_lock_lock(&rmsLock)
+        defer { os_unfair_lock_unlock(&rmsLock) }
+        guard classifReady else { return nil }
+        let copy = classifBuf
+        classifReady = false
+        return copy
     }
 
     private nonisolated(unsafe) var tapID: AudioObjectID = kAudioObjectUnknown
@@ -118,6 +152,27 @@ final class AudioTapMonitor: @unchecked Sendable {
             monitor._latestRMS = rms
             if frameCount > 0 { monitor._tapFrameSize = frameCount }
             monitor._hasFreshData = true
+
+            // Accumulate mono samples (channel 0) for scene classification.
+            // Only when the previous chunk has been consumed (classifReady == false).
+            if !monitor.classifReady, frameCount > 0 {
+                let ablPtr = UnsafeMutableAudioBufferListPointer(
+                    UnsafeMutablePointer(mutating: inInputData))
+                if let buf = ablPtr.first, let data = buf.mData, buf.mDataByteSize > 0 {
+                    let samples = data.assumingMemoryBound(to: Float32.self)
+                    let channels = max(1, Int(buf.mNumberChannels))
+                    let toAdd = min(frameCount, monitor.classifCapacity - monitor.classifWritePos)
+                    for i in 0..<toAdd {
+                        monitor.classifBuf[monitor.classifWritePos + i] = samples[i * channels]
+                    }
+                    monitor.classifWritePos += toAdd
+                    if monitor.classifWritePos >= monitor.classifCapacity {
+                        monitor.classifWritePos = 0
+                        monitor.classifReady = true
+                    }
+                }
+            }
+
             os_unfair_lock_unlock(&monitor.rmsLock)
         }
         guard procErr == noErr else {

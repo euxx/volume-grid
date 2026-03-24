@@ -425,7 +425,8 @@ final class SmartVolumeSettingsTests: XCTestCase {
         let ud = UserDefaults(suiteName: suiteName)!
         let settings = SmartVolumeSettings(ud)
         settings.targetRMS = 5.0
-        XCTAssertEqual(settings.targetRMS, 0.30, accuracy: 1e-6, "targetRMS > 0.30 should clamp to maximum")
+        XCTAssertEqual(
+            settings.targetRMS, 0.30, accuracy: 1e-6, "targetRMS > 0.30 should clamp to maximum")
         ud.removePersistentDomain(forName: suiteName)
     }
 }

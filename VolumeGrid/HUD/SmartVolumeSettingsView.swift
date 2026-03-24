@@ -105,6 +105,36 @@ struct SmartVolumeSettingsView: View {
                 }
                 .padding(.vertical, 4)
             }
+
+            GroupBox("Speech Profile") {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let coordinator {
+                        SceneIndicator(coordinator: coordinator)
+                        Divider()
+                    }
+                    sliderRow(
+                        label: "Target",
+                        valueText: String(
+                            format: "%.0f%% · %@", settings.speechTargetRMS * 100,
+                            loudnessLabel(settings.speechTargetRMS)),
+                        slider: Slider(value: $settings.speechTargetRMS, in: 0.01...0.30)
+                    )
+                    sliderRow(
+                        label: "Max vol",
+                        valueText: "\(bars(settings.speechMaxVolume)) bars",
+                        slider: Slider(value: $settings.speechMaxVolume, in: 0...1)
+                    )
+                    Text(
+                        "When speech is detected, these settings override Target Loudness. "
+                            + "A higher target and lower max prevent voices from pushing volume to 100%."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(nil)
+                }
+                .padding(.vertical, 4)
+            }
         }
         .padding()
         .frame(width: 360)
@@ -163,6 +193,49 @@ private struct CalibrateButton: View {
             )
             .font(.caption)
             .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Shows the scene currently detected by SoundAnalysis.
+@MainActor
+private struct SceneIndicator: View {
+    @ObservedObject var coordinator: SmartVolumeCoordinator
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(dotColor)
+                .frame(width: 8, height: 8)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+    }
+
+    private var label: String {
+        guard coordinator.isRunning else { return "Start Smart Volume to enable detection" }
+        guard let scene = coordinator.currentScene else {
+            return "Detecting scene…"
+        }
+        let spPct = Int(coordinator.speechConfidence * 100)
+        let muPct = Int(coordinator.musicConfidence * 100)
+        switch scene {
+        case "speech": return "Speech detected (\(spPct)%) — using Speech Profile"
+        case "music": return "Music detected (\(muPct)%) — using standard profile"
+        default: return "Ambient (speech \(spPct)%, music \(muPct)%) — using standard profile"
+        }
+    }
+
+    private var dotColor: Color {
+        guard coordinator.isRunning, let scene = coordinator.currentScene else {
+            return .secondary
+        }
+        switch scene {
+        case "speech": return .blue
+        case "music": return .green
+        default: return .secondary
         }
     }
 }

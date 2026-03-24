@@ -1,3 +1,4 @@
+import AVFoundation
 import Combine
 import Dispatch
 import Foundation
@@ -14,6 +15,11 @@ final class SmartVolumeCoordinator: ObservableObject {
     /// Live diagnostics — updated every AGC tick (nil when stopped or silent).
     @Published private(set) var lastMeasuredRMS: Float?
     @Published private(set) var lastRawTarget: Float?
+    /// Currently detected audio scene; nil when Smart Volume is not running or macOS < 14.2.
+    @Published private(set) var currentScene: String?
+    /// Live confidence scores from SoundAnalysis; 0 when classifier is inactive.
+    @Published private(set) var speechConfidence: Double = 0
+    @Published private(set) var musicConfidence: Double = 0
 
     private let volumeMonitor: VolumeMonitor
     private let deviceManager = AudioDeviceManager()
@@ -32,10 +38,20 @@ final class SmartVolumeCoordinator: ObservableObject {
     // @available on every property that touches the coordinator.
     private var _tapMonitorBox: AnyObject?
 
+    // _classifierBox holds a SoundSceneClassifier (macOS 12.0+) using the same pattern.
+    private var _classifierBox: AnyObject?
+    private var classifierCancellables = Set<AnyCancellable>()
+
     @available(macOS 14.2, *)
     private var tapMonitor: AudioTapMonitor? {
         get { _tapMonitorBox as? AudioTapMonitor }
         set { _tapMonitorBox = newValue }
+    }
+
+    @available(macOS 14.2, *)
+    private var classifier: SoundSceneClassifier? {
+        get { _classifierBox as? SoundSceneClassifier }
+        set { _classifierBox = newValue }
     }
 
     private var smartVolumeTimer: DispatchSourceTimer?
@@ -165,6 +181,30 @@ final class SmartVolumeCoordinator: ObservableObject {
             "start: targetRMS=\(self.settings.targetRMS) min=\(self.settings.minVolume) max=\(self.settings.maxVolume) device=\(uid)"
         )
 
+        // Start SoundAnalysis scene classifier.
+        // Failures are non-fatal: Smart Volume continues without scene detection.
+        let classif = SoundSceneClassifier()
+        do {
+            try classif.setup(
+                sampleRate: Double(monitor.tapSampleRate), channelCount: 1)
+            classifier = classif
+            // No dropFirst: receive the initial .ambient so currentScene is never nil
+            // while Smart Volume is running.
+            classif.$currentScene
+                .sink { [weak self] scene in
+                    self?.applySceneProfile(scene)
+                }
+                .store(in: &classifierCancellables)
+            classif.$speechConfidence
+                .sink { [weak self] v in self?.speechConfidence = v }
+                .store(in: &classifierCancellables)
+            classif.$musicConfidence
+                .sink { [weak self] v in self?.musicConfidence = v }
+                .store(in: &classifierCancellables)
+        } catch {
+            log.error("start: SoundSceneClassifier setup failed: \(error)")
+        }
+
         let interval = Double(timerInterval)
         let timer = DispatchSource.makeTimerSource(queue: timerQueue)
         timer.schedule(deadline: .now() + interval, repeating: interval)
@@ -173,6 +213,13 @@ final class SmartVolumeCoordinator: ObservableObject {
             // nil = no fresh data since last poll; skip this AGC cycle
             guard let (rms, _) = monitor.drainMetrics() else { return }
             let dt = self.timerInterval
+            // Drain classification samples and pass raw [Float32] + sample rate to
+            // the classifier.  [Float32] is a value type (Sendable) so it crosses
+            // thread boundaries safely without any special wrapper.
+            if let samples = monitor.drainClassificationSamples() {
+                let sr = Double(monitor.tapSampleRate)
+                self.classifier?.analyze(samples: samples, sampleRate: sr)
+            }
             Task { @MainActor [weak self] in
                 self?.handleAGC(rms: rms, dt: dt)
             }
@@ -188,11 +235,19 @@ final class SmartVolumeCoordinator: ObservableObject {
             tapMonitor?.stop()
             tapMonitor = nil
         }
+        if #available(macOS 14.2, *) {
+            classifier?.reset()
+            classifier = nil
+        }
+        classifierCancellables.removeAll()
         normalizer.reset()
         smoothedRMS = 0.0
         isRunning = false
         lastMeasuredRMS = nil
         lastRawTarget = nil
+        currentScene = nil
+        speechConfidence = 0
+        musicConfidence = 0
     }
 
     /// Set targetRMS to the current perceived loudness so the AGC maintains
@@ -217,6 +272,27 @@ final class SmartVolumeCoordinator: ObservableObject {
             let reason = errorMessage ?? "unknown error"
             log.error("rebuildTapIfRunning: failed to restart tap — \(reason)")
             settings.isEnabled = false
+        }
+    }
+
+    // MARK: - Scene-aware profile switching
+
+    @available(macOS 14.2, *)
+    private func applySceneProfile(_ scene: SoundSceneClassifier.Scene) {
+        currentScene = scene.description
+        switch scene {
+        case .speech:
+            normalizer.targetRMS = settings.speechTargetRMS
+            normalizer.maxVolumeScalar = settings.speechMaxVolume
+            log.info(
+                "Scene → speech: targetRMS=\(self.settings.speechTargetRMS) maxVol=\(self.settings.speechMaxVolume)"
+            )
+        case .music, .ambient:
+            normalizer.targetRMS = settings.targetRMS
+            normalizer.maxVolumeScalar = settings.maxVolume
+            log.info(
+                "Scene → \(scene): targetRMS=\(self.settings.targetRMS) maxVol=\(self.settings.maxVolume)"
+            )
         }
     }
 

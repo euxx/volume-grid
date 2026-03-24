@@ -30,5 +30,7 @@
   <true/>
   <key>LSBackgroundOnly</key>
   <true/>
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>Volume Grid uses audio capture to monitor output loudness and automatically normalize the volume level.</string>
 </dict>
 </plist>

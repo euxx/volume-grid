@@ -147,6 +147,7 @@ private final class VolumeStateStore: @unchecked Sendable {
 class VolumeMonitor: ObservableObject {
     @Published var volumePercentage: Int = 0
     @Published var volumeScalar: CGFloat = 0
+    @Published private(set) var isMuted: Bool = false
     @Published var audioDevices: [AudioDevice] = []
     @Published var currentDevice: AudioDevice?
     @Published var isCurrentDeviceVolumeSupported: Bool = false
@@ -275,7 +276,14 @@ class VolumeMonitor: ObservableObject {
                 return
             }
 
-            _ = self.deviceManager.setVolume(clampedScalar, for: deviceID, elements: elements)
+            let volumeSet = self.deviceManager.setVolume(
+                clampedScalar, for: deviceID, elements: elements)
+            guard volumeSet else {
+                logger.error(
+                    "setVolume: CoreAudio rejected volume change to \(clampedScalar) on device \(deviceID)"
+                )
+                return
+            }
 
             if clampedScalar > 0 {
                 let muteElements = self.state.muteElementsSnapshot()
@@ -292,12 +300,21 @@ class VolumeMonitor: ObservableObject {
                 self.volumePercentage = Int(round(uiScalar * 100))
                 if clampedScalar > 0 {
                     self.state.setDeviceMuted(false)
+                    // Sync @Published isMuted so Combine subscribers see the correct state
+                    if self.isMuted { self.isMuted = false }
                 }
             }
         }
     }
 
     private func refreshMuteState(for deviceID: AudioDeviceID? = nil) {
+        defer {
+            // Sync @Published isMuted on ALL exit paths (including early returns for no-device
+            // and no-elements cases). state.deviceMuted() reads from the lock-protected store.
+            let muted = state.deviceMuted()
+            if isMuted != muted { isMuted = muted }
+        }
+
         let resolvedDeviceID = deviceID ?? resolveDeviceID()
 
         guard resolvedDeviceID != 0 else {
@@ -349,6 +366,7 @@ class VolumeMonitor: ObservableObject {
             if currentScalar > epsilon, self.state.deviceMuted() {
                 logger.debug("volumeChanged: Volume > 0 but device is muted, unmuting")
                 self.state.setDeviceMuted(false)
+                if self.isMuted { self.isMuted = false }
             }
 
             self.volumeChangeDebounceTask?.cancel()
@@ -601,6 +619,8 @@ class VolumeMonitor: ObservableObject {
         let deviceStatus = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
         if deviceStatus != noErr {
+            logger.error(
+                "startListening: failed to register device listener, status=\(deviceStatus)")
             return
         }
 

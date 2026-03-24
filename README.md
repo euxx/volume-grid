@@ -16,7 +16,20 @@
 - 🔄 Shows volume HUD when switching sound output devices
 - 🔊 Menu bar icon with subtle progress bar that changes with volume
 - 🎧 Switch sound output devices from the menu bar icon's menu
+- 🎚️ Smart Volume — automatically adjusts system volume to maintain consistent loudness
 - 🛠️ Native, minimal, lightweight (~2MB app, ~20MB RAM)
+
+### Smart Volume
+
+Smart Volume silently monitors the audio output bus and adjusts system volume in real time so the perceived loudness stays at a level you choose — no more cranking up the volume for a quiet video only to be blasted by the next one.
+
+**Settings** (accessible from the menu bar icon):
+
+| Setting | Description |
+|---|---|
+| Volume Grid Range | Min/max bar counts the AGC is allowed to set |
+| Target Loudness | Desired RMS level (quiet → loud, default: normal) |
+| Response Speed | How quickly the AGC reacts (fast ↔ smooth) |
 
 <img src=".github/assets/screenshot.png" alt="VolumeGrid Screenshot" style="width: 100%; max-width: 400px; margin-top: 20px; border-radius: 4px;">
 

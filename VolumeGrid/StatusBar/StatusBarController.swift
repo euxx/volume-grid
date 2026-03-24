@@ -1,6 +1,7 @@
 import AppKit
 import AudioToolbox
 import Combine
+import SwiftUI
 import os
 
 private let logger = Logger(subsystem: "one.eux.volumegrid", category: "StatusBarController")
@@ -9,6 +10,7 @@ private let logger = Logger(subsystem: "one.eux.volumegrid", category: "StatusBa
 final class StatusBarController {
     private let volumeMonitor: VolumeMonitor
     private let launchAtLoginController: LaunchAtLoginServiceable
+    private let coordinator: SmartVolumeCoordinator
 
     private let statusItem: NSStatusItem
     private let statusBarVolumeView = StatusBarVolumeView()
@@ -17,16 +19,36 @@ final class StatusBarController {
     private let volumeMenuView = VolumeMenuItemView()
     private let launchAtLoginMenuItem: NSMenuItem
     private var deviceMenuItems: [AudioDevice: NSMenuItem] = [:]
+    /// Disabled info item showing live AGC diagnostics below the Smart Volume toggle.
+    private let smartVolumeInfoItem = NSMenuItem()
+    private let smartVolumeToggleItem = NSMenuItem(
+        title: "Smart Volume",
+        action: #selector(toggleSmartVolume),
+        keyEquivalent: ""
+    )
+    private let smartVolumeSettingsItem = NSMenuItem(
+        title: "Smart Volume Settings…",
+        action: #selector(showSmartVolumeSettings),
+        keyEquivalent: ""
+    )
+    private var menuDelegate: MenuDelegate?
 
     private var subscriptions = Set<AnyCancellable>()
     private var volumeChangeHandler: ((CGFloat) -> Void)?
     private var isVolumeControlAvailable = false
     private var aboutWindow: NSWindow?
     private var aboutWindowObserver: NSObjectProtocol?
+    private var smartVolumeSettingsWindow: NSWindow?
+    private var smartVolumeSettingsObserver: NSObjectProtocol?
 
-    init(volumeMonitor: VolumeMonitor, launchAtLoginController: LaunchAtLoginServiceable) {
+    init(
+        volumeMonitor: VolumeMonitor,
+        launchAtLoginController: LaunchAtLoginServiceable,
+        coordinator: SmartVolumeCoordinator
+    ) {
         self.volumeMonitor = volumeMonitor
         self.launchAtLoginController = launchAtLoginController
+        self.coordinator = coordinator
 
         statusItem = NSStatusBar.system.statusItem(withLength: 24)
         launchAtLoginMenuItem = NSMenuItem(
@@ -40,6 +62,8 @@ final class StatusBarController {
         setupStatusBarButton()
         setupMenu()
         bindVolumeUpdates()
+        menuDelegate = MenuDelegate(controller: self)
+        menu.delegate = menuDelegate
     }
 
     private func setupStatusBarButton() {
@@ -74,6 +98,23 @@ final class StatusBarController {
         // Add device selection section
         menu.addItem(NSMenuItem.separator())
         updateDeviceMenu()
+        menu.addItem(NSMenuItem.separator())
+
+        // Smart Volume toggle
+        let smartVolumeItem = smartVolumeToggleItem
+        smartVolumeItem.target = self
+        smartVolumeItem.state = SmartVolumeSettings.shared.isEnabled ? .on : .off
+        menu.addItem(smartVolumeItem)
+
+        // Disabled info line — title is refreshed in menuWillOpen(:)
+        smartVolumeInfoItem.isEnabled = false
+        smartVolumeInfoItem.isHidden = !SmartVolumeSettings.shared.isEnabled
+        menu.addItem(smartVolumeInfoItem)
+
+        smartVolumeSettingsItem.target = self
+        smartVolumeSettingsItem.isHidden = !SmartVolumeSettings.shared.isEnabled
+        menu.addItem(smartVolumeSettingsItem)
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(launchAtLoginMenuItem)
         menu.addItem(NSMenuItem.separator())
@@ -306,6 +347,46 @@ final class StatusBarController {
         window.makeKeyAndOrderFront(nil)
     }
 
+    @objc private func showSmartVolumeSettings() {
+        if let existing = smartVolumeSettingsWindow {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            existing.orderFrontRegardless()
+            existing.makeKey()
+            return
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 250),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: true
+        )
+        window.title = "Smart Volume Settings"
+        window.isReleasedWhenClosed = false
+        window.isRestorable = false
+        window.contentView = NSHostingView(
+            rootView: SmartVolumeSettingsView(coordinator: coordinator))
+
+        smartVolumeSettingsObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.smartVolumeSettingsWindow = nil
+                if let observer = self?.smartVolumeSettingsObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                    self?.smartVolumeSettingsObserver = nil
+                }
+            }
+        }
+
+        self.smartVolumeSettingsWindow = window
+        window.center()
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+
     @objc private func toggleLaunchAtLogin() {
         let targetState = !launchAtLoginController.isEnabled()
         launchAtLoginMenuItem.isEnabled = false
@@ -325,6 +406,60 @@ final class StatusBarController {
                 }
             }
         }
+    }
+
+    // MARK: - NSMenuDelegate
+
+    private final class MenuDelegate: NSObject, NSMenuDelegate {
+        weak var controller: StatusBarController?
+        init(controller: StatusBarController) { self.controller = controller }
+
+        nonisolated func menuWillOpen(_ menu: NSMenu) {
+            Task { @MainActor [weak self] in self?.controller?.refreshSmartVolumeInfoItem() }
+        }
+    }
+
+    private func refreshSmartVolumeInfoItem() {
+        let settings = SmartVolumeSettings.shared
+        // Keep toggle state in sync (coordinator may have changed isEnabled via live reload).
+        smartVolumeToggleItem.state = settings.isEnabled ? .on : .off
+        smartVolumeInfoItem.isHidden = !settings.isEnabled
+        smartVolumeSettingsItem.isHidden = !settings.isEnabled
+        guard settings.isEnabled else { return }
+        let status: String
+        if coordinator.isRunning, let rms = coordinator.lastMeasuredRMS {
+            status = String(
+                format: "  RMS %.4f  raw→ %.3f  cfg %.2f–%.2f @ %.4f",
+                rms, coordinator.lastRawTarget ?? 0,
+                settings.minVolume, settings.maxVolume, settings.targetRMS
+            )
+        } else {
+            status = String(
+                format: "  cfg %.2f–%.2f @ %.4f  (no signal)",
+                settings.minVolume, settings.maxVolume, settings.targetRMS
+            )
+        }
+        smartVolumeInfoItem.title = status
+    }
+
+    // MARK: - Smart Volume
+
+    @objc private func toggleSmartVolume(_ sender: NSMenuItem) {
+        let newEnabled = !SmartVolumeSettings.shared.isEnabled
+        if newEnabled {
+            coordinator.start()
+            // start() is synchronous on @MainActor; if it failed isRunning is still false.
+            guard coordinator.isRunning else {
+                showError(coordinator.errorMessage ?? "Could not start Smart Volume.")
+                return
+            }
+        } else {
+            coordinator.stop()
+        }
+        SmartVolumeSettings.shared.isEnabled = newEnabled
+        sender.state = newEnabled ? .on : .off
+        smartVolumeInfoItem.isHidden = !newEnabled
+        smartVolumeSettingsItem.isHidden = !newEnabled
     }
 
     @objc private func selectAudioDevice(_ sender: NSMenuItem) {

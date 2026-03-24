@@ -288,6 +288,18 @@ final class AudioDeviceManager: Sendable {
         return "Unknown"
     }
 
+    nonisolated func getDeviceUID(_ deviceID: AudioDeviceID) -> String? {
+        var address = makePropertyAddress(
+            selector: kAudioDevicePropertyDeviceUID,
+            scope: kAudioObjectPropertyScopeGlobal
+        )
+        var unmanagedUID: Unmanaged<CFString>?
+        guard getPropertyData(deviceID: deviceID, address: &address, value: &unmanagedUID),
+            let unmanagedUID
+        else { return nil }
+        return unmanagedUID.takeRetainedValue() as String
+    }
+
     nonisolated func setDefaultOutputDevice(_ deviceID: AudioDeviceID) -> Bool {
         var address = defaultOutputDeviceAddress
         return setPropertyData(

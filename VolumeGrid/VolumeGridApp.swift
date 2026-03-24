@@ -8,6 +8,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var launchAtLoginController: LaunchAtLoginController?
     private var hudManager: HUDManager?
     private var statusBarController: StatusBarController?
+    private var coordinator: SmartVolumeCoordinator?
     private var hudSubscription: AnyCancellable?
 
     private var isRunningTests: Bool {
@@ -37,9 +38,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
 
+        let coord = SmartVolumeCoordinator(volumeMonitor: monitor)
+        self.coordinator = coord
+        // SmartVolumeCoordinator.init() auto-starts if isEnabled was persisted.
+        // No need to call coord.start() here again.
+
         statusBarController = StatusBarController(
             volumeMonitor: monitor,
-            launchAtLoginController: loginController
+            launchAtLoginController: loginController,
+            coordinator: coord
         )
 
         monitor.startListening()

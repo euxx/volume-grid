@@ -67,6 +67,22 @@ final class AudioTapMonitor: @unchecked Sendable {
         return copy
     }
 
+    // K-weighting filter — initialized in start() with actual sample rate and channel count.
+    // Accessed only from the real-time IO proc (single-threaded), except reset in start()
+    // which runs before the IO proc starts, so no lock is needed.
+    private nonisolated(unsafe) var kFilter: KWeightingFilter = KWeightingFilter(
+        sampleRate: 48000, channelCount: 2)
+
+    // Bitmask where bit N is 1 if channel N is an LFE channel (should be excluded from
+    // loudness measurement per ITU-R BS.1770).  Written once in start() from the output
+    // device's preferred channel layout, before the IO proc is registered.
+    private nonisolated(unsafe) var lfeChannelMask: UInt64 = 0
+
+    // Maximum number of channels to include in the K-weighted RMS.
+    // Set to 2 when the channel layout cannot be determined for a multi-channel device,
+    // so unidentified LFE content is excluded conservatively.  Int.max otherwise.
+    private nonisolated(unsafe) var maxActiveChannels: Int = Int.max
+
     private nonisolated(unsafe) var tapID: AudioObjectID = kAudioObjectUnknown
     private nonisolated(unsafe) var aggregateDeviceID: AudioObjectID = kAudioObjectUnknown
     private nonisolated(unsafe) var deviceProcID: AudioDeviceIOProcID?
@@ -114,6 +130,24 @@ final class AudioTapMonitor: @unchecked Sendable {
             throw TapError.unsupportedFormat
         }
         tapSampleRate = Float(asbd.mSampleRate > 0 ? asbd.mSampleRate : 48000)
+        let sr = Double(tapSampleRate)
+        let ch = max(1, Int(asbd.mChannelsPerFrame))
+        kFilter = KWeightingFilter(sampleRate: sr, channelCount: ch)
+        if let lfe = AudioTapMonitor.queryLFEMask(outputDeviceUID: outputDeviceUID) {
+            lfeChannelMask = lfe
+            maxActiveChannels = Int.max
+        } else if ch > 2 {
+            // Channel layout unavailable for multi-channel device; conservatively limit to
+            // front L+R so unidentified LFE cannot contaminate the loudness measurement.
+            log.warning(
+                "channel layout unavailable for \(ch)-ch device; AGC limited to front 2 channels"
+            )
+            lfeChannelMask = 0
+            maxActiveChannels = 2
+        } else {
+            lfeChannelMask = 0
+            maxActiveChannels = Int.max
+        }
 
         let aggUID = UUID().uuidString
         let aggDesc: [String: Any] = [
@@ -147,7 +181,9 @@ final class AudioTapMonitor: @unchecked Sendable {
         let procErr = AudioDeviceCreateIOProcIDWithBlock(&procID, newAggID, nil) {
             inNow, inInputData, inInputTime, outOutputData, inOutputTime in
             let monitor = unsafeSelf.takeUnretainedValue()
-            let (rms, frameCount) = AudioTapMonitor.measureRMSRealtime(bufferList: inInputData)
+            // K-weighted RMS: mutates monitor.kFilter (no lock — only IO proc accesses it)
+            let (rms, frameCount) = monitor.measureKWeightedRMSFromIOProc(
+                bufferList: inInputData)
             os_unfair_lock_lock(&monitor.rmsLock)
             monitor._latestRMS = rms
             if frameCount > 0 { monitor._tapFrameSize = frameCount }
@@ -234,7 +270,166 @@ final class AudioTapMonitor: @unchecked Sendable {
         try start(outputDeviceUID: outputDeviceUID)
     }
 
-    // MARK: — Real-time measurement (static, no Swift object access)
+    // MARK: — K-weighted real-time measurement (instance method, mutates kFilter)
+
+    /// Compute K-weighted RMS from an AudioBufferList.
+    ///
+    /// Called exclusively from the real-time IO proc.  Mutates `kFilter` without holding
+    /// a lock because only the IO proc accesses the filter (it is reset in `start()` before
+    /// the IO proc is registered).
+    nonisolated private func measureKWeightedRMSFromIOProc(
+        bufferList: UnsafePointer<AudioBufferList>
+    ) -> (rms: Float, frameCount: Int) {
+        var totalMeanSquare: Float = 0
+        var channelsSeen = 0  // global channel index across all buffers (includes LFE)
+        var channelsIncluded = 0  // non-LFE channels contributing to the RMS average
+        var detectedFrameCount = 0
+
+        let ablPtr = UnsafeMutableAudioBufferListPointer(
+            UnsafeMutablePointer(mutating: bufferList))
+        for buffer in ablPtr {
+            guard buffer.mDataByteSize > 0, let data = buffer.mData else { continue }
+            let channelsInBuffer = max(1, Int(buffer.mNumberChannels))
+            let frameCount =
+                Int(buffer.mDataByteSize) / (MemoryLayout<Float32>.size * channelsInBuffer)
+            guard frameCount > 0 else { continue }
+            detectedFrameCount = frameCount
+            let samples = data.assumingMemoryBound(to: Float32.self)
+            for ch in 0..<channelsInBuffer {
+                let absIndex = channelsSeen
+                channelsSeen += 1
+                // Skip LFE channels identified at start() from the device channel layout.
+                // Also stop once maxActiveChannels are included (conservative fallback when
+                // the layout is unavailable for a multi-channel device).
+                guard
+                    channelsIncluded < maxActiveChannels,
+                    absIndex < 64,
+                    (lfeChannelMask & (UInt64(1) << absIndex)) == 0
+                else {
+                    continue
+                }
+                let kRMS = kFilter.processChannel(
+                    absIndex, samples: samples + ch,
+                    stride: channelsInBuffer, frameCount: frameCount)
+                totalMeanSquare += kRMS * kRMS
+                channelsIncluded += 1
+            }
+        }
+
+        guard channelsIncluded > 0 else { return (0, 0) }
+        let finalRMS = sqrt(totalMeanSquare / Float(channelsIncluded))
+        return (finalRMS, detectedFrameCount)
+    }
+
+    // MARK: — LFE channel detection
+
+    /// Returns a bitmask where bit N is 1 if channel N is LFE.
+    ///
+    /// Resolves the UID to a device ID, queries `kAudioDevicePropertyPreferredChannelLayout`,
+    /// and identifies `kAudioChannelLabel_LFEScreen` / `kAudioChannelLabel_LFE2` channels.
+    /// Returns `nil` if the layout cannot be determined (callers treat this as "unknown").
+    /// Returns 0 for layouts with no LFE (stereo, mono).
+    private static func queryLFEMask(outputDeviceUID uid: String) -> UInt64? {
+        var deviceID: AudioDeviceID = kAudioDeviceUnknown
+        var cfUID: CFString = uid as CFString
+        // AudioValueTranslation requires pointers that outlive the struct, so use nested
+        // withUnsafeMutablePointer to keep cfUID and deviceID alive for the entire call.
+        let lookupStatus = withUnsafeMutablePointer(to: &cfUID) { cfUIDPtr in
+            withUnsafeMutablePointer(to: &deviceID) { devIDPtr in
+                var translation = AudioValueTranslation(
+                    mInputData: UnsafeMutableRawPointer(cfUIDPtr),
+                    mInputDataSize: UInt32(MemoryLayout<CFString>.size),
+                    mOutputData: UnsafeMutableRawPointer(devIDPtr),
+                    mOutputDataSize: UInt32(MemoryLayout<AudioDeviceID>.size))
+                var sz = UInt32(MemoryLayout<AudioValueTranslation>.size)
+                var uidAddr = AudioObjectPropertyAddress(
+                    mSelector: kAudioHardwarePropertyDeviceForUID,
+                    mScope: kAudioObjectPropertyScopeGlobal,
+                    mElement: kAudioObjectPropertyElementMain)
+                return AudioObjectGetPropertyData(
+                    AudioObjectID(kAudioObjectSystemObject), &uidAddr, 0, nil, &sz, &translation)
+            }
+        }
+        guard lookupStatus == noErr, deviceID != kAudioDeviceUnknown else { return nil }
+
+        var layoutAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyPreferredChannelLayout,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain)
+        var layoutSz: UInt32 = 0
+        guard
+            AudioObjectGetPropertyDataSize(deviceID, &layoutAddr, 0, nil, &layoutSz) == noErr,
+            layoutSz >= 12
+        else { return nil }
+
+        let buf = UnsafeMutableRawBufferPointer.allocate(byteCount: Int(layoutSz), alignment: 8)
+        defer { buf.deallocate() }
+        guard
+            AudioObjectGetPropertyData(
+                deviceID, &layoutAddr, 0, nil, &layoutSz, buf.baseAddress!) == noErr
+        else { return nil }
+
+        return parseLFEMask(layoutBuffer: buf.baseAddress!, size: Int(layoutSz))
+    }
+
+    /// Parse an `AudioChannelLayout` buffer and return a bitmask of LFE channel indices.
+    ///
+    /// Returns `nil` for unknown tag-based layouts that cannot be expanded.
+    /// Returns 0 for layouts with no LFE.
+    private static func parseLFEMask(layoutBuffer ptr: UnsafeMutableRawPointer, size: Int)
+        -> UInt64?
+    {
+        guard size >= 12 else { return nil }
+        var tag = ptr.load(as: AudioChannelLayoutTag.self)
+
+        if tag == kAudioChannelLayoutTag_UseChannelDescriptions {
+            let count = Int(ptr.advanced(by: 8).load(as: UInt32.self))
+            let stride = MemoryLayout<AudioChannelDescription>.stride  // 20 bytes
+            guard size >= 12 + count * stride else { return nil }
+            var mask: UInt64 = 0
+            for i in 0..<min(count, 63) {
+                let label = ptr.advanced(by: 12 + i * stride).load(as: AudioChannelLabel.self)
+                if label == kAudioChannelLabel_LFEScreen || label == kAudioChannelLabel_LFE2 {
+                    mask |= UInt64(1) << i
+                }
+            }
+            return mask
+        }
+
+        if tag == kAudioChannelLayoutTag_UseChannelBitmap {
+            // kAudioChannelBit_LFEScreen = 1<<3, kAudioChannelBit_LFE2 = 1<<10
+            let lfeBits: UInt32 = (1 << 3) | (1 << 10)
+            let bitmap = ptr.advanced(by: 4).load(as: UInt32.self)
+            var mask: UInt64 = 0
+            var chIdx = 0
+            for bit in 0..<32 {
+                let bitVal = UInt32(1) << bit
+                guard (bitmap & bitVal) != 0 else { continue }
+                if (lfeBits & bitVal) != 0 { mask |= UInt64(1) << chIdx }
+                chIdx += 1
+            }
+            return mask
+        }
+
+        // Expand a known layout tag to channel descriptions, then recurse once.
+        var expandedSz: UInt32 = 0
+        AudioFormatGetPropertyInfo(
+            kAudioFormatProperty_ChannelLayoutForTag,
+            UInt32(MemoryLayout<AudioChannelLayoutTag>.size), &tag, &expandedSz)
+        guard expandedSz > 0 else { return nil }
+        let expanded = UnsafeMutableRawBufferPointer.allocate(
+            byteCount: Int(expandedSz), alignment: 8)
+        defer { expanded.deallocate() }
+        guard
+            AudioFormatGetProperty(
+                kAudioFormatProperty_ChannelLayoutForTag,
+                UInt32(MemoryLayout<AudioChannelLayoutTag>.size), &tag,
+                &expandedSz, expanded.baseAddress!) == noErr
+        else { return nil }
+        return parseLFEMask(layoutBuffer: expanded.baseAddress!, size: Int(expandedSz))
+    }
+
+    // MARK: — Real-time measurement (static, kept for unit tests)
 
     /// Compute per-channel RMS using vDSP, averaged across all channels.
     /// Handles both interleaved and non-interleaved formats by using per-channel strides.

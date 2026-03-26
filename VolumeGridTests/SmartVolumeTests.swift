@@ -280,7 +280,7 @@ final class SmartVolumeSettingsTests: XCTestCase {
         let ud = UserDefaults(suiteName: suiteName)!
         let settings = SmartVolumeSettings(ud)
         XCTAssertFalse(settings.isEnabled)
-        XCTAssertEqual(settings.targetRMS, 0.05, accuracy: 1e-6)
+        XCTAssertEqual(settings.targetRMS, 0.075, accuracy: 1e-6)
         XCTAssertEqual(settings.minVolume, 0.1, accuracy: 1e-6)
         XCTAssertEqual(settings.maxVolume, 1.0, accuracy: 1e-6)
         ud.removePersistentDomain(forName: suiteName)
@@ -427,6 +427,35 @@ final class SmartVolumeSettingsTests: XCTestCase {
         settings.targetRMS = 5.0
         XCTAssertEqual(
             settings.targetRMS, 0.30, accuracy: 1e-6, "targetRMS > 0.30 should clamp to maximum")
+        ud.removePersistentDomain(forName: suiteName)
+    }
+
+    /// Verifies that reloadFromDefaults() uses K-weighted defaults (0.075 / 0.18) as fallback,
+    /// not the old plain-RMS values (0.05 / 0.12).  If a UserDefaults.didChangeNotification
+    /// fires before the keys are persisted, settings must not silently revert to the old scale.
+    func testReloadFromDefaultsUsesKWeightedFallback() async {
+        let suiteName = "smartVolumeTests.\(UUID().uuidString)"
+        let ud = UserDefaults(suiteName: suiteName)!
+        // Create fresh settings; keys are not yet written to this suite.
+        let settings = SmartVolumeSettings(ud)
+        // Confirm fresh-init values are K-weighted defaults.
+        XCTAssertEqual(settings.targetRMS, 0.075, accuracy: 1e-5)
+        XCTAssertEqual(settings.speechTargetRMS, 0.18, accuracy: 1e-3)
+        // Remove any persisted keys so reload falls through to the fallback path.
+        ud.removeObject(forKey: "smartVolume.targetRMS")
+        ud.removeObject(forKey: "smartVolume.speechTargetRMS")
+        ud.removeObject(forKey: "smartVolume.rmsVersion")
+        // Trigger reloadFromDefaults via notification.
+        NotificationCenter.default.post(name: UserDefaults.didChangeNotification, object: ud)
+        await Task.yield()
+        await Task.yield()
+        // Values must stay at K-weighted defaults, not revert to plain-RMS values.
+        XCTAssertEqual(
+            settings.targetRMS, 0.075, accuracy: 1e-5,
+            "reloadFromDefaults fallback must use K-weighted default, not old 0.05")
+        XCTAssertEqual(
+            settings.speechTargetRMS, 0.18, accuracy: 1e-3,
+            "reloadFromDefaults fallback must use K-weighted default, not old 0.12")
         ud.removePersistentDomain(forName: suiteName)
     }
 }

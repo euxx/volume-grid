@@ -87,7 +87,14 @@ final class SmartVolumeSettings: ObservableObject {
         static let smoothing = "smartVolume.smoothing"
         static let strength = "smartVolume.strength"
         static let speechTargetRMS = "smartVolume.speechTargetRMS"
+        // Written once when K-weighted measurement is first used; guards against
+        // applying the migration factor more than once on subsequent launches.
+        static let rmsVersion = "smartVolume.rmsVersion"
     }
+
+    /// Version tag written to UserDefaults to mark that targetRMS values are in the
+    /// K-weighted scale.  Changing this string triggers a one-time migration.
+    private static let currentRMSVersion = "kweighted_v1"
 
     init(_ defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -95,7 +102,7 @@ final class SmartVolumeSettings: ObservableObject {
         targetRMS =
             defaults.object(forKey: Keys.targetRMS).map { _ in
                 defaults.float(forKey: Keys.targetRMS)
-            } ?? 0.05
+            } ?? 0.075  // 0.075 ≈ 0.05 plain-RMS × 1.5 K-weighting factor
         let rawMin =
             defaults.object(forKey: Keys.minVolume).map { _ in
                 defaults.float(forKey: Keys.minVolume)
@@ -122,8 +129,26 @@ final class SmartVolumeSettings: ObservableObject {
         let rawSpeechTargetRMS =
             defaults.object(forKey: Keys.speechTargetRMS).map { _ in
                 defaults.float(forKey: Keys.speechTargetRMS)
-            } ?? 0.12
+            } ?? 0.18  // 0.18 ≈ 0.12 plain-RMS × 1.5 K-weighting factor
         speechTargetRMS = max(0.01, min(rawSpeechTargetRMS, 0.30))
+
+        // One-time migration: if the stored values were calibrated against plain RMS
+        // (no version tag), multiply them up to the K-weighted scale.
+        // Factor 1.5: K-weighted RMS of typical broadband content is ~1.5× plain RMS.
+        if defaults.string(forKey: Keys.rmsVersion) != SmartVolumeSettings.currentRMSVersion {
+            let factor: Float = 1.5
+            if defaults.object(forKey: Keys.targetRMS) != nil {
+                let migrated = max(1e-5, min(targetRMS * factor, 0.30))
+                targetRMS = migrated
+                defaults.set(migrated, forKey: Keys.targetRMS)
+            }
+            if defaults.object(forKey: Keys.speechTargetRMS) != nil {
+                let migrated = max(0.01, min(speechTargetRMS * factor, 0.30))
+                speechTargetRMS = migrated
+                defaults.set(migrated, forKey: Keys.speechTargetRMS)
+            }
+            defaults.set(SmartVolumeSettings.currentRMSVersion, forKey: Keys.rmsVersion)
+        }
 
         // Watch for changes from external tools (e.g. `defaults write`) so the running
         // app picks them up immediately without a restart.
@@ -152,7 +177,7 @@ final class SmartVolumeSettings: ObservableObject {
 
         let newTargetRMS =
             defaults.object(forKey: Keys.targetRMS)
-            .map { _ in defaults.float(forKey: Keys.targetRMS) } ?? 0.05
+            .map { _ in defaults.float(forKey: Keys.targetRMS) } ?? 0.075
         if targetRMS != newTargetRMS { targetRMS = newTargetRMS }
 
         let rawMin =
@@ -182,7 +207,7 @@ final class SmartVolumeSettings: ObservableObject {
 
         let rawSpeechTarget =
             defaults.object(forKey: Keys.speechTargetRMS)
-            .map { _ in defaults.float(forKey: Keys.speechTargetRMS) } ?? 0.12
+            .map { _ in defaults.float(forKey: Keys.speechTargetRMS) } ?? 0.18
         let newSpeechTarget = max(0.01, min(rawSpeechTarget, 0.30))
         if speechTargetRMS != newSpeechTarget { speechTargetRMS = newSpeechTarget }
 

@@ -93,8 +93,8 @@ final class SmartVolumeSettings: ObservableObject {
     }
 
     /// Version tag written to UserDefaults to mark that targetRMS values are in the
-    /// K-weighted scale.  Changing this string triggers a one-time migration.
-    private static let currentRMSVersion = "kweighted_v1"
+    /// perceived-loudness scale (measuredRMS × systemVolume).
+    private static let currentRMSVersion = "kweighted_perceived_v2"
 
     init(_ defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -102,7 +102,7 @@ final class SmartVolumeSettings: ObservableObject {
         targetRMS =
             defaults.object(forKey: Keys.targetRMS).map { _ in
                 defaults.float(forKey: Keys.targetRMS)
-            } ?? 0.075  // 0.075 ≈ 0.05 plain-RMS × 1.5 K-weighting factor
+            } ?? 0.040  // perceived-loudness default: typical comfortable speech/video
         let rawMin =
             defaults.object(forKey: Keys.minVolume).map { _ in
                 defaults.float(forKey: Keys.minVolume)
@@ -129,24 +129,23 @@ final class SmartVolumeSettings: ObservableObject {
         let rawSpeechTargetRMS =
             defaults.object(forKey: Keys.speechTargetRMS).map { _ in
                 defaults.float(forKey: Keys.speechTargetRMS)
-            } ?? 0.18  // 0.18 ≈ 0.12 plain-RMS × 1.5 K-weighting factor
+            } ?? 0.055  // higher than music/ambient 0.040: less AGC reduction on loud speech
         speechTargetRMS = max(0.01, min(rawSpeechTargetRMS, 0.30))
 
-        // One-time migration: if the stored values were calibrated against plain RMS
-        // (no version tag), multiply them up to the K-weighted scale.
-        // Factor 1.5: K-weighted RMS of typical broadband content is ~1.5× plain RMS.
-        if defaults.string(forKey: Keys.rmsVersion) != SmartVolumeSettings.currentRMSVersion {
-            let factor: Float = 1.5
-            if defaults.object(forKey: Keys.targetRMS) != nil {
-                let migrated = max(1e-5, min(targetRMS * factor, 0.30))
-                targetRMS = migrated
-                defaults.set(migrated, forKey: Keys.targetRMS)
+        // Migration: update targetRMS / speechTargetRMS to the current semantic scale.
+        // Versions that start with "kweighted_perceived_" are already in perceived-loudness
+        // space; we only reset to defaults when upgrading from a pre-perceived-RMS version.
+        let storedVersion = defaults.string(forKey: Keys.rmsVersion) ?? ""
+        if storedVersion != SmartVolumeSettings.currentRMSVersion {
+            if !storedVersion.hasPrefix("kweighted_perceived_") {
+                // Legacy (plain-RMS or K-weighted pre-volume) scale: reset to new defaults.
+                // Users can press Calibrate to personalise after the upgrade.
+                targetRMS = 0.040
+                speechTargetRMS = 0.055
+                defaults.set(Float(0.040), forKey: Keys.targetRMS)
+                defaults.set(Float(0.055), forKey: Keys.speechTargetRMS)
             }
-            if defaults.object(forKey: Keys.speechTargetRMS) != nil {
-                let migrated = max(0.01, min(speechTargetRMS * factor, 0.30))
-                speechTargetRMS = migrated
-                defaults.set(migrated, forKey: Keys.speechTargetRMS)
-            }
+            // Always stamp the current version so this block does not re-run.
             defaults.set(SmartVolumeSettings.currentRMSVersion, forKey: Keys.rmsVersion)
         }
 
@@ -177,7 +176,7 @@ final class SmartVolumeSettings: ObservableObject {
 
         let newTargetRMS =
             defaults.object(forKey: Keys.targetRMS)
-            .map { _ in defaults.float(forKey: Keys.targetRMS) } ?? 0.075
+            .map { _ in defaults.float(forKey: Keys.targetRMS) } ?? 0.040
         if targetRMS != newTargetRMS { targetRMS = newTargetRMS }
 
         let rawMin =
@@ -207,7 +206,7 @@ final class SmartVolumeSettings: ObservableObject {
 
         let rawSpeechTarget =
             defaults.object(forKey: Keys.speechTargetRMS)
-            .map { _ in defaults.float(forKey: Keys.speechTargetRMS) } ?? 0.18
+            .map { _ in defaults.float(forKey: Keys.speechTargetRMS) } ?? 0.055
         let newSpeechTarget = max(0.01, min(rawSpeechTarget, 0.30))
         if speechTargetRMS != newSpeechTarget { speechTargetRMS = newSpeechTarget }
 

@@ -35,43 +35,56 @@ struct LoudnessNormalizer {
     /// Compute the next volume scalar.
     ///
     /// - Parameters:
-    ///   - measuredRMS: RMS of the captured audio signal (pre-volume tap assumed).
+    ///   - measuredRMS: K-weighted RMS of the captured audio signal (pre-volume tap).
+    ///   - currentVolume: Current system volume scalar.  Combined with `measuredRMS` to
+    ///     compute perceived loudness (`= measuredRMS × currentVolume`).  `targetRMS`
+    ///     is defined in the same perceived-loudness space, so the feedback loop closes
+    ///     on what the user actually hears rather than the raw pre-volume signal.
     ///   - dt: AGC update interval in seconds (= coordinator `timerInterval`, ≈ 0.2 s).
     ///         Do NOT pass `frameSize / sampleRate` — that is the per-IO-buffer duration,
     ///         much smaller than the timer interval.
     /// - Returns: Clamped volume scalar, or `nil` if silent / not yet initialised.
-    mutating func update(measuredRMS: Float, dt: Float) -> Float? {
-        // Noise gate: ignore audio that is less than 20 % of targetRMS.
-        // This prevents the AGC from ramping volume to maximum during quiet background
-        // passages (ambient music, crowd noise) between meaningful speech bursts.
+    mutating func update(measuredRMS: Float, currentVolume: Float, dt: Float) -> Float? {
+        // Noise gate: ignore audio that is genuinely inaudible or below the content floor.
+        // Uses the pre-volume signal (measuredRMS) rather than perceived RMS so that a
+        // very low system volume does not prevent the AGC from detecting and raising volume.
+        // Gate = 20% of targetRMS on the raw signal scale.
         let noiseGate = max(1e-5, targetRMS * 0.2)
         guard measuredRMS > noiseGate else { return nil }
         guard initialized else { return nil }
-        let rawTarget = targetRMS / measuredRMS
+        // Perceived loudness: what the user actually hears.
+        // targetRMS is defined in perceived-loudness space so the feedback loop closes
+        // on what the user actually hears rather than the raw pre-volume signal.
+        let perceivedRMS = measuredRMS * max(1e-5, currentVolume)
+        // rawTarget < 1: perceived content is louder than target → lower volume (attack).
+        // rawTarget > 1: perceived content is quieter than target → raise volume (release).
+        let rawTarget = targetRMS / perceivedRMS
         // Apply compression strength: strength=1 gives full normalisation; lower values
         // reduce the gain correction so content with different native loudness isn't
         // over-corrected.  pow(1.0, s) == 1.0 and pow(0.0, s) == 0.0 remain correct.
         // strength=0 means "no correction" — hold current volume.
         guard strength > 0 else { return smoothedTargetVolume }
-        let correctedTarget = strength >= 1 ? rawTarget : powf(rawTarget, strength)
+        let correctedRatio = strength >= 1 ? rawTarget : powf(rawTarget, strength)
+        // Desired absolute volume: scale the current volume by the per-step ratio.
+        // At steady state with strength=1: desiredVolume = targetRMS / measuredRMS,
+        // which is the exact volume needed so that desiredVolume × measuredRMS = targetRMS.
+        let desiredVolume = currentVolume * correctedRatio
         // alpha = 1 − exp(−dt/τ) converts a physical time constant τ (seconds) to a
         // per-step coefficient, making the AGC speed independent of the timer frequency.
-        if correctedTarget < smoothedTargetVolume {
-            // Attack: loud signal — reduce volume quickly and arm the hold timer so that
-            // a following quiet patch (background music, pause) doesn't immediately
-            // trigger the release ramp.
+        if desiredVolume < smoothedTargetVolume {
+            // Attack: perceived signal is louder than target → reduce volume quickly.
             holdCountdown = holdSeconds
             let alpha = 1 - expf(-dt / attackSeconds)
-            smoothedTargetVolume += alpha * (correctedTarget - smoothedTargetVolume)
+            smoothedTargetVolume += alpha * (desiredVolume - smoothedTargetVolume)
         } else {
-            // Release: content is quieter than target.
+            // Release: perceived signal is quieter than target → raise volume slowly.
             if holdCountdown > 1e-6 {
                 // Hold phase: keep volume frozen until the timer expires.
                 holdCountdown = max(0, holdCountdown - dt)
             } else {
                 // Cap the effective IIR target at the ceiling so a very quiet signal
-                // (correctedTarget >> maxVolumeScalar) doesn't produce large upward steps.
-                let effectiveTarget = min(correctedTarget, maxVolumeScalar)
+                // (desiredVolume >> maxVolumeScalar) doesn't produce large upward steps.
+                let effectiveTarget = min(desiredVolume, maxVolumeScalar)
                 let alpha = 1 - expf(-dt / releaseSeconds)
                 smoothedTargetVolume += alpha * (effectiveTarget - smoothedTargetVolume)
             }

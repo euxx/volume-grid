@@ -10,7 +10,7 @@ final class LoudnessNormalizerTests: XCTestCase {
 
     func testUpdateReturnsNilBeforeReset() {
         var normalizer = LoudnessNormalizer()
-        let result = normalizer.update(measuredRMS: 0.05, dt: 0.2)
+        let result = normalizer.update(measuredRMS: 0.05, currentVolume: 1.0, dt: 0.2)
         XCTAssertNil(result, "update() must return nil until resetWith() has been called")
     }
 
@@ -18,7 +18,7 @@ final class LoudnessNormalizerTests: XCTestCase {
         var normalizer = LoudnessNormalizer()
         normalizer.targetRMS = 0.05
         normalizer.resetWith(currentVolume: 0.5)
-        let result = normalizer.update(measuredRMS: 0.05, dt: 0.2)
+        let result = normalizer.update(measuredRMS: 0.05, currentVolume: 1.0, dt: 0.2)
         XCTAssertNotNil(result)
     }
 
@@ -26,7 +26,7 @@ final class LoudnessNormalizerTests: XCTestCase {
         var normalizer = LoudnessNormalizer()
         normalizer.resetWith(currentVolume: 0.5)
         normalizer.reset()
-        XCTAssertNil(normalizer.update(measuredRMS: 0.05, dt: 0.2))
+        XCTAssertNil(normalizer.update(measuredRMS: 0.05, currentVolume: 1.0, dt: 0.2))
     }
 
     // MARK: - Silence guard
@@ -34,18 +34,35 @@ final class LoudnessNormalizerTests: XCTestCase {
     func testSilentSignalReturnsNil() {
         var normalizer = LoudnessNormalizer()  // default targetRMS = 0.05, gate = 0.01
         normalizer.resetWith(currentVolume: 0.5)
-        XCTAssertNil(normalizer.update(measuredRMS: 0, dt: 0.2))
-        XCTAssertNil(normalizer.update(measuredRMS: 1e-6, dt: 0.2))
-        XCTAssertNil(normalizer.update(measuredRMS: 1e-5, dt: 0.2))
+        XCTAssertNil(normalizer.update(measuredRMS: 0, currentVolume: 1.0, dt: 0.2))
+        XCTAssertNil(normalizer.update(measuredRMS: 1e-6, currentVolume: 1.0, dt: 0.2))
+        XCTAssertNil(normalizer.update(measuredRMS: 1e-5, currentVolume: 1.0, dt: 0.2))
         // below noise gate (0.01) even though above the bare epsilon
-        XCTAssertNil(normalizer.update(measuredRMS: 0.005, dt: 0.2))
+        XCTAssertNil(normalizer.update(measuredRMS: 0.005, currentVolume: 1.0, dt: 0.2))
     }
 
     func testJustAboveSilenceThresholdIsNotNil() {
         var normalizer = LoudnessNormalizer()  // default targetRMS = 0.05
         normalizer.resetWith(currentVolume: 0.5)
         // noise gate = targetRMS * 0.2 = 0.01; signal at 0.011 should produce a result
-        XCTAssertNotNil(normalizer.update(measuredRMS: 0.011, dt: 0.2))
+        XCTAssertNotNil(normalizer.update(measuredRMS: 0.011, currentVolume: 1.0, dt: 0.2))
+    }
+
+    /// Regression guard: noise gate uses pre-volume measuredRMS, not perceivedRMS.
+    /// When currentVolume is very low, content that IS playing must still pass the gate
+    /// so the AGC can raise volume back to a listenable level.
+    func testNoisegateDoesNotBlockRecoveryAtLowVolume() {
+        var normalizer = LoudnessNormalizer()
+        normalizer.targetRMS = 0.040
+        normalizer.minVolumeScalar = 0.05
+        normalizer.maxVolumeScalar = 1.0
+        normalizer.resetWith(currentVolume: 0.05)
+        // measuredRMS = 0.1 (content IS audible) but perceivedRMS = 0.1 × 0.05 = 0.005,
+        // which is below the old perceived gate of 0.040 × 0.2 = 0.008.
+        // With the gate on measuredRMS (0.1 > 0.008), AGC must return non-nil.
+        let result = normalizer.update(measuredRMS: 0.1, currentVolume: 0.05, dt: 0.2)
+        XCTAssertNotNil(result, "AGC must not be gated by low volume when content is playing")
+        XCTAssertGreaterThan(result!, 0.05, "AGC should raise volume toward target")
     }
 
     // MARK: - Boundary clamping
@@ -59,7 +76,7 @@ final class LoudnessNormalizerTests: XCTestCase {
         // Run many steps to approach the floor
         var result: Float = 1.0
         for _ in 0..<200 {
-            result = normalizer.update(measuredRMS: 0.001, dt: 0.2) ?? result
+            result = normalizer.update(measuredRMS: 0.001, currentVolume: 1.0, dt: 0.2) ?? result
         }
         XCTAssertGreaterThanOrEqual(result, 0.2)
     }
@@ -72,7 +89,7 @@ final class LoudnessNormalizerTests: XCTestCase {
         normalizer.resetWith(currentVolume: 0.5)
         var result: Float = 0.5
         for _ in 0..<200 {
-            result = normalizer.update(measuredRMS: 0.05, dt: 0.2) ?? result
+            result = normalizer.update(measuredRMS: 0.05, currentVolume: 1.0, dt: 0.2) ?? result
         }
         XCTAssertLessThanOrEqual(result, 0.8)
     }
@@ -89,7 +106,7 @@ final class LoudnessNormalizerTests: XCTestCase {
         normalizer.resetWith(currentVolume: 0.3)
         var result: Float = 0.3
         for _ in 0..<500 {
-            result = normalizer.update(measuredRMS: 0.05, dt: 0.2) ?? result
+            result = normalizer.update(measuredRMS: 0.05, currentVolume: 1.0, dt: 0.2) ?? result
         }
         // After 500 × 0.2 s = 100 s with releaseSeconds = 5 s, should be very close to 1.0
         XCTAssertEqual(result, 1.0, accuracy: 0.01)
@@ -119,8 +136,10 @@ final class LoudnessNormalizerTests: XCTestCase {
         releaseNorm.resetWith(currentVolume: 0.5)
 
         // One step each; measuredRMS drives rawTarget to exactly ±0.25 from start
-        let attackResult = attackNorm.update(measuredRMS: targetRMS / 0.25, dt: 0.2)!  // rawTarget=0.25
-        let releaseResult = releaseNorm.update(measuredRMS: targetRMS / 0.75, dt: 0.2)!  // rawTarget=0.75
+        let attackResult = attackNorm.update(
+            measuredRMS: targetRMS / 0.25, currentVolume: 1.0, dt: 0.2)!  // rawTarget=0.25
+        let releaseResult = releaseNorm.update(
+            measuredRMS: targetRMS / 0.75, currentVolume: 1.0, dt: 0.2)!  // rawTarget=0.75
 
         let attackMovement = abs(attackResult - 0.5)
         let releaseMovement = abs(releaseResult - 0.5)
@@ -142,17 +161,18 @@ final class LoudnessNormalizerTests: XCTestCase {
         normalizer.resetWith(currentVolume: 0.5)
 
         // Two attack ticks with a loud signal; holdCountdown is set to 1.0 after each.
-        _ = normalizer.update(measuredRMS: 0.3, dt: 0.2)
-        let volAfterAttack = normalizer.update(measuredRMS: 0.3, dt: 0.2)!
+        _ = normalizer.update(measuredRMS: 0.3, currentVolume: 1.0, dt: 0.2)
+        let volAfterAttack = normalizer.update(measuredRMS: 0.3, currentVolume: 1.0, dt: 0.2)!
 
         // 5 quiet ticks × 0.2 s = 1.0 s — volume must stay frozen during the hold.
         for _ in 0..<5 {
-            let v = normalizer.update(measuredRMS: 0.02, dt: 0.2) ?? volAfterAttack
+            let v =
+                normalizer.update(measuredRMS: 0.02, currentVolume: 1.0, dt: 0.2) ?? volAfterAttack
             XCTAssertEqual(v, volAfterAttack, accuracy: 1e-4, "volume must not rise during hold")
         }
 
         // Next quiet tick lands after hold expires → release resumes.
-        let volAfterHold = normalizer.update(measuredRMS: 0.02, dt: 0.2)!
+        let volAfterHold = normalizer.update(measuredRMS: 0.02, currentVolume: 1.0, dt: 0.2)!
         XCTAssertGreaterThan(
             volAfterHold, volAfterAttack, "volume must start rising once hold expires")
     }
@@ -166,9 +186,11 @@ final class LoudnessNormalizerTests: XCTestCase {
         normalizer.strength = 0.0
         normalizer.resetWith(currentVolume: 0.5)
         // Loud signal → attack path; with strength=0 should still return 0.5.
-        XCTAssertEqual(normalizer.update(measuredRMS: 0.3, dt: 0.2)!, 0.5, accuracy: 1e-6)
+        XCTAssertEqual(
+            normalizer.update(measuredRMS: 0.3, currentVolume: 1.0, dt: 0.2)!, 0.5, accuracy: 1e-6)
         // Quiet signal above noise gate (0.02 > 0.01) → release path; still 0.5.
-        XCTAssertEqual(normalizer.update(measuredRMS: 0.02, dt: 0.2)!, 0.5, accuracy: 1e-6)
+        XCTAssertEqual(
+            normalizer.update(measuredRMS: 0.02, currentVolume: 1.0, dt: 0.2)!, 0.5, accuracy: 1e-6)
     }
 
     func testStrengthOneIsFull() {
@@ -182,7 +204,7 @@ final class LoudnessNormalizerTests: XCTestCase {
         normalizer.maxVolumeScalar = 2.0
         normalizer.strength = 1.0
         normalizer.resetWith(currentVolume: 0.8)
-        let r = normalizer.update(measuredRMS: 0.2, dt: 0.2)!
+        let r = normalizer.update(measuredRMS: 0.2, currentVolume: 1.0, dt: 0.2)!
         let expectedAlpha = 1 - expf(-0.2 / 0.5)
         let expected = 0.8 + expectedAlpha * (0.25 - 0.8)
         XCTAssertEqual(
@@ -210,8 +232,8 @@ final class LoudnessNormalizerTests: XCTestCase {
 
         // Loud signal: rawTarget = 0.05/0.3 ≈ 0.167 < 0.8 → attack direction.
         // strength=0.5 → correctedTarget = sqrt(0.167) ≈ 0.408 (less aggressive).
-        let rFull = full.update(measuredRMS: 0.3, dt: 0.2)!
-        let rHalf = half.update(measuredRMS: 0.3, dt: 0.2)!
+        let rFull = full.update(measuredRMS: 0.3, currentVolume: 1.0, dt: 0.2)!
+        let rHalf = half.update(measuredRMS: 0.3, currentVolume: 1.0, dt: 0.2)!
         // rHalf should be larger (less reduction) than rFull.
         XCTAssertGreaterThan(rHalf, rFull, "strength=0.5 should reduce volume less than strength=1")
     }
@@ -226,7 +248,7 @@ final class LoudnessNormalizerTests: XCTestCase {
         normalizer.maxVolumeScalar = 1.0
         normalizer.resetWith(currentVolume: 0.2)
         // First update — IIR starts from 0.2, so the result should still be near 0.2
-        let first = normalizer.update(measuredRMS: 0.05, dt: 0.2)
+        let first = normalizer.update(measuredRMS: 0.05, currentVolume: 1.0, dt: 0.2)
         XCTAssertNotNil(first)
         XCTAssertEqual(
             first!, 0.2, accuracy: 0.05, "First step should be a small nudge, not a big jump")
@@ -248,7 +270,7 @@ final class LoudnessNormalizerTests: XCTestCase {
 
         // 50 quiet ticks — without anti-windup, smoothedTargetVolume would wind far beyond 0.8
         for _ in 0..<50 {
-            _ = normalizer.update(measuredRMS: 0.001, dt: 0.2)  // very quiet → huge rawTarget
+            _ = normalizer.update(measuredRMS: 0.001, currentVolume: 1.0, dt: 0.2)  // very quiet → huge rawTarget
         }
 
         // Now a loud signal arrives: rawTarget = 0.05/0.25 = 0.2 < min(0.1)? No, 0.2 clamped to 0.1
@@ -264,7 +286,7 @@ final class LoudnessNormalizerTests: XCTestCase {
         var vol: Float = 1.0
         let loudRMS: Float = 0.05 / 0.2  // rawTarget = 0.2
         for _ in 0..<5 {
-            vol = normalizer.update(measuredRMS: loudRMS, dt: 0.2) ?? vol
+            vol = normalizer.update(measuredRMS: loudRMS, currentVolume: 1.0, dt: 0.2) ?? vol
         }
         XCTAssertLessThan(
             vol, 0.5,
@@ -280,7 +302,7 @@ final class SmartVolumeSettingsTests: XCTestCase {
         let ud = UserDefaults(suiteName: suiteName)!
         let settings = SmartVolumeSettings(ud)
         XCTAssertFalse(settings.isEnabled)
-        XCTAssertEqual(settings.targetRMS, 0.075, accuracy: 1e-6)
+        XCTAssertEqual(settings.targetRMS, 0.040, accuracy: 1e-6)
         XCTAssertEqual(settings.minVolume, 0.1, accuracy: 1e-6)
         XCTAssertEqual(settings.maxVolume, 1.0, accuracy: 1e-6)
         ud.removePersistentDomain(forName: suiteName)
@@ -430,17 +452,18 @@ final class SmartVolumeSettingsTests: XCTestCase {
         ud.removePersistentDomain(forName: suiteName)
     }
 
-    /// Verifies that reloadFromDefaults() uses K-weighted defaults (0.075 / 0.18) as fallback,
-    /// not the old plain-RMS values (0.05 / 0.12).  If a UserDefaults.didChangeNotification
-    /// fires before the keys are persisted, settings must not silently revert to the old scale.
-    func testReloadFromDefaultsUsesKWeightedFallback() async {
+    /// Verifies that reloadFromDefaults() uses perceived-loudness defaults (0.040 / 0.040)
+    /// as fallback, not old K-weighted or plain-RMS values.  If a
+    /// UserDefaults.didChangeNotification fires before the keys are persisted, settings
+    /// must not silently revert to an old scale.
+    func testReloadFromDefaultsUsesPerceivedLoudnessFallback() async {
         let suiteName = "smartVolumeTests.\(UUID().uuidString)"
         let ud = UserDefaults(suiteName: suiteName)!
         // Create fresh settings; keys are not yet written to this suite.
         let settings = SmartVolumeSettings(ud)
-        // Confirm fresh-init values are K-weighted defaults.
-        XCTAssertEqual(settings.targetRMS, 0.075, accuracy: 1e-5)
-        XCTAssertEqual(settings.speechTargetRMS, 0.18, accuracy: 1e-3)
+        // Confirm fresh-init values are perceived-loudness defaults.
+        XCTAssertEqual(settings.targetRMS, 0.040, accuracy: 1e-5)
+        XCTAssertEqual(settings.speechTargetRMS, 0.055, accuracy: 1e-5)
         // Remove any persisted keys so reload falls through to the fallback path.
         ud.removeObject(forKey: "smartVolume.targetRMS")
         ud.removeObject(forKey: "smartVolume.speechTargetRMS")
@@ -449,13 +472,34 @@ final class SmartVolumeSettingsTests: XCTestCase {
         NotificationCenter.default.post(name: UserDefaults.didChangeNotification, object: ud)
         await Task.yield()
         await Task.yield()
-        // Values must stay at K-weighted defaults, not revert to plain-RMS values.
+        // Values must stay at perceived-loudness defaults.
         XCTAssertEqual(
-            settings.targetRMS, 0.075, accuracy: 1e-5,
-            "reloadFromDefaults fallback must use K-weighted default, not old 0.05")
+            settings.targetRMS, 0.040, accuracy: 1e-5,
+            "reloadFromDefaults fallback must use perceived-loudness default 0.040")
         XCTAssertEqual(
-            settings.speechTargetRMS, 0.18, accuracy: 1e-3,
-            "reloadFromDefaults fallback must use K-weighted default, not old 0.12")
+            settings.speechTargetRMS, 0.055, accuracy: 1e-5,
+            "speechTargetRMS default must be 0.055 (higher than music 0.040 so speech mode differs)"
+        )
+        ud.removePersistentDomain(forName: suiteName)
+    }
+
+    /// Verify that upgrading from kweighted_perceived_v1 → v2 preserves user-calibrated
+    /// values (no reset), since both versions are in the same perceived-loudness scale.
+    func testMigrationPreservesPerceivedV1CalibratedValues() async {
+        let suiteName = "smartVolumeTests.\(UUID().uuidString)"
+        let ud = UserDefaults(suiteName: suiteName)!
+        // Simulate a user who carefully calibrated their values on v1.
+        ud.set(Float(0.065), forKey: "smartVolume.targetRMS")
+        ud.set(Float(0.055), forKey: "smartVolume.speechTargetRMS")
+        ud.set("kweighted_perceived_v1", forKey: "smartVolume.rmsVersion")
+        let settings = SmartVolumeSettings(ud)
+        // Values must be preserved — they're already in perceived-loudness scale.
+        XCTAssertEqual(settings.targetRMS, 0.065, accuracy: 1e-6)
+        XCTAssertEqual(settings.speechTargetRMS, 0.055, accuracy: 1e-6)
+        // Version tag must be bumped to current.
+        XCTAssertEqual(
+            ud.string(forKey: "smartVolume.rmsVersion"), "kweighted_perceived_v2",
+            "version must be updated to current even when values are preserved")
         ud.removePersistentDomain(forName: suiteName)
     }
 }

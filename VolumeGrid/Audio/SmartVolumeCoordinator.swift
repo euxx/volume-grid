@@ -163,6 +163,15 @@ final class SmartVolumeCoordinator: ObservableObject {
                 normalizer.strength = strength
             }
             .store(in: &cancellables)
+        // Keep normalizer in sync when speechTargetRMS changes while in speech mode.
+        settings.$speechTargetRMS
+            .dropFirst()
+            .sink { [weak self] speechTargetRMS in
+                guard let self, currentScene == "speech" else { return }
+                normalizer.targetRMS = speechTargetRMS
+                log.info("Speech targetRMS updated: \(speechTargetRMS)")
+            }
+            .store(in: &cancellables)
         // React to live isEnabled changes (e.g. via `defaults write`).
         // Note: rebuildTapIfRunning() also sets settings.isEnabled = false on failure,
         // which fires this subscriber — the guard conditions below make it a safe no-op.
@@ -313,16 +322,23 @@ final class SmartVolumeCoordinator: ObservableObject {
         musicConfidence = 0
     }
 
-    /// Set targetRMS to the current perceived loudness so the AGC maintains
-    /// the volume level the user currently considers comfortable.
+    /// Set targetRMS (or speechTargetRMS when in speech mode) to the current perceived
+    /// loudness so the AGC is satisfied at whatever volume the user has now.
     /// No-op if the tap is not running or no audio has been measured yet.
     func calibrateTargetRMS() {
-        // Use smoothedRMS (what the normalizer actually acts on) for stable calibration.
         guard isRunning, smoothedRMS > 1e-5 else { return }
         let perceived = smoothedRMS * Float(volumeMonitor.volumeScalar)
-        settings.targetRMS = max(0.01, min(0.30, perceived))
+        let clamped = max(0.01, min(0.30, perceived))
+        // Route to the active scene's target so Calibrate is always meaningful.
+        if currentScene == "speech" {
+            settings.speechTargetRMS = clamped
+        } else {
+            settings.targetRMS = clamped
+        }
+        // Update normalizer immediately (settings subscriber is async via Combine).
+        normalizer.targetRMS = clamped
         log.info(
-            "calibrateTargetRMS: smoothedRMS=\(self.smoothedRMS) vol=\(Float(self.volumeMonitor.volumeScalar)) → targetRMS=\(self.settings.targetRMS)"
+            "calibrateTargetRMS: scene=\(self.currentScene ?? "nil") smoothedRMS=\(self.smoothedRMS) vol=\(Float(self.volumeMonitor.volumeScalar)) → targetRMS=\(clamped)"
         )
     }
 
@@ -460,8 +476,12 @@ final class SmartVolumeCoordinator: ObservableObject {
             ? 1 - expf(-timerInterval / rmsRisingSeconds)  // fast: track rising loudness
             : 1 - expf(-timerInterval / rmsFallingSeconds)  // slow: hold during quiet spans
         smoothedRMS = rmsAlpha * rms + (1 - rmsAlpha) * smoothedRMS
-        let rawTarget = normalizer.targetRMS / smoothedRMS
-        guard let newVolume = normalizer.update(measuredRMS: smoothedRMS, dt: dt) else { return }
+        let currentVol = Float(volumeMonitor.volumeScalar)
+        let rawTarget = normalizer.targetRMS / (smoothedRMS * max(1e-5, currentVol))
+        guard
+            let newVolume = normalizer.update(
+                measuredRMS: smoothedRMS, currentVolume: currentVol, dt: dt)
+        else { return }
         lastMeasuredRMS = rms
         lastRawTarget = rawTarget
         log.debug(

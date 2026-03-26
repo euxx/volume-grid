@@ -43,6 +43,10 @@ struct SmartVolumeSettingsView: View {
                             in: 0...1
                         )
                     )
+                    if let coordinator {
+                        Divider()
+                        LiveVolumeIndicator(coordinator: coordinator)
+                    }
                 }
                 .padding(.vertical, 4)
             }
@@ -119,14 +123,9 @@ struct SmartVolumeSettingsView: View {
                             loudnessLabel(settings.speechTargetRMS)),
                         slider: Slider(value: $settings.speechTargetRMS, in: 0.01...0.30)
                     )
-                    sliderRow(
-                        label: "Max vol",
-                        valueText: "\(bars(settings.speechMaxVolume)) bars",
-                        slider: Slider(value: $settings.speechMaxVolume, in: 0...1)
-                    )
                     Text(
-                        "When speech is detected, these settings override Target Loudness. "
-                            + "A higher target and lower max prevent voices from pushing volume to 100%."
+                        "When speech is detected, this target overrides the general Target Loudness, "
+                            + "allowing the AGC to boost quiet voices without affecting music playback."
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -177,16 +176,36 @@ struct SmartVolumeSettingsView: View {
 
 /// Observe coordinator state so the button reflects live isRunning / lastMeasuredRMS changes.
 @MainActor
-private struct CalibrateButton: View {
+private struct LiveVolumeIndicator: View {
     @ObservedObject var coordinator: SmartVolumeCoordinator
 
     var body: some View {
         HStack {
+            Text("Current")
+                .frame(width: 60, alignment: .leading)
+            Spacer()
+            Text(
+                VolumeFormatter.formattedVolumeString(forScalar: CGFloat(coordinator.currentVolume))
+                    + " bars"
+            )
+            .frame(width: 90, alignment: .trailing)
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Observe coordinator state so the button reflects live isRunning / lastMeasuredRMS changes.
+@MainActor
+private struct CalibrateButton: View {
+    @ObservedObject var coordinator: SmartVolumeCoordinator
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
             Button("Calibrate to Current Loudness") {
                 coordinator.calibrateTargetRMS()
             }
             .disabled(!coordinator.isRunning || coordinator.lastMeasuredRMS == nil)
-            Spacer()
             Text(
                 coordinator.isRunning
                     ? "Sets target to what you're hearing now" : "Start Smart Volume first"

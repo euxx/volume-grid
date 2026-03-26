@@ -1,17 +1,20 @@
 import Cocoa
 
+enum VolumeKey {
+    case up, down, mute
+}
+
 @MainActor
 final class SystemEventMonitor {
     // Only mutated on MainActor (start/stop); read in deinit after last reference released
     private nonisolated(unsafe) var globalMonitor: Any?
     private nonisolated(unsafe) var localMonitor: Any?
+    // Deduplicates the global + local NSEvent callbacks that both fire for the same
+    // physical key press.  They share an identical event.timestamp, so filtering on
+    // (data1, timestamp) is exact — unlike an interval window that also swallows fast
+    // key-repeat events (which arrive every ~33 ms on key hold).
     private var lastEventData: Int?
-    private var lastEventTime: Date?
-    // Stage 1 debounce: global + local NSEvent monitors both fire for the same
-    // key press. This interval deduplicates them so each press is handled once.
-    // The 50 ms key-press debounce in VolumeMonitor (Stage 2) is shorter and
-    // always fires after this filter has already removed duplicates.
-    private let debounceInterval: TimeInterval = 0.1
+    private var lastEventTimestamp: TimeInterval?
 
     init() {}
 
@@ -29,7 +32,7 @@ final class SystemEventMonitor {
         }
     }
 
-    func start(handler: @escaping @MainActor () -> Void) {
+    func start(handler: @escaping @MainActor (VolumeKey) -> Void) {
         stop()
 
         // Global monitor fires on a background thread — dispatch to MainActor
@@ -53,7 +56,7 @@ final class SystemEventMonitor {
             globalMonitor = nil
             localMonitor = nil
             lastEventData = nil
-            lastEventTime = nil
+            lastEventTimestamp = nil
         }
 
         if let monitor = globalMonitor {
@@ -64,28 +67,27 @@ final class SystemEventMonitor {
         }
     }
 
-    private func process(event: NSEvent, handler: @escaping @MainActor () -> Void) {
+    private func process(event: NSEvent, handler: @escaping @MainActor (VolumeKey) -> Void) {
         guard event.subtype.rawValue == 8 else { return }
         let keyCode = (event.data1 & 0xFFFF_0000) >> 16
         let keyFlags = event.data1 & 0x0000_FFFF
         let keyState = (keyFlags & 0xFF00) >> 8
         guard keyState == 0xA else { return }
 
-        let now = Date()
-        if let last = lastEventData, last == event.data1, let lastTime = lastEventTime {
-            let timeSinceLastEvent = now.timeIntervalSince(lastTime)
-            if timeSinceLastEvent < debounceInterval {
-                return
-            }
+        // Deduplicate the global + local callbacks for the same physical event: they share
+        // an identical event.timestamp.  Key-repeat events arrive ~33 ms apart and therefore
+        // have a different timestamp, so they are correctly allowed through.
+        if event.data1 == lastEventData, event.timestamp == lastEventTimestamp {
+            return
         }
         lastEventData = event.data1
-        lastEventTime = now
+        lastEventTimestamp = event.timestamp
 
         switch keyCode & 0xFF {
-        case 0, 1, 7:
-            handler()
-        default:
-            break
+        case 0: handler(.up)  // NX_KEYTYPE_SOUND_UP
+        case 1: handler(.down)  // NX_KEYTYPE_SOUND_DOWN
+        case 7: handler(.mute)  // NX_KEYTYPE_MUTE
+        default: break
         }
     }
 }

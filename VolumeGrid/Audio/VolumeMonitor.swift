@@ -161,6 +161,8 @@ class VolumeMonitor: ObservableObject {
     private nonisolated let state = VolumeStateStore()
     private let systemEventMonitor = SystemEventMonitor()
     private nonisolated let hudEventSubject = PassthroughSubject<HUDEvent, Never>()
+    private let keyEventSubject = PassthroughSubject<VolumeKey, Never>()
+    var keyPressPublisher: AnyPublisher<VolumeKey, Never> { keyEventSubject.eraseToAnyPublisher() }
     private var volumeChangeDebounceTask: Task<Void, Never>?
     private var deviceChangeDebounceTask: Task<Void, Never>?
     private var keyPressDebounceTask: Task<Void, Never>?
@@ -575,14 +577,15 @@ class VolumeMonitor: ObservableObject {
         }
 
         // Key press handler: always show HUD when user presses volume/mute keys
-        systemEventMonitor.start { [weak self] in
+        systemEventMonitor.start { [weak self] key in
             guard let self else { return }
+            self.keyEventSubject.send(key)
 
             // Stage 2 debounce: the key press and CoreAudio volumeChanged callback
             // arrive nearly simultaneously. This 50 ms delay lets CoreAudio finish
             // processing so the HUD shows the final volume, not the pre-change value.
-            // Stage 1 (100 ms in SystemEventMonitor) has already deduplicated the
-            // global/local event pair before this point.
+            // Stage 1 (SystemEventMonitor) has already deduplicated the
+            // global/local event pair (same event.timestamp) before this point.
             self.keyPressDebounceTask?.cancel()
             let task = Task {
                 try? await Task.sleep(

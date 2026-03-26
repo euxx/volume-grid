@@ -79,16 +79,6 @@ final class SmartVolumeSettings: ObservableObject {
         }
     }
 
-    /// Volume ceiling applied in speech mode.  Prevents the AGC from pushing to 100%
-    /// just because a quiet voice is speaking.
-    @Published var speechMaxVolume: Float {
-        didSet {
-            let clamped = max(0, min(speechMaxVolume, 1))
-            if speechMaxVolume != clamped { speechMaxVolume = clamped }
-            writeIfNeeded(speechMaxVolume, forKey: Keys.speechMaxVolume)
-        }
-    }
-
     private enum Keys {
         static let isEnabled = "smartVolume.isEnabled"
         static let targetRMS = "smartVolume.targetRMS"
@@ -97,7 +87,6 @@ final class SmartVolumeSettings: ObservableObject {
         static let smoothing = "smartVolume.smoothing"
         static let strength = "smartVolume.strength"
         static let speechTargetRMS = "smartVolume.speechTargetRMS"
-        static let speechMaxVolume = "smartVolume.speechMaxVolume"
     }
 
     init(_ defaults: UserDefaults = .standard) {
@@ -135,11 +124,6 @@ final class SmartVolumeSettings: ObservableObject {
                 defaults.float(forKey: Keys.speechTargetRMS)
             } ?? 0.12
         speechTargetRMS = max(0.01, min(rawSpeechTargetRMS, 0.30))
-        let rawSpeechMaxVolume =
-            defaults.object(forKey: Keys.speechMaxVolume).map { _ in
-                defaults.float(forKey: Keys.speechMaxVolume)
-            } ?? 0.85
-        speechMaxVolume = max(0, min(rawSpeechMaxVolume, 1))
 
         // Watch for changes from external tools (e.g. `defaults write`) so the running
         // app picks them up immediately without a restart.
@@ -202,10 +186,5 @@ final class SmartVolumeSettings: ObservableObject {
         let newSpeechTarget = max(0.01, min(rawSpeechTarget, 0.30))
         if speechTargetRMS != newSpeechTarget { speechTargetRMS = newSpeechTarget }
 
-        let rawSpeechMax =
-            defaults.object(forKey: Keys.speechMaxVolume)
-            .map { _ in defaults.float(forKey: Keys.speechMaxVolume) } ?? 0.85
-        let newSpeechMax = max(0, min(rawSpeechMax, 1))
-        if speechMaxVolume != newSpeechMax { speechMaxVolume = newSpeechMax }
     }
 }

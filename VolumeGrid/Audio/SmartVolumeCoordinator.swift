@@ -4,6 +4,44 @@ import Dispatch
 import Foundation
 import os.log
 
+/// Pure description of the effect a single volume key press should have on the AGC settings.
+///
+/// - At ceiling (current ≥ activeMax − step/2): ceiling shifts; targetRMS unchanged.
+///   The AGC naturally tracks to the new ceiling because rawTarget (= targetRMS/smoothedRMS)
+///   already exceeds the old ceiling — simply raising the bound lets it through.
+/// - Mid-range: ceiling stays; targetRMS is recalibrated to match the user's intent.
+/// - `seedVolume`: volume passed to `LoudnessNormalizer.resetWith(currentVolume:)` so the
+///   AGC settles at the new intended level without a transient jump.
+struct VolumeKeyEffect {
+    let newMax: Float?  // nil = ceiling unchanged
+    let newTargetRMS: Float?  // nil = targetRMS unchanged
+    let seedVolume: Float  // always set; used to reseed normalizer
+
+    static func compute(
+        up: Bool,
+        currentVolume: Float,
+        activeMax: Float,
+        minVolume: Float,
+        smoothedRMS: Float
+    ) -> VolumeKeyEffect {
+        let step = 1.0 / Float(VolumeGridConstants.volumeBlocksCount)
+        if currentVolume >= activeMax - step / 2 {
+            // User is pinned at the ceiling — shift the ceiling only.
+            // targetRMS is left unchanged; the AGC will naturally track to the new ceiling.
+            let newMax = up ? min(1.0, activeMax + step) : max(minVolume, activeMax - step)
+            return .init(newMax: newMax, newTargetRMS: nil, seedVolume: newMax)
+        } else {
+            // User is in mid-range — recalibrate the AGC target, leave ceiling alone.
+            let desiredVolume =
+                up ? min(activeMax, currentVolume + step) : max(minVolume, currentVolume - step)
+            let newTargetRMS =
+                smoothedRMS > 1e-5
+                ? (smoothedRMS * desiredVolume).clamped(to: 0.01...0.30) : nil
+            return .init(newMax: nil, newTargetRMS: newTargetRMS, seedVolume: desiredVolume)
+        }
+    }
+}
+
 /// Coordinates AudioTapMonitor, LoudnessNormalizer, and VolumeMonitor to implement
 /// dynamic loudness normalisation.  Runs entirely on @MainActor except for the
 /// DispatchSourceTimer fire handler (nonisolated timerQueue).
@@ -20,6 +58,8 @@ final class SmartVolumeCoordinator: ObservableObject {
     /// Live confidence scores from SoundAnalysis; 0 when classifier is inactive.
     @Published private(set) var speechConfidence: Double = 0
     @Published private(set) var musicConfidence: Double = 0
+    /// Current system volume scalar (mirrors VolumeMonitor.volumeScalar for live UI updates).
+    @Published private(set) var currentVolume: Double = 0
 
     private let volumeMonitor: VolumeMonitor
     private let deviceManager = AudioDeviceManager()
@@ -65,11 +105,20 @@ final class SmartVolumeCoordinator: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     /// Tracks previous mute state to detect the unmute edge in handleAGC.
     private var wasMuted = false
+    /// Anticipated system volume after pending key presses, while CoreAudio has not yet
+    /// updated `volumeMonitor.volumeScalar` (~50 ms lag).  Cleared 200 ms after the last
+    /// key press so rapid successive presses accumulate correctly.
+    private var pendingVolumeBase: Float?
+    private var pendingVolumeTask: Task<Void, Never>?
 
     private let log = Logger(subsystem: "one.eux.volumegrid", category: "SmartVolume")
 
     init(volumeMonitor: VolumeMonitor) {
         self.volumeMonitor = volumeMonitor
+        // Mirror current system volume for live UI readout.
+        volumeMonitor.$volumeScalar
+            .map { Double($0) }
+            .assign(to: &$currentVolume)
         // Rebuild the tap whenever the default output device changes.
         volumeMonitor.$currentDevice
             .dropFirst()
@@ -83,9 +132,15 @@ final class SmartVolumeCoordinator: ObservableObject {
             .dropFirst()
             .sink { [weak self] targetRMS, minVolume, maxVolume in
                 guard let self else { return }
-                normalizer.targetRMS = targetRMS
                 normalizer.minVolumeScalar = minVolume
                 normalizer.maxVolumeScalar = maxVolume
+                // Only push targetRMS into the normalizer when speech mode is not active.
+                // In speech mode the coordinator holds normalizer.targetRMS = speechTargetRMS;
+                // overwriting it here (e.g. on a ceiling-press that changes maxVolume)
+                // would revert the normalizer to the wrong profile until scene detection fires.
+                if currentScene != "speech" {
+                    normalizer.targetRMS = targetRMS
+                }
                 log.info(
                     "Settings updated: targetRMS=\(targetRMS) min=\(minVolume) max=\(maxVolume)")
             }
@@ -205,6 +260,11 @@ final class SmartVolumeCoordinator: ObservableObject {
             log.error("start: SoundSceneClassifier setup failed: \(error)")
         }
 
+        // Volume key presses adjust the active Grid Range ceiling while Smart Volume is on.
+        volumeMonitor.keyPressPublisher
+            .sink { [weak self] key in self?.handleVolumeKey(key) }
+            .store(in: &classifierCancellables)
+
         let interval = Double(timerInterval)
         let timer = DispatchSource.makeTimerSource(queue: timerQueue)
         timer.schedule(deadline: .now() + interval, repeating: interval)
@@ -242,6 +302,9 @@ final class SmartVolumeCoordinator: ObservableObject {
         classifierCancellables.removeAll()
         normalizer.reset()
         smoothedRMS = 0.0
+        pendingVolumeTask?.cancel()
+        pendingVolumeTask = nil
+        pendingVolumeBase = nil
         isRunning = false
         lastMeasuredRMS = nil
         lastRawTarget = nil
@@ -261,6 +324,86 @@ final class SmartVolumeCoordinator: ObservableObject {
         log.info(
             "calibrateTargetRMS: smoothedRMS=\(self.smoothedRMS) vol=\(Float(self.volumeMonitor.volumeScalar)) → targetRMS=\(self.settings.targetRMS)"
         )
+    }
+
+    // MARK: - Volume key handling
+
+    private func handleVolumeKey(_ key: VolumeKey) {
+        guard isRunning else {
+            log.debug("volumeKey dropped: Smart Volume not running")
+            return
+        }
+        switch key {
+        case .up:
+            // Ignore volume keys while muted: volumeScalar is 0 during mute, which would
+            // drive AGC calibration from a meaningless base.  macOS handles the unmute +
+            // volume change itself; the AGC reseeds on the unmute edge in handleAGC().
+            guard !volumeMonitor.isMuted else { return }
+            adjustVolume(up: true)
+        case .down:
+            guard !volumeMonitor.isMuted else { return }
+            adjustVolume(up: false)
+        case .mute:
+            // Mute is handled by VolumeMonitor's HUD path; no AGC action needed.
+            break
+        }
+    }
+
+    /// Shift the active Grid Range ceiling or recalibrate the AGC target by one grid step.
+    ///
+    /// At ceiling (current ≈ activeMax):
+    ///   - up: raise ceiling (user needs more headroom)
+    ///   - down: lower ceiling (user thinks the ceiling is too high)
+    ///
+    /// Mid-range (current well below ceiling):
+    ///   - Ceiling stays; adjust targetRMS so the AGC holds the new level.
+    private func adjustVolume(up: Bool) {
+        let inSpeech = currentScene == "speech"
+        let activeMax = settings.maxVolume
+        // Use pendingVolumeBase while CoreAudio hasn't yet reflected the last key press
+        // (~50 ms lag), so rapid successive presses accumulate correctly.
+        let current = pendingVolumeBase ?? Float(volumeMonitor.volumeScalar)
+        let effect = VolumeKeyEffect.compute(
+            up: up, currentVolume: current, activeMax: activeMax,
+            minVolume: settings.minVolume, smoothedRMS: smoothedRMS)
+
+        // Remember where the user is heading; cleared once CoreAudio settles (~200 ms).
+        pendingVolumeBase = effect.seedVolume
+        pendingVolumeTask?.cancel()
+        // `try?` discards the CancellationError from Task.sleep; `guard !isCancelled`
+        // then exits early so a cancelled (superseded) task never clears pendingVolumeBase.
+        pendingVolumeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled else { return }
+            self?.pendingVolumeBase = nil
+        }
+
+        if let newMax = effect.newMax {
+            settings.maxVolume = newMax
+            normalizer.maxVolumeScalar = newMax
+            log.info(
+                "volumeKey \(up ? "up" : "down") at ceiling: vol=\(current) newMax=\(newMax)"
+            )
+        } else {
+            log.info(
+                "volumeKey \(up ? "up" : "down") mid-range: vol=\(current) activeMax=\(activeMax) smoothedRMS=\(self.smoothedRMS) seed=\(effect.seedVolume)"
+            )
+        }
+        if let newTargetRMS = effect.newTargetRMS {
+            if inSpeech {
+                settings.speechTargetRMS = newTargetRMS
+            } else {
+                settings.targetRMS = newTargetRMS
+            }
+            normalizer.targetRMS = newTargetRMS
+            log.info("volumeKey targetRMS → \(newTargetRMS)")
+        } else {
+            log.debug(
+                "volumeKey targetRMS unchanged: smoothedRMS=\(self.smoothedRMS) below noise floor or at ceiling"
+            )
+        }
+        // Reseed normalizer so the system volume settles at the intended level immediately.
+        normalizer.resetWith(currentVolume: effect.seedVolume)
     }
 
     func rebuildTapIfRunning() {
@@ -283,9 +426,9 @@ final class SmartVolumeCoordinator: ObservableObject {
         switch scene {
         case .speech:
             normalizer.targetRMS = settings.speechTargetRMS
-            normalizer.maxVolumeScalar = settings.speechMaxVolume
+            normalizer.maxVolumeScalar = settings.maxVolume
             log.info(
-                "Scene → speech: targetRMS=\(self.settings.speechTargetRMS) maxVol=\(self.settings.speechMaxVolume)"
+                "Scene → speech: targetRMS=\(self.settings.speechTargetRMS) maxVol=\(self.settings.maxVolume)"
             )
         case .music, .ambient:
             normalizer.targetRMS = settings.targetRMS

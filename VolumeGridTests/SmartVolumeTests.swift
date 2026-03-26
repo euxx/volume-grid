@@ -550,3 +550,124 @@ final class AudioTapMonitorRMSTests: XCTestCase {
             monitor.drainMetrics(), "drainMetrics() must return nil before any IO callback fires")
     }
 }
+
+// MARK: - VolumeKeyEffect tests
+
+@MainActor
+final class VolumeKeyEffectTests: XCTestCase {
+    private let step = Float(1.0) / Float(VolumeGridConstants.volumeBlocksCount)
+
+    // MARK: - At ceiling
+
+    func testAtCeilingUpRaisesCeiling() {
+        let effect = VolumeKeyEffect.compute(
+            up: true, currentVolume: 0.5, activeMax: 0.5, minVolume: 0.1, smoothedRMS: 0.05)
+        XCTAssertEqual(effect.newMax ?? 0, 0.5 + step, accuracy: 1e-5)
+        XCTAssertNil(effect.newTargetRMS, "at ceiling: targetRMS must not change")
+        XCTAssertEqual(effect.seedVolume, 0.5 + step, accuracy: 1e-5)
+    }
+
+    func testAtCeilingDownLowersCeiling() {
+        let effect = VolumeKeyEffect.compute(
+            up: false, currentVolume: 0.5, activeMax: 0.5, minVolume: 0.1, smoothedRMS: 0.05)
+        XCTAssertEqual(effect.newMax ?? 0, 0.5 - step, accuracy: 1e-5)
+        XCTAssertNil(effect.newTargetRMS, "at ceiling: targetRMS must not change")
+        XCTAssertEqual(effect.seedVolume, 0.5 - step, accuracy: 1e-5)
+    }
+
+    func testAtCeilingUpClampedAtOne() {
+        let effect = VolumeKeyEffect.compute(
+            up: true, currentVolume: 1.0, activeMax: 1.0, minVolume: 0.1, smoothedRMS: 0.05)
+        XCTAssertEqual(effect.newMax ?? 0, 1.0, accuracy: 1e-5, "ceiling must not exceed 1.0")
+        XCTAssertEqual(effect.seedVolume, 1.0, accuracy: 1e-5)
+    }
+
+    func testAtCeilingDownClampedAtMinVolume() {
+        let effect = VolumeKeyEffect.compute(
+            up: false, currentVolume: 0.1, activeMax: 0.1, minVolume: 0.1, smoothedRMS: 0.05)
+        XCTAssertEqual(
+            effect.newMax ?? 0, 0.1, accuracy: 1e-5, "ceiling must not fall below minVolume")
+        XCTAssertEqual(effect.seedVolume, 0.1, accuracy: 1e-5)
+    }
+
+    // MARK: - Mid-range
+
+    func testBelowCeilingUpKeepsCeilingAdjustsTargetRMS() {
+        // vol=0.3 is well below ceiling=0.5: ceiling must stay, targetRMS recalibrated upward.
+        // desiredVolume = min(0.5, 0.3 + step) = 0.3625
+        // newTargetRMS  = (0.05 * 0.3625).clamped(to: 0.01...0.30) = 0.018125
+        let desiredVolume = min(0.5, 0.3 + step)
+        let effect = VolumeKeyEffect.compute(
+            up: true, currentVolume: 0.3, activeMax: 0.5, minVolume: 0.1, smoothedRMS: 0.05)
+        XCTAssertNil(effect.newMax, "ceiling must not change when vol is below ceiling")
+        XCTAssertEqual(effect.newTargetRMS ?? 0, 0.05 * desiredVolume, accuracy: 1e-5)
+        XCTAssertEqual(effect.seedVolume, desiredVolume, accuracy: 1e-5)
+    }
+
+    func testBelowCeilingDownKeepsCeilingAdjustsTargetRMS() {
+        // desiredVolume = max(0.1, 0.3 - step) = 0.2375
+        // newTargetRMS  = (0.05 * 0.2375).clamped(to: 0.01...0.30) = 0.011875
+        let desiredVolume = max(0.1, 0.3 - step)
+        let effect = VolumeKeyEffect.compute(
+            up: false, currentVolume: 0.3, activeMax: 0.5, minVolume: 0.1, smoothedRMS: 0.05)
+        XCTAssertNil(effect.newMax, "ceiling must not change when vol is below ceiling")
+        XCTAssertEqual(effect.newTargetRMS ?? 0, 0.05 * desiredVolume, accuracy: 1e-5)
+        XCTAssertEqual(effect.seedVolume, desiredVolume, accuracy: 1e-5)
+    }
+
+    // MARK: - targetRMS clamp boundaries
+
+    func testTargetRMS_clampedToUpperBound() {
+        // smoothedRMS=0.5, desiredVolume ≈ 0.8625 → product 0.43125 must clamp to 0.30.
+        let effect = VolumeKeyEffect.compute(
+            up: true, currentVolume: 0.8, activeMax: 0.9, minVolume: 0.1, smoothedRMS: 0.5)
+        XCTAssertNil(effect.newMax)
+        XCTAssertEqual(
+            effect.newTargetRMS ?? 0, 0.30, accuracy: 1e-5, "must clamp to 0.30 upper bound")
+    }
+
+    func testTargetRMS_clampedToLowerBound() {
+        // smoothedRMS=0.05, desiredVolume=0.1 (at floor) → product 0.005 must clamp to 0.01.
+        let effect = VolumeKeyEffect.compute(
+            up: false, currentVolume: 0.15, activeMax: 0.5, minVolume: 0.1, smoothedRMS: 0.05)
+        XCTAssertNil(effect.newMax)
+        XCTAssertEqual(
+            effect.newTargetRMS ?? 0, 0.01, accuracy: 1e-5, "must clamp to 0.01 lower bound")
+    }
+
+    // MARK: - desiredVolume boundary clamping
+
+    func testMidRangeUp_desiredVolumeClampedToActiveMax() {
+        // vol=0.44 < ceiling-step/2=0.469, but vol+step=0.503 > ceiling=0.5.
+        // desiredVolume must be clamped to activeMax.
+        let effect = VolumeKeyEffect.compute(
+            up: true, currentVolume: 0.44, activeMax: 0.5, minVolume: 0.1, smoothedRMS: 0.05)
+        XCTAssertNil(effect.newMax, "ceiling must not change")
+        XCTAssertEqual(effect.seedVolume, 0.5, accuracy: 1e-5, "desiredVolume clamped to activeMax")
+    }
+
+    func testMidRangeDown_desiredVolumeClampedToMinVolume() {
+        // vol=0.15, down: vol-step=0.0875 < minVolume=0.1 → must clamp to 0.1.
+        let effect = VolumeKeyEffect.compute(
+            up: false, currentVolume: 0.15, activeMax: 0.5, minVolume: 0.1, smoothedRMS: 0.05)
+        XCTAssertNil(effect.newMax, "ceiling must not change")
+        XCTAssertEqual(effect.seedVolume, 0.1, accuracy: 1e-5, "desiredVolume clamped to minVolume")
+    }
+
+    // MARK: - Silent content
+
+    func testSilentContent_AtCeiling_CeilingChangesButNoTargetRMS() {
+        // At ceiling, targetRMS is never changed regardless of smoothedRMS.
+        let effect = VolumeKeyEffect.compute(
+            up: true, currentVolume: 0.5, activeMax: 0.5, minVolume: 0.1, smoothedRMS: 0.0)
+        XCTAssertEqual(effect.newMax ?? 0, 0.5 + step, accuracy: 1e-5)
+        XCTAssertNil(effect.newTargetRMS, "at ceiling: targetRMS never changes")
+    }
+
+    func testSilentContent_MidRange_NoChanges() {
+        let effect = VolumeKeyEffect.compute(
+            up: true, currentVolume: 0.3, activeMax: 0.5, minVolume: 0.1, smoothedRMS: 0.0)
+        XCTAssertNil(effect.newMax, "ceiling unchanged mid-range")
+        XCTAssertNil(effect.newTargetRMS, "targetRMS unchanged with no audio")
+    }
+}

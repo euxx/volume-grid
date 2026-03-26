@@ -502,6 +502,96 @@ final class SmartVolumeSettingsTests: XCTestCase {
             "version must be updated to current even when values are preserved")
         ud.removePersistentDomain(forName: suiteName)
     }
+
+    // MARK: - Per-device calibration
+
+    func testSaveCalibrationPersistsToUserDefaults() {
+        let suiteName = "smartVolumeTests.\(UUID().uuidString)"
+        let ud = UserDefaults(suiteName: suiteName)!
+        let settings = SmartVolumeSettings(ud)
+        let uid = "BuiltInSpeakerDevice"
+        let cal = SmartVolumeSettings.DeviceCalibration(targetRMS: 0.045, speechTargetRMS: 0.060)
+        settings.saveCalibration(cal, forDeviceUID: uid)
+
+        // Value must be readable back via calibration(forDeviceUID:).
+        guard let loaded = settings.calibration(forDeviceUID: uid) else {
+            return XCTFail("expected non-nil calibration after save")
+        }
+        XCTAssertEqual(loaded.targetRMS, Float(0.045), accuracy: Float(1e-6))
+        XCTAssertEqual(loaded.speechTargetRMS, Float(0.060), accuracy: Float(1e-6))
+
+        // A second SmartVolumeSettings instance (simulating app relaunch) must also see
+        // the persisted calibration from UserDefaults.
+        let settings2 = SmartVolumeSettings(ud)
+        guard let reloaded = settings2.calibration(forDeviceUID: uid) else {
+            return XCTFail("calibration must survive round-trip through UserDefaults")
+        }
+        XCTAssertEqual(reloaded.targetRMS, Float(0.045), accuracy: Float(1e-6))
+        ud.removePersistentDomain(forName: suiteName)
+    }
+
+    func testCalibrationForUnknownDeviceReturnsNil() {
+        let suiteName = "smartVolumeTests.\(UUID().uuidString)"
+        let ud = UserDefaults(suiteName: suiteName)!
+        let settings = SmartVolumeSettings(ud)
+        XCTAssertNil(settings.calibration(forDeviceUID: "NoSuchDevice-XYZ"))
+        ud.removePersistentDomain(forName: suiteName)
+    }
+
+    func testMultipleDevicesCalibratedIndependently() {
+        let suiteName = "smartVolumeTests.\(UUID().uuidString)"
+        let ud = UserDefaults(suiteName: suiteName)!
+        let settings = SmartVolumeSettings(ud)
+        settings.saveCalibration(
+            SmartVolumeSettings.DeviceCalibration(targetRMS: 0.030, speechTargetRMS: 0.040),
+            forDeviceUID: "HeadphonesUID"
+        )
+        settings.saveCalibration(
+            SmartVolumeSettings.DeviceCalibration(targetRMS: 0.080, speechTargetRMS: 0.100),
+            forDeviceUID: "ExternalSpeakerUID"
+        )
+        XCTAssertEqual(
+            settings.calibration(forDeviceUID: "HeadphonesUID")?.targetRMS ?? -1, Float(0.030),
+            accuracy: Float(1e-6))
+        XCTAssertEqual(
+            settings.calibration(forDeviceUID: "ExternalSpeakerUID")?.targetRMS ?? -1,
+            Float(0.080), accuracy: Float(1e-6))
+        ud.removePersistentDomain(forName: suiteName)
+    }
+
+    /// Regression guard: saveCalibration must persist both targetRMS *and* speechTargetRMS
+    /// independently so a speech calibration on one device does not clobber its music target.
+    func testSpeechCalibrationPreservesMusicTarget() {
+        let suiteName = "smartVolumeTests.\(UUID().uuidString)"
+        let ud = UserDefaults(suiteName: suiteName)!
+        let settings = SmartVolumeSettings(ud)
+        let uid = "BuiltInSpeakerDevice"
+
+        // Simulate Calibrate while playing music → saves a music target.
+        settings.saveCalibration(
+            SmartVolumeSettings.DeviceCalibration(targetRMS: 0.035, speechTargetRMS: 0.055),
+            forDeviceUID: uid)
+
+        // Now simulate Calibrate while in speech mode → only speechTargetRMS should change.
+        // (Mirrors what SmartVolumeCoordinator.calibrateTargetRMS() does.)
+        let existingCal = settings.calibration(forDeviceUID: uid)
+        let newCal = SmartVolumeSettings.DeviceCalibration(
+            targetRMS: existingCal?.targetRMS ?? settings.targetRMS,
+            speechTargetRMS: 0.070
+        )
+        settings.saveCalibration(newCal, forDeviceUID: uid)
+
+        guard let reloaded = settings.calibration(forDeviceUID: uid) else {
+            return XCTFail("calibration must exist after double save")
+        }
+        // Music target must be unchanged.
+        XCTAssertEqual(
+            reloaded.targetRMS, Float(0.035), accuracy: Float(1e-6),
+            "music calibration must survive a speech re-calibration on the same device")
+        // Speech target must reflect the new value.
+        XCTAssertEqual(reloaded.speechTargetRMS, Float(0.070), accuracy: Float(1e-6))
+        ud.removePersistentDomain(forName: suiteName)
+    }
 }
 
 // MARK: - AudioTapMonitor RMS tests

@@ -79,6 +79,33 @@ final class SmartVolumeSettings: ObservableObject {
         }
     }
 
+    // MARK: - Per-device calibration
+
+    /// Stores a `targetRMS`/`speechTargetRMS` pair calibrated on a specific output device.
+    /// Keyed by the device UID returned by CoreAudio.  When Smart Volume starts or the
+    /// output device changes, the coordinator loads the matching entry so the AGC
+    /// immediately uses the previously calibrated loudness target for that device.
+    struct DeviceCalibration: Codable, Equatable {
+        var targetRMS: Float
+        var speechTargetRMS: Float
+    }
+
+    /// Per-device calibration map.  Not `@Published` — changes are made via
+    /// `saveCalibration(for:)` which writes to UserDefaults directly.
+    private(set) var deviceCalibrations: [String: DeviceCalibration] = [:]
+
+    /// Save a calibration entry for the given device UID and persist to UserDefaults.
+    func saveCalibration(_ cal: DeviceCalibration, forDeviceUID uid: String) {
+        deviceCalibrations[uid] = cal
+        guard let data = try? JSONEncoder().encode(deviceCalibrations) else { return }
+        defaults.set(data, forKey: Keys.deviceCalibrations)
+    }
+
+    /// Return the stored calibration for a device UID, or `nil` if none exists.
+    func calibration(forDeviceUID uid: String) -> DeviceCalibration? {
+        deviceCalibrations[uid]
+    }
+
     private enum Keys {
         static let isEnabled = "smartVolume.isEnabled"
         static let targetRMS = "smartVolume.targetRMS"
@@ -87,6 +114,7 @@ final class SmartVolumeSettings: ObservableObject {
         static let smoothing = "smartVolume.smoothing"
         static let strength = "smartVolume.strength"
         static let speechTargetRMS = "smartVolume.speechTargetRMS"
+        static let deviceCalibrations = "smartVolume.deviceCalibrations"
         // Written once when K-weighted measurement is first used; guards against
         // applying the migration factor more than once on subsequent launches.
         static let rmsVersion = "smartVolume.rmsVersion"
@@ -98,6 +126,12 @@ final class SmartVolumeSettings: ObservableObject {
 
     init(_ defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        if let data = defaults.data(forKey: Keys.deviceCalibrations),
+            let decoded = try? JSONDecoder().decode(
+                [String: DeviceCalibration].self, from: data)
+        {
+            deviceCalibrations = decoded
+        }
         isEnabled = defaults.object(forKey: Keys.isEnabled) as? Bool ?? false
         targetRMS =
             defaults.object(forKey: Keys.targetRMS).map { _ in
@@ -209,6 +243,16 @@ final class SmartVolumeSettings: ObservableObject {
             .map { _ in defaults.float(forKey: Keys.speechTargetRMS) } ?? 0.055
         let newSpeechTarget = max(0.01, min(rawSpeechTarget, 0.30))
         if speechTargetRMS != newSpeechTarget { speechTargetRMS = newSpeechTarget }
+
+        if let data = defaults.data(forKey: Keys.deviceCalibrations),
+            let decoded = try? JSONDecoder().decode(
+                [String: DeviceCalibration].self, from: data)
+        {
+            deviceCalibrations = decoded
+        } else {
+            // Key was removed or corrupted externally — clear stale in-memory entries.
+            deviceCalibrations = [:]
+        }
 
     }
 }

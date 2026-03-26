@@ -105,6 +105,17 @@ final class SmartVolumeCoordinator: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     /// Tracks previous mute state to detect the unmute edge in handleAGC.
     private var wasMuted = false
+    /// UID of the CoreAudio device the current tap is attached to.
+    /// Stored so `calibrateTargetRMS()` can save the calibration to the right device entry.
+    private var currentDeviceUID: String?
+    /// Session-live AGC target for music/ambient content.
+    /// Initialised from the per-device stored calibration on `start()` (falling back to
+    /// `settings.targetRMS`), then kept in sync by the `$targetRMS` subscriber so key
+    /// presses and slider adjustments take immediate effect.
+    /// `applySceneProfile` uses this to restore the correct target when leaving speech mode.
+    private var activeMusicTargetRMS: Float = 0.040
+    /// Session-live AGC target for speech content (analogous to `activeMusicTargetRMS`).
+    private var activeSpeechTargetRMS: Float = 0.055
     /// Anticipated system volume after pending key presses, while CoreAudio has not yet
     /// updated `volumeMonitor.volumeScalar` (~50 ms lag).  Cleared 200 ms after the last
     /// key press so rapid successive presses accumulate correctly.
@@ -141,6 +152,10 @@ final class SmartVolumeCoordinator: ObservableObject {
                 if currentScene != "speech" {
                     normalizer.targetRMS = targetRMS
                 }
+                // Keep session-live music target in sync so scene transitions and
+                // calibrateTargetRMS() always use the most recent user-set value,
+                // not a snapshot from the previous start().
+                activeMusicTargetRMS = targetRMS
                 log.info(
                     "Settings updated: targetRMS=\(targetRMS) min=\(minVolume) max=\(maxVolume)")
             }
@@ -167,7 +182,10 @@ final class SmartVolumeCoordinator: ObservableObject {
         settings.$speechTargetRMS
             .dropFirst()
             .sink { [weak self] speechTargetRMS in
-                guard let self, currentScene == "speech" else { return }
+                guard let self else { return }
+                // Always keep session-live speech target in sync.
+                activeSpeechTargetRMS = speechTargetRMS
+                guard currentScene == "speech" else { return }
                 normalizer.targetRMS = speechTargetRMS
                 log.info("Speech targetRMS updated: \(speechTargetRMS)")
             }
@@ -220,13 +238,23 @@ final class SmartVolumeCoordinator: ObservableObject {
 
         normalizer.maxVolumeScalar = settings.maxVolume
         normalizer.minVolumeScalar = settings.minVolume
-        normalizer.targetRMS = settings.targetRMS
+        // Use per-device calibration when available; fall back to global settings.
+        let cal = settings.calibration(forDeviceUID: uid)
+        activeMusicTargetRMS = cal?.targetRMS ?? settings.targetRMS
+        activeSpeechTargetRMS = cal?.speechTargetRMS ?? settings.speechTargetRMS
+        normalizer.targetRMS = activeMusicTargetRMS
+        if let cal {
+            log.info(
+                "start: loaded device calibration for \(uid): targetRMS=\(cal.targetRMS) speechTargetRMS=\(cal.speechTargetRMS)"
+            )
+        }
         normalizer.attackSeconds = settings.attackSeconds
         normalizer.releaseSeconds = settings.releaseSeconds
         normalizer.strength = settings.strength
         // Seed the IIR from the current volume so the first AGC step is a smooth nudge,
         // not a sudden jump to the computed target.
         normalizer.resetWith(currentVolume: Float(volumeMonitor.volumeScalar))
+        currentDeviceUID = uid
 
         let monitor = AudioTapMonitor()
         do {
@@ -320,6 +348,7 @@ final class SmartVolumeCoordinator: ObservableObject {
         currentScene = nil
         speechConfidence = 0
         musicConfidence = 0
+        currentDeviceUID = nil
     }
 
     /// Set targetRMS (or speechTargetRMS when in speech mode) to the current perceived
@@ -332,11 +361,27 @@ final class SmartVolumeCoordinator: ObservableObject {
         // Route to the active scene's target so Calibrate is always meaningful.
         if currentScene == "speech" {
             settings.speechTargetRMS = clamped
+            activeSpeechTargetRMS = clamped
         } else {
             settings.targetRMS = clamped
+            activeMusicTargetRMS = clamped
         }
         // Update normalizer immediately (settings subscriber is async via Combine).
         normalizer.targetRMS = clamped
+        // Persist calibration to the current device profile so switching back to this
+        // device later restores the calibrated level immediately.
+        // Both session-live targets are saved so a speech calibration does not clobber
+        // the device's music target and vice versa.
+        if let uid = currentDeviceUID {
+            settings.saveCalibration(
+                SmartVolumeSettings.DeviceCalibration(
+                    targetRMS: activeMusicTargetRMS,
+                    speechTargetRMS: activeSpeechTargetRMS
+                ),
+                forDeviceUID: uid
+            )
+            log.info("calibrateTargetRMS: saved profile for device \(uid)")
+        }
         log.info(
             "calibrateTargetRMS: scene=\(self.currentScene ?? "nil") smoothedRMS=\(self.smoothedRMS) vol=\(Float(self.volumeMonitor.volumeScalar)) → targetRMS=\(clamped)"
         )
@@ -441,16 +486,20 @@ final class SmartVolumeCoordinator: ObservableObject {
         currentScene = scene.description
         switch scene {
         case .speech:
-            normalizer.targetRMS = settings.speechTargetRMS
+            // Use session-live speech target (initialised from device cal on start()).
+            let speechTarget = self.activeSpeechTargetRMS
+            normalizer.targetRMS = speechTarget
             normalizer.maxVolumeScalar = settings.maxVolume
             log.info(
-                "Scene → speech: targetRMS=\(self.settings.speechTargetRMS) maxVol=\(self.settings.maxVolume)"
+                "Scene → speech: targetRMS=\(speechTarget) maxVol=\(self.settings.maxVolume)"
             )
         case .music, .ambient:
-            normalizer.targetRMS = settings.targetRMS
+            // Use session-live music target (initialised from device cal on start()).
+            let musicTarget = self.activeMusicTargetRMS
+            normalizer.targetRMS = musicTarget
             normalizer.maxVolumeScalar = settings.maxVolume
             log.info(
-                "Scene → \(scene): targetRMS=\(self.settings.targetRMS) maxVol=\(self.settings.maxVolume)"
+                "Scene → \(scene): targetRMS=\(musicTarget) maxVol=\(self.settings.maxVolume)"
             )
         }
     }

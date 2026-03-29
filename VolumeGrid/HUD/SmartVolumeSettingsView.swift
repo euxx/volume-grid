@@ -77,8 +77,8 @@ struct SmartVolumeSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .lineLimit(nil)
                     if let coordinator {
-                        if coordinator.isRunning {
-                            SceneIndicator(coordinator: coordinator)
+                        if #available(macOS 14.2, *) {
+                            ClassificationsView(coordinator: coordinator)
                         }
                         CalibrateButton(coordinator: coordinator)
                     }
@@ -203,45 +203,56 @@ private struct CalibrateButton: View {
     }
 }
 
-/// Shows the scene currently detected by SoundAnalysis.
+/// Displays the top sound categories currently detected by SoundAnalysis.
+@available(macOS 14.2, *)
 @MainActor
-private struct SceneIndicator: View {
+private struct ClassificationsView: View {
     @ObservedObject var coordinator: SmartVolumeCoordinator
 
     var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(dotColor)
-                .frame(width: 8, height: 8)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
+        VStack(alignment: .leading, spacing: 4) {
+            if !coordinator.isRunning {
+                Text("Start Smart Volume to enable detection")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if coordinator.topClassifications.isEmpty {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.secondary)
+                        .frame(width: 8, height: 8)
+                    Text("Detecting…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ForEach(coordinator.topClassifications.prefix(5)) { item in
+                    HStack(spacing: 6) {
+                        Text(
+                            item.identifier
+                                .replacingOccurrences(of: "_", with: " ")
+                                .capitalized
+                        )
+                        .font(.caption)
+                        .frame(minWidth: 90, alignment: .leading)
+                        GeometryReader { geo in
+                            Capsule()
+                                .fill(barColor(item.confidence))
+                                .frame(width: max(4, geo.size.width * CGFloat(item.confidence)))
+                        }
+                        .frame(height: 6)
+                        .background(.secondary.opacity(0.15))
+                        .clipShape(Capsule())
+                        Text(String(format: "%d%%", Int(item.confidence * 100)))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(width: 28, alignment: .trailing)
+                    }
+                }
+            }
         }
     }
 
-    private var label: String {
-        guard coordinator.isRunning else { return "Start Smart Volume to enable detection" }
-        guard let scene = coordinator.currentScene else {
-            return "Detecting scene…"
-        }
-        let spPct = Int(coordinator.speechConfidence * 100)
-        let muPct = Int(coordinator.musicConfidence * 100)
-        switch scene {
-        case "speech": return "Speech detected (\(spPct)%) — informational"
-        case "music": return "Music detected (\(muPct)%) — informational"
-        default: return "Ambient (speech \(spPct)%, music \(muPct)%)"
-        }
-    }
-
-    private var dotColor: Color {
-        guard coordinator.isRunning, let scene = coordinator.currentScene else {
-            return .secondary
-        }
-        switch scene {
-        case "speech": return .blue
-        case "music": return .green
-        default: return .secondary
-        }
+    private func barColor(_ confidence: Double) -> Color {
+        confidence > 0.6 ? .blue : .secondary
     }
 }

@@ -52,6 +52,8 @@ final class SmartVolumeCoordinator: ObservableObject {
     /// Live confidence scores from SoundAnalysis; 0 when classifier is inactive.
     @Published private(set) var speechConfidence: Double = 0
     @Published private(set) var musicConfidence: Double = 0
+    @Published private(set) var silenceConfidence: Double = 0
+    @Published private(set) var topClassifications: [TopClassification] = []
     /// Current system volume scalar (mirrors VolumeMonitor.volumeScalar for live UI updates).
     @Published private(set) var currentVolume: Double = 0
 
@@ -275,6 +277,12 @@ final class SmartVolumeCoordinator: ObservableObject {
             classif.$musicConfidence
                 .sink { [weak self] v in self?.musicConfidence = v }
                 .store(in: &classifierCancellables)
+            classif.$silenceConfidence
+                .sink { [weak self] v in self?.silenceConfidence = v }
+                .store(in: &classifierCancellables)
+            classif.$topClassifications
+                .sink { [weak self] v in self?.topClassifications = v }
+                .store(in: &classifierCancellables)
         } catch {
             log.error("start: SoundSceneClassifier setup failed: \(error)")
         }
@@ -333,6 +341,8 @@ final class SmartVolumeCoordinator: ObservableObject {
         currentScene = nil
         speechConfidence = 0
         musicConfidence = 0
+        silenceConfidence = 0
+        topClassifications = []
         currentDeviceUID = nil
         // Reset active zone to reflect global settings (no device running).
         activeTargetRMSLow = settings.targetRMSLow
@@ -499,6 +509,17 @@ final class SmartVolumeCoordinator: ObservableObject {
             lastMeasuredRMS = smoothedRMS  // hold window: keep display stable
         } else {
             lastMeasuredRMS = nil  // hold expired — genuine silence
+        }
+        // During detected silence, if the signal is below the comfort floor, call
+        // silenceTick() instead of update().  This:
+        //   1. Anchors smoothedTargetVolume to the current volume so the IIR cannot
+        //      accumulate a pending "raise" that fires as a jump when content resumes.
+        //   2. Advances holdCountdown so hold expires in real wall-clock time rather than
+        //      only during content — preserving hold protection across brief gaps.
+        let perceivedRMS = smoothedRMS * max(1e-5, currentVol)
+        if silenceConfidence > 0.5, perceivedRMS < normalizer.targetRMSLow {
+            normalizer.silenceTick(currentVolume: currentVol, dt: dt)
+            return
         }
         if let newVolume = normalizer.update(
             measuredRMS: smoothedRMS, currentVolume: currentVol, dt: dt)

@@ -125,6 +125,18 @@ struct LoudnessNormalizer {
         initialized = true
     }
 
+    /// Called each tick that the AGC is bypassed due to externally classified silence.
+    ///
+    /// Anchors `smoothedTargetVolume` to `currentVolume` to prevent the IIR from drifting
+    /// toward a large raise while no volume change is applied.  Simultaneously advances
+    /// `holdCountdown` so it expires with real wall-clock time rather than only during
+    /// content — without this, hold would freeze indefinitely across a long silence gap,
+    /// delaying the raise that should follow when quiet content resumes.
+    mutating func silenceTick(currentVolume: Float, dt: Float) {
+        smoothedTargetVolume = currentVolume
+        if holdCountdown > 0 { holdCountdown = max(0, holdCountdown - dt) }
+    }
+
     /// Disable AGC until the next `resetWith` call. Used when the tap is stopped.
     mutating func reset() {
         initialized = false

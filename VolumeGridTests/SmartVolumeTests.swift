@@ -370,6 +370,60 @@ final class LoudnessNormalizerTests: XCTestCase {
         XCTAssertGreaterThan(
             result, 0.5, "AGC should raise volume when signal is below the low bound")
     }
+
+    // Regression: SmartVolumeCoordinator calls silenceTick() each silence tick instead of
+    // update().  This test validates the normalizer-level invariant:
+    // after N "below floor" update() ticks the IIR drifts upward, but silenceTick()
+    // anchors it so the very first post-silence update stays close to the anchor — no jump.
+    func testSilenceTickPreventsDriftAndPreservesHold() {
+        var normalizer = LoudnessNormalizer()
+        normalizer.targetRMSLow = 0.030
+        normalizer.targetRMSHigh = 0.090
+        normalizer.minVolumeScalar = 0.0
+        normalizer.maxVolumeScalar = 1.0
+        normalizer.releaseSeconds = 5.0
+        normalizer.resetWith(currentVolume: 0.5)
+
+        // Verify drift: 10 update() ticks below floor push smoothedTargetVolume well above 0.5.
+        // noiseGate = 0.030 × 0.2 = 0.006; measuredRMS=0.015 > gate ✓
+        // perceivedRMS = 0.015 × 0.5 = 0.0075 < 0.030 → below floor → IIR drifts up
+        for _ in 0..<10 {
+            _ = normalizer.update(measuredRMS: 0.015, currentVolume: 0.5, dt: 0.2)
+        }
+        let drifted = normalizer.update(measuredRMS: 0.015, currentVolume: 0.5, dt: 0.2)!
+        XCTAssertGreaterThan(
+            drifted, 0.55,
+            "IIR should drift above 0.55 after 10 unchecked ticks (proving the drift exists)")
+
+        // Coordinator silence path: reset anchor, then call silenceTick() each tick.
+        normalizer.resetWith(currentVolume: 0.5)
+        for _ in 0..<10 {
+            normalizer.silenceTick(currentVolume: 0.5, dt: 0.2)
+        }
+        let postSilence = normalizer.update(measuredRMS: 0.015, currentVolume: 0.5, dt: 0.2)!
+        XCTAssertLessThan(
+            postSilence - 0.5, 0.05,
+            "First update after silenceTick must start near the anchor 0.5, not the drifted value")
+
+        // Verify hold preservation: trigger attack to set holdCountdown, then run silenceTick()
+        // for 5 ticks (1 s total); hold should NOT be zeroed — it just drains by 1 s.
+        normalizer.resetWith(currentVolume: 0.5)
+        normalizer.holdSeconds = 3.0
+        // Loud tick: perceivedRMS = 0.20 × 0.5 = 0.10 > 0.090 → attack → holdCountdown = 3.0
+        _ = normalizer.update(measuredRMS: 0.20, currentVolume: 0.5, dt: 0.2)
+        // 5 silence ticks × 0.2 s = 1.0 s; holdCountdown should be ~2.0, not 0.
+        for _ in 0..<5 {
+            normalizer.silenceTick(currentVolume: 0.5, dt: 0.2)
+        }
+        // After silence, a below-floor tick should still be blocked by hold (no raise yet).
+        // perceivedRMS = 0.010 × 0.5 = 0.005 < 0.030 → too quiet; but hold is active →
+        // smoothedTargetVolume unchanged → returned value equals the post-attack level.
+        let volumeAfterAttack = normalizer.update(measuredRMS: 0.20, currentVolume: 0.5, dt: 0.0)!
+        let duringHold = normalizer.update(measuredRMS: 0.010, currentVolume: 0.5, dt: 0.2)!
+        XCTAssertEqual(
+            duringHold, volumeAfterAttack, accuracy: 0.001,
+            "Hold should still protect against raise 1 s after attack, even across a silence gap")
+    }
 }
 
 @MainActor

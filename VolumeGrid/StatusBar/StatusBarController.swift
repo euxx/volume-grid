@@ -426,17 +426,22 @@ final class StatusBarController {
         smartVolumeInfoItem.isHidden = !settings.isEnabled
         smartVolumeSettingsItem.isHidden = !settings.isEnabled
         guard settings.isEnabled else { return }
+        // Use the coordinator's active zone bounds (which reflect device calibration when
+        // a calibrated device is running) rather than the global settings values.
+        let low = coordinator.activeTargetRMSLow
+        let high = coordinator.activeTargetRMSHigh
         let status: String
         if coordinator.isRunning, let rms = coordinator.lastMeasuredRMS {
             status = String(
-                format: "  RMS %.4f  raw→ %.3f  cfg %.2f–%.2f @ %.4f",
-                rms, coordinator.lastRawTarget ?? 0,
-                settings.minVolume, settings.maxVolume, settings.targetRMS
+                format: "  RMS %.4f  zone [%.3f, %.3f]  cfg %.2f–%.2f",
+                rms, low, high,
+                settings.minVolume, settings.maxVolume
             )
         } else {
             status = String(
-                format: "  cfg %.2f–%.2f @ %.4f  (no signal)",
-                settings.minVolume, settings.maxVolume, settings.targetRMS
+                format: "  zone [%.3f, %.3f]  cfg %.2f–%.2f  (no signal)",
+                low, high,
+                settings.minVolume, settings.maxVolume
             )
         }
         smartVolumeInfoItem.title = status

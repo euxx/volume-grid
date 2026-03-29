@@ -6,38 +6,28 @@ import os.log
 
 /// Pure description of the effect a single volume key press should have on the AGC settings.
 ///
-/// - At ceiling (current ≥ activeMax − step/2): ceiling shifts; targetRMS unchanged.
-///   The AGC naturally tracks to the new ceiling because rawTarget (= targetRMS/smoothedRMS)
-///   already exceeds the old ceiling — simply raising the bound lets it through.
-/// - Mid-range: ceiling stays; targetRMS is recalibrated to match the user's intent.
+/// - At ceiling (current ≥ activeMax − step/2): ceiling shifts; zone bounds unchanged.
+/// - Mid-range: ceiling stays; dead zone is recentred around the user's intended volume.
 /// - `seedVolume`: volume passed to `LoudnessNormalizer.resetWith(currentVolume:)` so the
 ///   AGC settles at the new intended level without a transient jump.
 struct VolumeKeyEffect {
     let newMax: Float?  // nil = ceiling unchanged
-    let newTargetRMS: Float?  // nil = targetRMS unchanged
     let seedVolume: Float  // always set; used to reseed normalizer
 
     static func compute(
         up: Bool,
         currentVolume: Float,
         activeMax: Float,
-        minVolume: Float,
-        smoothedRMS: Float
+        minVolume: Float
     ) -> VolumeKeyEffect {
         let step = 1.0 / Float(VolumeGridConstants.volumeBlocksCount)
         if currentVolume >= activeMax - step / 2 {
-            // User is pinned at the ceiling — shift the ceiling only.
-            // targetRMS is left unchanged; the AGC will naturally track to the new ceiling.
             let newMax = up ? min(1.0, activeMax + step) : max(minVolume, activeMax - step)
-            return .init(newMax: newMax, newTargetRMS: nil, seedVolume: newMax)
+            return .init(newMax: newMax, seedVolume: newMax)
         } else {
-            // User is in mid-range — recalibrate the AGC target, leave ceiling alone.
             let desiredVolume =
                 up ? min(activeMax, currentVolume + step) : max(minVolume, currentVolume - step)
-            let newTargetRMS =
-                smoothedRMS > 1e-5
-                ? (smoothedRMS * desiredVolume).clamped(to: 0.01...0.30) : nil
-            return .init(newMax: nil, newTargetRMS: newTargetRMS, seedVolume: desiredVolume)
+            return .init(newMax: nil, seedVolume: desiredVolume)
         }
     }
 }
@@ -52,7 +42,11 @@ final class SmartVolumeCoordinator: ObservableObject {
     @Published private(set) var errorMessage: String?
     /// Live diagnostics — updated every AGC tick (nil when stopped or silent).
     @Published private(set) var lastMeasuredRMS: Float?
-    @Published private(set) var lastRawTarget: Float?
+    /// The active comfort-zone bounds used by the normalizer.  Reflects per-device calibration
+    /// when a calibrated device is running, otherwise mirrors the global settings values.
+    @Published private(set) var activeTargetRMSLow: Float = SmartVolumeSettings.shared.targetRMSLow
+    @Published private(set) var activeTargetRMSHigh: Float = SmartVolumeSettings.shared
+        .targetRMSHigh
     /// Currently detected audio scene; nil when Smart Volume is not running or macOS < 14.2.
     @Published private(set) var currentScene: String?
     /// Live confidence scores from SoundAnalysis; 0 when classifier is inactive.
@@ -105,17 +99,13 @@ final class SmartVolumeCoordinator: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     /// Tracks previous mute state to detect the unmute edge in handleAGC.
     private var wasMuted = false
+    /// Hysteresis counter for `lastMeasuredRMS` diagnostics.  Counts down after raw silence
+    /// begins so brief speech pauses do not flicker the display to nil.
+    private var diagHoldTicks = 0
+    private let diagHoldThreshold = 3  // 3 × 200 ms = 600 ms hold after raw silence
     /// UID of the CoreAudio device the current tap is attached to.
     /// Stored so `calibrateTargetRMS()` can save the calibration to the right device entry.
     private var currentDeviceUID: String?
-    /// Session-live AGC target for music/ambient content.
-    /// Initialised from the per-device stored calibration on `start()` (falling back to
-    /// `settings.targetRMS`), then kept in sync by the `$targetRMS` subscriber so key
-    /// presses and slider adjustments take immediate effect.
-    /// `applySceneProfile` uses this to restore the correct target when leaving speech mode.
-    private var activeMusicTargetRMS: Float = 0.040
-    /// Session-live AGC target for speech content (analogous to `activeMusicTargetRMS`).
-    private var activeSpeechTargetRMS: Float = 0.055
     /// Anticipated system volume after pending key presses, while CoreAudio has not yet
     /// updated `volumeMonitor.volumeScalar` (~50 ms lag).  Cleared 200 ms after the last
     /// key press so rapid successive presses accumulate correctly.
@@ -136,28 +126,31 @@ final class SmartVolumeCoordinator: ObservableObject {
             .removeDuplicates { $0?.id == $1?.id }
             .sink { [weak self] _ in self?.rebuildTapIfRunning() }
             .store(in: &cancellables)
-        // Keep normalizer in sync whenever settings change while running
-        // (e.g. after `defaults write` triggers a live reload).
-        settings.$targetRMS
-            .combineLatest(settings.$minVolume, settings.$maxVolume)
+        // Keep normalizer zone bounds in sync when the user explicitly changes them
+        // (comfort-zone sliders, calibrate button, or live defaults write).
+        // This is intentionally separate from the volume-range subscriber below so that
+        // a min/max adjustment does NOT overwrite a device-specific calibrated zone.
+        settings.$targetRMSLow
+            .combineLatest(settings.$targetRMSHigh)
             .dropFirst()
-            .sink { [weak self] targetRMS, minVolume, maxVolume in
+            .sink { [weak self] low, high in
+                guard let self else { return }
+                normalizer.targetRMSLow = low
+                normalizer.targetRMSHigh = high
+                activeTargetRMSLow = low
+                activeTargetRMSHigh = high
+                log.info("Zone bounds updated: targetRMSLow=\(low) high=\(high)")
+            }
+            .store(in: &cancellables)
+        // Keep the normalizer's volume range in sync independently of the zone bounds.
+        settings.$minVolume
+            .combineLatest(settings.$maxVolume)
+            .dropFirst()
+            .sink { [weak self] minVolume, maxVolume in
                 guard let self else { return }
                 normalizer.minVolumeScalar = minVolume
                 normalizer.maxVolumeScalar = maxVolume
-                // Only push targetRMS into the normalizer when speech mode is not active.
-                // In speech mode the coordinator holds normalizer.targetRMS = speechTargetRMS;
-                // overwriting it here (e.g. on a ceiling-press that changes maxVolume)
-                // would revert the normalizer to the wrong profile until scene detection fires.
-                if currentScene != "speech" {
-                    normalizer.targetRMS = targetRMS
-                }
-                // Keep session-live music target in sync so scene transitions and
-                // calibrateTargetRMS() always use the most recent user-set value,
-                // not a snapshot from the previous start().
-                activeMusicTargetRMS = targetRMS
-                log.info(
-                    "Settings updated: targetRMS=\(targetRMS) min=\(minVolume) max=\(maxVolume)")
+                log.info("Volume range updated: min=\(minVolume) max=\(maxVolume)")
             }
             .store(in: &cancellables)
         settings.$smoothing
@@ -176,18 +169,6 @@ final class SmartVolumeCoordinator: ObservableObject {
             .sink { [weak self] strength in
                 guard let self else { return }
                 normalizer.strength = strength
-            }
-            .store(in: &cancellables)
-        // Keep normalizer in sync when speechTargetRMS changes while in speech mode.
-        settings.$speechTargetRMS
-            .dropFirst()
-            .sink { [weak self] speechTargetRMS in
-                guard let self else { return }
-                // Always keep session-live speech target in sync.
-                activeSpeechTargetRMS = speechTargetRMS
-                guard currentScene == "speech" else { return }
-                normalizer.targetRMS = speechTargetRMS
-                log.info("Speech targetRMS updated: \(speechTargetRMS)")
             }
             .store(in: &cancellables)
         // React to live isEnabled changes (e.g. via `defaults write`).
@@ -240,12 +221,13 @@ final class SmartVolumeCoordinator: ObservableObject {
         normalizer.minVolumeScalar = settings.minVolume
         // Use per-device calibration when available; fall back to global settings.
         let cal = settings.calibration(forDeviceUID: uid)
-        activeMusicTargetRMS = cal?.targetRMS ?? settings.targetRMS
-        activeSpeechTargetRMS = cal?.speechTargetRMS ?? settings.speechTargetRMS
-        normalizer.targetRMS = activeMusicTargetRMS
+        normalizer.targetRMSLow = cal?.targetRMSLow ?? settings.targetRMSLow
+        normalizer.targetRMSHigh = cal?.targetRMSHigh ?? settings.targetRMSHigh
+        activeTargetRMSLow = normalizer.targetRMSLow
+        activeTargetRMSHigh = normalizer.targetRMSHigh
         if let cal {
             log.info(
-                "start: loaded device calibration for \(uid): targetRMS=\(cal.targetRMS) speechTargetRMS=\(cal.speechTargetRMS)"
+                "start: loaded device calibration for \(uid): low=\(cal.targetRMSLow) high=\(cal.targetRMSHigh)"
             )
         }
         normalizer.attackSeconds = settings.attackSeconds
@@ -270,7 +252,7 @@ final class SmartVolumeCoordinator: ObservableObject {
         errorMessage = nil
         isRunning = true
         log.info(
-            "start: targetRMS=\(self.settings.targetRMS) min=\(self.settings.minVolume) max=\(self.settings.maxVolume) device=\(uid)"
+            "start: targetRMSLow=\(self.settings.targetRMSLow) high=\(self.settings.targetRMSHigh) min=\(self.settings.minVolume) max=\(self.settings.maxVolume) device=\(uid)"
         )
 
         // Start SoundAnalysis scene classifier.
@@ -342,52 +324,40 @@ final class SmartVolumeCoordinator: ObservableObject {
         classifierCancellables.removeAll()
         normalizer.reset()
         smoothedRMS = 0.0
+        diagHoldTicks = 0
         pendingVolumeTask?.cancel()
         pendingVolumeTask = nil
         pendingVolumeBase = nil
         isRunning = false
         lastMeasuredRMS = nil
-        lastRawTarget = nil
         currentScene = nil
         speechConfidence = 0
         musicConfidence = 0
         currentDeviceUID = nil
+        // Reset active zone to reflect global settings (no device running).
+        activeTargetRMSLow = settings.targetRMSLow
+        activeTargetRMSHigh = settings.targetRMSHigh
     }
 
-    /// Set targetRMS (or speechTargetRMS when in speech mode) to the current perceived
-    /// loudness so the AGC is satisfied at whatever volume the user has now.
+    /// Recentre the dead zone around the current perceived loudness (±6 dB margins).
     /// No-op if the tap is not running or no audio has been measured yet.
     func calibrateTargetRMS() {
         guard isRunning, smoothedRMS > 1e-5 else { return }
         let perceived = smoothedRMS * Float(volumeMonitor.volumeScalar)
-        let clamped = max(0.01, min(0.30, perceived))
-        // Route to the active scene's target so Calibrate is always meaningful.
-        if currentScene == "speech" {
-            settings.speechTargetRMS = clamped
-            activeSpeechTargetRMS = clamped
-        } else {
-            settings.targetRMS = clamped
-            activeMusicTargetRMS = clamped
-        }
-        // Update normalizer immediately (settings subscriber is async via Combine).
-        normalizer.targetRMS = clamped
-        // Persist calibration to the current device profile so switching back to this
-        // device later restores the calibrated level immediately.
-        // Both session-live targets are saved so a speech calibration does not clobber
-        // the device's music target and vice versa.
+        let newLow = max(0.01, perceived * 0.5)
+        let newHigh = min(0.30, perceived * 2.0)
+        settings.targetRMSLow = newLow
+        settings.targetRMSHigh = newHigh
+        normalizer.targetRMSLow = newLow
+        normalizer.targetRMSHigh = newHigh
         if let uid = currentDeviceUID {
             settings.saveCalibration(
-                SmartVolumeSettings.DeviceCalibration(
-                    targetRMS: activeMusicTargetRMS,
-                    speechTargetRMS: activeSpeechTargetRMS
-                ),
+                SmartVolumeSettings.DeviceCalibration(targetRMSLow: newLow, targetRMSHigh: newHigh),
                 forDeviceUID: uid
             )
-            log.info("calibrateTargetRMS: saved profile for device \(uid)")
         }
         log.info(
-            "calibrateTargetRMS: scene=\(self.currentScene ?? "nil") smoothedRMS=\(self.smoothedRMS) vol=\(Float(self.volumeMonitor.volumeScalar)) → targetRMS=\(clamped)"
-        )
+            "calibrateTargetRMS: perceived=\(perceived) → zone=[\(newLow), \(newHigh)]")
     }
 
     // MARK: - Volume key handling
@@ -413,23 +383,22 @@ final class SmartVolumeCoordinator: ObservableObject {
         }
     }
 
-    /// Shift the active Grid Range ceiling or recalibrate the AGC target by one grid step.
+    /// Shift the active Grid Range ceiling or recentre the AGC dead zone by one grid step.
     ///
     /// At ceiling (current ≈ activeMax):
     ///   - up: raise ceiling (user needs more headroom)
     ///   - down: lower ceiling (user thinks the ceiling is too high)
     ///
     /// Mid-range (current well below ceiling):
-    ///   - Ceiling stays; adjust targetRMS so the AGC holds the new level.
+    ///   - Ceiling stays; recentre the dead zone so the AGC holds the new level.
     private func adjustVolume(up: Bool) {
-        let inSpeech = currentScene == "speech"
         let activeMax = settings.maxVolume
         // Use pendingVolumeBase while CoreAudio hasn't yet reflected the last key press
         // (~50 ms lag), so rapid successive presses accumulate correctly.
         let current = pendingVolumeBase ?? Float(volumeMonitor.volumeScalar)
         let effect = VolumeKeyEffect.compute(
             up: up, currentVolume: current, activeMax: activeMax,
-            minVolume: settings.minVolume, smoothedRMS: smoothedRMS)
+            minVolume: settings.minVolume)
 
         // Remember where the user is heading; cleared once CoreAudio settles (~200 ms).
         pendingVolumeBase = effect.seedVolume
@@ -452,19 +421,15 @@ final class SmartVolumeCoordinator: ObservableObject {
             log.info(
                 "volumeKey \(up ? "up" : "down") mid-range: vol=\(current) activeMax=\(activeMax) smoothedRMS=\(self.smoothedRMS) seed=\(effect.seedVolume)"
             )
-        }
-        if let newTargetRMS = effect.newTargetRMS {
-            if inSpeech {
-                settings.speechTargetRMS = newTargetRMS
-            } else {
-                settings.targetRMS = newTargetRMS
+            if smoothedRMS > 1e-5 {
+                let newCenter = smoothedRMS * effect.seedVolume
+                let newLow = max(0.01, newCenter * 0.5)
+                let newHigh = min(0.30, newCenter * 2.0)
+                settings.targetRMSLow = newLow
+                settings.targetRMSHigh = newHigh
+                normalizer.targetRMSLow = newLow
+                normalizer.targetRMSHigh = newHigh
             }
-            normalizer.targetRMS = newTargetRMS
-            log.info("volumeKey targetRMS → \(newTargetRMS)")
-        } else {
-            log.debug(
-                "volumeKey targetRMS unchanged: smoothedRMS=\(self.smoothedRMS) below noise floor or at ceiling"
-            )
         }
         // Reseed normalizer so the system volume settles at the intended level immediately.
         normalizer.resetWith(currentVolume: effect.seedVolume)
@@ -487,24 +452,9 @@ final class SmartVolumeCoordinator: ObservableObject {
     @available(macOS 14.2, *)
     private func applySceneProfile(_ scene: SoundSceneClassifier.Scene) {
         currentScene = scene.description
-        switch scene {
-        case .speech:
-            // Use session-live speech target (initialised from device cal on start()).
-            let speechTarget = self.activeSpeechTargetRMS
-            normalizer.targetRMS = speechTarget
-            normalizer.maxVolumeScalar = settings.maxVolume
-            log.info(
-                "Scene → speech: targetRMS=\(speechTarget) maxVol=\(self.settings.maxVolume)"
-            )
-        case .music, .ambient:
-            // Use session-live music target (initialised from device cal on start()).
-            let musicTarget = self.activeMusicTargetRMS
-            normalizer.targetRMS = musicTarget
-            normalizer.maxVolumeScalar = settings.maxVolume
-            log.info(
-                "Scene → \(scene): targetRMS=\(musicTarget) maxVol=\(self.settings.maxVolume)"
-            )
-        }
+        // Dead-zone model uses the same [targetRMSLow, targetRMSHigh] for all scenes.
+        // Scene info is kept for display only.
+        log.info("Scene → \(scene): (informational only, no zone change)")
     }
 
     // MARK: - AGC (Main Actor)
@@ -512,6 +462,12 @@ final class SmartVolumeCoordinator: ObservableObject {
     private func handleAGC(rms: Float, dt: Float) {
         guard isRunning else { return }
         let muted = volumeMonitor.isMuted
+        // On the mute edge, clear diagnostics immediately so the menu and calibrate button
+        // reflect the absence of audible output rather than retaining the pre-mute RMS.
+        if !wasMuted && muted {
+            diagHoldTicks = 0
+            lastMeasuredRMS = nil
+        }
         // On the unmute edge, reseed the normalizer from the user-chosen volume.
         // Without this, the IIR would immediately pull the volume back to where it
         // was before the mute, ignoring whatever the user set while muted.
@@ -529,17 +485,29 @@ final class SmartVolumeCoordinator: ObservableObject {
             : 1 - expf(-timerInterval / rmsFallingSeconds)  // slow: hold during quiet spans
         smoothedRMS = rmsAlpha * rms + (1 - rmsAlpha) * smoothedRMS
         let currentVol = Float(volumeMonitor.volumeScalar)
-        let rawTarget = normalizer.targetRMS / (smoothedRMS * max(1e-5, currentVol))
-        guard
-            let newVolume = normalizer.update(
-                measuredRMS: smoothedRMS, currentVolume: currentVol, dt: dt)
-        else { return }
-        lastMeasuredRMS = rms
-        lastRawTarget = rawTarget
-        log.debug(
-            "AGC measuredRMS=\(rms) rawTarget=\(rawTarget) curVol=\(Float(self.volumeMonitor.volumeScalar)) → \(newVolume)"
-        )
-        // Smart Volume writes volume exactly like a user action — HUD shows normally.
-        volumeMonitor.setVolume(scalar: newVolume)
+        // Update diagnostics whenever audio is present, even when inside the comfort zone
+        // (so the calibrate button stays active and the menu shows live RMS, not "no signal").
+        // Gate check uses raw rms (current tick) so the hold counter resets only on actual
+        // audio, not on the slow smoothedRMS tail. The hold absorbs brief speech pauses
+        // (≤ 600 ms) without flickering the display to nil.
+        let noiseGate = max(1e-5, normalizer.targetRMSLow * 0.2)
+        if rms > noiseGate {
+            diagHoldTicks = diagHoldThreshold
+            lastMeasuredRMS = smoothedRMS
+        } else if diagHoldTicks > 0 {
+            diagHoldTicks -= 1
+            lastMeasuredRMS = smoothedRMS  // hold window: keep display stable
+        } else {
+            lastMeasuredRMS = nil  // hold expired — genuine silence
+        }
+        if let newVolume = normalizer.update(
+            measuredRMS: smoothedRMS, currentVolume: currentVol, dt: dt)
+        {
+            log.debug(
+                "AGC measuredRMS=\(rms) curVol=\(Float(self.volumeMonitor.volumeScalar)) → \(newVolume)"
+            )
+            // Smart Volume writes volume exactly like a user action — HUD shows normally.
+            volumeMonitor.setVolume(scalar: newVolume)
+        }
     }
 }

@@ -51,24 +51,35 @@ struct SmartVolumeSettingsView: View {
                 .padding(.vertical, 4)
             }
 
-            GroupBox("Target Loudness") {
+            GroupBox("Comfort Zone") {
                 VStack(alignment: .leading, spacing: 8) {
                     sliderRow(
-                        label: "Target",
+                        label: "Too loud",
                         valueText: String(
-                            format: "%.0f%% · %@", settings.targetRMS * 100,
-                            loudnessLabel(settings.targetRMS)),
-                        slider: Slider(value: $settings.targetRMS, in: 0.01...0.30)
+                            format: "%.0f%% · %@", settings.targetRMSHigh * 100,
+                            loudnessLabel(settings.targetRMSHigh)),
+                        slider: Slider(value: $settings.targetRMSHigh, in: 0.01...0.30)
+                    )
+                    sliderRow(
+                        label: "Too quiet",
+                        valueText: String(
+                            format: "%.0f%% · %@", settings.targetRMSLow * 100,
+                            loudnessLabel(settings.targetRMSLow)),
+                        slider: Slider(value: $settings.targetRMSLow, in: 0.01...0.30)
                     )
                     Text(
-                        "Higher = louder content is the baseline. Lower = AGC boosts quiet content more. "
-                            + "Try 5% for muted videos, 10–15% for normal speech/video."
+                        "AGC only acts outside this range. Set ‘Too loud’ to your preferred maximum "
+                            + "listening level; ‘Too quiet’ to the minimum acceptable level. "
+                            + "Tap Calibrate to set both bounds relative to your current listening volume."
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .lineLimit(nil)
                     if let coordinator {
+                        if coordinator.isRunning {
+                            SceneIndicator(coordinator: coordinator)
+                        }
                         CalibrateButton(coordinator: coordinator)
                     }
                     Divider()
@@ -78,8 +89,7 @@ struct SmartVolumeSettingsView: View {
                         slider: Slider(value: $settings.strength, in: 0...1)
                     )
                     Text(
-                        "100% = full normalisation. Lower values preserve more original dynamics "
-                            + "when content varies widely in loudness."
+                        "100% = full normalisation at zone boundary. Lower values apply gentler correction."
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -110,30 +120,6 @@ struct SmartVolumeSettingsView: View {
                 .padding(.vertical, 4)
             }
 
-            GroupBox("Speech Profile") {
-                VStack(alignment: .leading, spacing: 8) {
-                    if let coordinator {
-                        SceneIndicator(coordinator: coordinator)
-                        Divider()
-                    }
-                    sliderRow(
-                        label: "Target",
-                        valueText: String(
-                            format: "%.0f%% · %@", settings.speechTargetRMS * 100,
-                            loudnessLabel(settings.speechTargetRMS)),
-                        slider: Slider(value: $settings.speechTargetRMS, in: 0.01...0.30)
-                    )
-                    Text(
-                        "When speech is detected, this target overrides the general Target Loudness, "
-                            + "allowing the AGC to boost quiet voices without affecting music playback."
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(nil)
-                }
-                .padding(.vertical, 4)
-            }
         }
         .padding()
         .frame(width: 360)
@@ -208,7 +194,8 @@ private struct CalibrateButton: View {
             .disabled(!coordinator.isRunning || coordinator.lastMeasuredRMS == nil)
             Text(
                 coordinator.isRunning
-                    ? "Sets target to what you're hearing now" : "Start Smart Volume first"
+                    ? "Centers comfort zone around current listening level"
+                    : "Start Smart Volume first"
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -241,9 +228,9 @@ private struct SceneIndicator: View {
         let spPct = Int(coordinator.speechConfidence * 100)
         let muPct = Int(coordinator.musicConfidence * 100)
         switch scene {
-        case "speech": return "Speech detected (\(spPct)%) — using Speech Profile"
-        case "music": return "Music detected (\(muPct)%) — using standard profile"
-        default: return "Ambient (speech \(spPct)%, music \(muPct)%) — using standard profile"
+        case "speech": return "Speech detected (\(spPct)%) — informational"
+        case "music": return "Music detected (\(muPct)%) — informational"
+        default: return "Ambient (speech \(spPct)%, music \(muPct)%)"
         }
     }
 

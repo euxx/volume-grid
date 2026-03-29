@@ -12,11 +12,25 @@ final class SmartVolumeSettings: ObservableObject {
         didSet { writeIfNeeded(isEnabled, forKey: Keys.isEnabled) }
     }
 
-    @Published var targetRMS: Float {
+    /// Lower bound of the AGC comfort zone (perceived RMS; too quiet below this → AGC raises volume).
+    @Published var targetRMSLow: Float {
         didSet {
-            let clamped = max(1e-5, min(targetRMS, 0.30))
-            if targetRMS != clamped { targetRMS = clamped }
-            writeIfNeeded(targetRMS, forKey: Keys.targetRMS)
+            let clamped = max(1e-5, min(targetRMSLow, 0.30))
+            if targetRMSLow != clamped { targetRMSLow = clamped }
+            // Enforce ordering: low must not exceed high.
+            if targetRMSLow > targetRMSHigh { targetRMSHigh = targetRMSLow }
+            writeIfNeeded(targetRMSLow, forKey: Keys.targetRMSLow)
+        }
+    }
+
+    /// Upper bound of the AGC comfort zone (perceived RMS; too loud above this → AGC lowers volume).
+    @Published var targetRMSHigh: Float {
+        didSet {
+            let clamped = max(1e-5, min(targetRMSHigh, 0.30))
+            if targetRMSHigh != clamped { targetRMSHigh = clamped }
+            // Enforce ordering: high must not fall below low.
+            if targetRMSHigh < targetRMSLow { targetRMSLow = targetRMSHigh }
+            writeIfNeeded(targetRMSHigh, forKey: Keys.targetRMSHigh)
         }
     }
 
@@ -64,30 +78,15 @@ final class SmartVolumeSettings: ObservableObject {
     /// Range: 3 s (smoothing=0) … 12 s (smoothing=1).
     var releaseSeconds: Float { 3.0 + smoothing * (12.0 - 3.0) }
 
-    // MARK: - Speech profile
-    //
-    // When SoundAnalysis detects speech, the coordinator switches to these settings
-    // so the AGC doesn't boost volume to maximum for naturally quiet voices.
-
-    /// Target RMS for speech content.  Higher than the default music target so the AGC
-    /// requires less volume boost for quiet voices.
-    @Published var speechTargetRMS: Float {
-        didSet {
-            let clamped = max(0.01, min(speechTargetRMS, 0.30))
-            if speechTargetRMS != clamped { speechTargetRMS = clamped }
-            writeIfNeeded(speechTargetRMS, forKey: Keys.speechTargetRMS)
-        }
-    }
-
     // MARK: - Per-device calibration
 
-    /// Stores a `targetRMS`/`speechTargetRMS` pair calibrated on a specific output device.
-    /// Keyed by the device UID returned by CoreAudio.  When Smart Volume starts or the
-    /// output device changes, the coordinator loads the matching entry so the AGC
-    /// immediately uses the previously calibrated loudness target for that device.
+    /// Stores a `[targetRMSLow, targetRMSHigh]` comfort zone calibrated on a specific
+    /// output device.  Keyed by the CoreAudio device UID.  When Smart Volume starts or
+    /// the output device changes, the coordinator loads the matching entry so the AGC
+    /// immediately uses the previously calibrated zone for that device.
     struct DeviceCalibration: Codable, Equatable {
-        var targetRMS: Float
-        var speechTargetRMS: Float
+        var targetRMSLow: Float
+        var targetRMSHigh: Float
     }
 
     /// Per-device calibration map.  Not `@Published` — changes are made via
@@ -108,21 +107,20 @@ final class SmartVolumeSettings: ObservableObject {
 
     private enum Keys {
         static let isEnabled = "smartVolume.isEnabled"
-        static let targetRMS = "smartVolume.targetRMS"
+        static let targetRMSLow = "smartVolume.targetRMSLow"
+        static let targetRMSHigh = "smartVolume.targetRMSHigh"
         static let minVolume = "smartVolume.minVolume"
         static let maxVolume = "smartVolume.maxVolume"
         static let smoothing = "smartVolume.smoothing"
         static let strength = "smartVolume.strength"
-        static let speechTargetRMS = "smartVolume.speechTargetRMS"
         static let deviceCalibrations = "smartVolume.deviceCalibrations"
-        // Written once when K-weighted measurement is first used; guards against
-        // applying the migration factor more than once on subsequent launches.
+        // Written once when the dead-zone model is first used; guards against
+        // applying migrations more than once on subsequent launches.
         static let rmsVersion = "smartVolume.rmsVersion"
     }
 
-    /// Version tag written to UserDefaults to mark that targetRMS values are in the
-    /// perceived-loudness scale (measuredRMS × systemVolume).
-    private static let currentRMSVersion = "kweighted_perceived_v2"
+    /// Version tag written to UserDefaults to mark that zone bounds are in use.
+    private static let currentRMSVersion = "deadzone_v1"
 
     init(_ defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -133,10 +131,14 @@ final class SmartVolumeSettings: ObservableObject {
             deviceCalibrations = decoded
         }
         isEnabled = defaults.object(forKey: Keys.isEnabled) as? Bool ?? false
-        targetRMS =
-            defaults.object(forKey: Keys.targetRMS).map { _ in
-                defaults.float(forKey: Keys.targetRMS)
-            } ?? 0.040  // perceived-loudness default: typical comfortable speech/video
+        targetRMSLow =
+            defaults.object(forKey: Keys.targetRMSLow).map { _ in
+                defaults.float(forKey: Keys.targetRMSLow)
+            } ?? 0.020
+        targetRMSHigh =
+            defaults.object(forKey: Keys.targetRMSHigh).map { _ in
+                defaults.float(forKey: Keys.targetRMSHigh)
+            } ?? 0.090
         let rawMin =
             defaults.object(forKey: Keys.minVolume).map { _ in
                 defaults.float(forKey: Keys.minVolume)
@@ -160,26 +162,13 @@ final class SmartVolumeSettings: ObservableObject {
             } ?? 1.0
         strength = max(0, min(rawStrength, 1))
 
-        let rawSpeechTargetRMS =
-            defaults.object(forKey: Keys.speechTargetRMS).map { _ in
-                defaults.float(forKey: Keys.speechTargetRMS)
-            } ?? 0.055  // higher than music/ambient 0.040: less AGC reduction on loud speech
-        speechTargetRMS = max(0.01, min(rawSpeechTargetRMS, 0.30))
-
-        // Migration: update targetRMS / speechTargetRMS to the current semantic scale.
-        // Versions that start with "kweighted_perceived_" are already in perceived-loudness
-        // space; we only reset to defaults when upgrading from a pre-perceived-RMS version.
+        // Migration: reset any pre-dead-zone persisted values to new defaults.
         let storedVersion = defaults.string(forKey: Keys.rmsVersion) ?? ""
         if storedVersion != SmartVolumeSettings.currentRMSVersion {
-            if !storedVersion.hasPrefix("kweighted_perceived_") {
-                // Legacy (plain-RMS or K-weighted pre-volume) scale: reset to new defaults.
-                // Users can press Calibrate to personalise after the upgrade.
-                targetRMS = 0.040
-                speechTargetRMS = 0.055
-                defaults.set(Float(0.040), forKey: Keys.targetRMS)
-                defaults.set(Float(0.055), forKey: Keys.speechTargetRMS)
-            }
-            // Always stamp the current version so this block does not re-run.
+            targetRMSLow = 0.020
+            targetRMSHigh = 0.090
+            defaults.set(Float(0.020), forKey: Keys.targetRMSLow)
+            defaults.set(Float(0.090), forKey: Keys.targetRMSHigh)
             defaults.set(SmartVolumeSettings.currentRMSVersion, forKey: Keys.rmsVersion)
         }
 
@@ -208,10 +197,15 @@ final class SmartVolumeSettings: ObservableObject {
         let newIsEnabled = defaults.object(forKey: Keys.isEnabled) as? Bool ?? false
         if isEnabled != newIsEnabled { isEnabled = newIsEnabled }
 
-        let newTargetRMS =
-            defaults.object(forKey: Keys.targetRMS)
-            .map { _ in defaults.float(forKey: Keys.targetRMS) } ?? 0.040
-        if targetRMS != newTargetRMS { targetRMS = newTargetRMS }
+        let newTargetRMSLow =
+            defaults.object(forKey: Keys.targetRMSLow)
+            .map { _ in defaults.float(forKey: Keys.targetRMSLow) } ?? 0.020
+        if targetRMSLow != newTargetRMSLow { targetRMSLow = newTargetRMSLow }
+
+        let newTargetRMSHigh =
+            defaults.object(forKey: Keys.targetRMSHigh)
+            .map { _ in defaults.float(forKey: Keys.targetRMSHigh) } ?? 0.090
+        if targetRMSHigh != newTargetRMSHigh { targetRMSHigh = newTargetRMSHigh }
 
         let rawMin =
             defaults.object(forKey: Keys.minVolume)
@@ -237,12 +231,6 @@ final class SmartVolumeSettings: ObservableObject {
             .map { _ in defaults.float(forKey: Keys.strength) } ?? 1.0
         let newStrength = max(0, min(rawStrength, 1))
         if strength != newStrength { strength = newStrength }
-
-        let rawSpeechTarget =
-            defaults.object(forKey: Keys.speechTargetRMS)
-            .map { _ in defaults.float(forKey: Keys.speechTargetRMS) } ?? 0.055
-        let newSpeechTarget = max(0.01, min(rawSpeechTarget, 0.30))
-        if speechTargetRMS != newSpeechTarget { speechTargetRMS = newSpeechTarget }
 
         if let data = defaults.data(forKey: Keys.deviceCalibrations),
             let decoded = try? JSONDecoder().decode(

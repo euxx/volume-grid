@@ -18,7 +18,11 @@ final class AudioTapMonitor: @unchecked Sendable {
     // drainMetrics() (timer queue). Both are nonisolated contexts. We protect them with
     // os_unfair_lock; nonisolated(unsafe) tells Swift's isolation checker we handle it manually.
     private nonisolated(unsafe) var rmsLock = os_unfair_lock_s()
-    private nonisolated(unsafe) var _latestRMS: Float = 0
+    // Accumulated mean-square energy and frame count for the current AGC window.
+    // The IO proc adds rms²×frameCount per callback so drainMetrics() computes the true
+    // energy-averaged RMS over the whole window (not just the last IO-proc snapshot).
+    private nonisolated(unsafe) var _accumulatedMeanSquare: Float = 0
+    private nonisolated(unsafe) var _windowFrameCount: Int = 0
     private nonisolated(unsafe) var _tapFrameSize: Int = 512
     // IO proc sets this true each callback; drainMetrics() clears it.
     // Prevents coordinator from acting on stale data when the stream is quiet or paused.
@@ -40,14 +44,20 @@ final class AudioTapMonitor: @unchecked Sendable {
     private nonisolated(unsafe) var classifWritePos: Int = 0
     private nonisolated(unsafe) var classifReady: Bool = false
 
-    /// Atomically read the latest RMS and frame size.
+    /// Atomically read the window-averaged K-weighted RMS and frame size, then reset the
+    /// accumulator for the next window.
     /// Returns nil if no new audio data has arrived since the last call (IO proc not invoked).
     nonisolated func drainMetrics() -> (rms: Float, frameSize: Int)? {
         os_unfair_lock_lock(&rmsLock)
         defer { os_unfair_lock_unlock(&rmsLock) }
         guard _hasFreshData else { return nil }
         _hasFreshData = false
-        return (_latestRMS, _tapFrameSize)
+        let rms =
+            _windowFrameCount > 0
+            ? sqrtf(_accumulatedMeanSquare / Float(_windowFrameCount)) : 0
+        _accumulatedMeanSquare = 0
+        _windowFrameCount = 0
+        return (rms, _tapFrameSize)
     }
 
     /// Atomically drain the accumulated classification buffer if a full chunk is ready.
@@ -98,6 +108,14 @@ final class AudioTapMonitor: @unchecked Sendable {
 
     func start(outputDeviceUID: String) throws {
         self.outputDeviceUID = outputDeviceUID
+        // Reset accumulator state so a reused instance (e.g. via rebuildTap()) does not
+        // carry stale energy from the previous session into the first AGC window.
+        // The IO proc has not started yet, so no lock is required.
+        _accumulatedMeanSquare = 0
+        _windowFrameCount = 0
+        _hasFreshData = false
+        classifWritePos = 0
+        classifReady = false
 
         let tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
         tapDescription.uuid = UUID()
@@ -185,7 +203,9 @@ final class AudioTapMonitor: @unchecked Sendable {
             let (rms, frameCount) = monitor.measureKWeightedRMSFromIOProc(
                 bufferList: inInputData)
             os_unfair_lock_lock(&monitor.rmsLock)
-            monitor._latestRMS = rms
+            // Accumulate mean square weighted by frame count for window-averaged RMS.
+            monitor._accumulatedMeanSquare += rms * rms * Float(frameCount)
+            monitor._windowFrameCount += frameCount
             if frameCount > 0 { monitor._tapFrameSize = frameCount }
             monitor._hasFreshData = true
 

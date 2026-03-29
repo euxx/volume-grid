@@ -179,18 +179,17 @@ final class LoudnessNormalizerTests: XCTestCase {
 
     // MARK: - Strength (compression ratio)
 
-    func testStrengthZeroHoldsVolume() {
-        // strength=0 must NOT produce any gain change — returns current smoothedTargetVolume.
+    func testStrengthZeroReturnsNil() {
+        // strength=0 means "no correction" — update() returns nil so the coordinator
+        // skips writing volume and does not override manual adjustments.
         var normalizer = LoudnessNormalizer()
         normalizer.targetRMS = 0.05  // noiseGate = 0.05 * 0.2 = 0.01
         normalizer.strength = 0.0
         normalizer.resetWith(currentVolume: 0.5)
-        // Loud signal → attack path; with strength=0 should still return 0.5.
-        XCTAssertEqual(
-            normalizer.update(measuredRMS: 0.3, currentVolume: 1.0, dt: 0.2)!, 0.5, accuracy: 1e-6)
-        // Quiet signal above noise gate (0.02 > 0.01) → release path; still 0.5.
-        XCTAssertEqual(
-            normalizer.update(measuredRMS: 0.02, currentVolume: 1.0, dt: 0.2)!, 0.5, accuracy: 1e-6)
+        // Loud signal → attack path; with strength=0 must return nil.
+        XCTAssertNil(normalizer.update(measuredRMS: 0.3, currentVolume: 1.0, dt: 0.2))
+        // Quiet signal above noise gate (0.02 > 0.01) → release path; still nil.
+        XCTAssertNil(normalizer.update(measuredRMS: 0.02, currentVolume: 1.0, dt: 0.2))
     }
 
     func testStrengthOneIsFull() {

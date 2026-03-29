@@ -113,13 +113,17 @@ final class SoundSceneClassifier {
     }
 
     /// Stop analysis and reset all state.
+    /// The analyzer teardown is enqueued asynchronously so the main thread is never
+    /// blocked waiting for in-flight ML inference to finish.  Published state resets
+    /// immediately.  `setup()` calls this before its own `analysisQueue.sync`, so the
+    /// serial queue guarantees teardown completes before any new session is established.
     func reset() {
-        analysisQueue.sync {
-            if let req = observedRequest { streamAnalyzer?.remove(req) }
-            streamAnalyzer = nil
-            observedRequest = nil
-            resultObserver = nil
-            framePosition = 0
+        analysisQueue.async {
+            if let req = self.observedRequest { self.streamAnalyzer?.remove(req) }
+            self.streamAnalyzer = nil
+            self.observedRequest = nil
+            self.resultObserver = nil
+            self.framePosition = 0
         }
         currentScene = .ambient
         speechConfidence = 0
@@ -128,19 +132,45 @@ final class SoundSceneClassifier {
 
     // MARK: - Private
 
+    // Hysteresis thresholds: higher confidence required to enter a scene than to stay in it.
+    // This prevents rapid scene flipping near the boundary (e.g. speech+background music),
+    // which would cause audible targetRMS toggling at ~0.5 Hz.
+    private static let sceneEnterThreshold = 0.6
+    private static let sceneExitThreshold = 0.4
+
     private func applyConfidences(speech: Double, music: Double) {
         speechConfidence = speech
         musicConfidence = music
         log.debug(
             "confidences: speech=\(String(format: "%.2f", speech)) music=\(String(format: "%.2f", music))"
         )
+        // Apply hysteresis: use different thresholds for entering vs staying in a scene.
         let newScene: Scene
-        if speech > 0.5 {
-            newScene = .speech
-        } else if music > 0.5 {
-            newScene = .music
-        } else {
-            newScene = .ambient
+        switch currentScene {
+        case .speech:
+            if speech >= Self.sceneExitThreshold {
+                newScene = .speech
+            } else if music >= Self.sceneEnterThreshold {
+                newScene = .music
+            } else {
+                newScene = .ambient
+            }
+        case .music:
+            if music >= Self.sceneExitThreshold {
+                newScene = .music
+            } else if speech >= Self.sceneEnterThreshold {
+                newScene = .speech
+            } else {
+                newScene = .ambient
+            }
+        case .ambient:
+            if speech >= Self.sceneEnterThreshold {
+                newScene = .speech
+            } else if music >= Self.sceneEnterThreshold {
+                newScene = .music
+            } else {
+                newScene = .ambient
+            }
         }
         guard newScene != currentScene else { return }
         currentScene = newScene

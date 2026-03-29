@@ -43,7 +43,7 @@ struct LoudnessNormalizer {
     ///   - dt: AGC update interval in seconds (= coordinator `timerInterval`, ≈ 0.2 s).
     ///         Do NOT pass `frameSize / sampleRate` — that is the per-IO-buffer duration,
     ///         much smaller than the timer interval.
-    /// - Returns: Clamped volume scalar, or `nil` if silent / not yet initialised.
+    /// - Returns: Clamped volume scalar, or `nil` if silent, not yet initialised, or `strength` is 0.
     mutating func update(measuredRMS: Float, currentVolume: Float, dt: Float) -> Float? {
         // Noise gate: ignore audio that is genuinely inaudible or below the content floor.
         // Uses the pre-volume signal (measuredRMS) rather than perceived RMS so that a
@@ -62,8 +62,9 @@ struct LoudnessNormalizer {
         // Apply compression strength: strength=1 gives full normalisation; lower values
         // reduce the gain correction so content with different native loudness isn't
         // over-corrected.  pow(1.0, s) == 1.0 and pow(0.0, s) == 0.0 remain correct.
-        // strength=0 means "no correction" — hold current volume.
-        guard strength > 0 else { return smoothedTargetVolume }
+        // strength=0 means "no correction" — skip AGC this tick so manual adjustments
+        // are not overridden.
+        guard strength > 0 else { return nil }
         let correctedRatio = strength >= 1 ? rawTarget : powf(rawTarget, strength)
         // Desired absolute volume: scale the current volume by the per-step ratio.
         // At steady state with strength=1: desiredVolume = targetRMS / measuredRMS,

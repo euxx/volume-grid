@@ -305,7 +305,7 @@ final class SmartVolumeCoordinator: ObservableObject {
         let interval = Double(timerInterval)
         let timer = DispatchSource.makeTimerSource(queue: timerQueue)
         timer.schedule(deadline: .now() + interval, repeating: interval)
-        timer.setEventHandler { [weak self, weak monitor] in
+        timer.setEventHandler { [weak self, weak monitor, weak classif] in
             guard let self, let monitor else { return }
             // nil = no fresh data since last poll; skip this AGC cycle
             guard let (rms, _) = monitor.drainMetrics() else { return }
@@ -313,9 +313,12 @@ final class SmartVolumeCoordinator: ObservableObject {
             // Drain classification samples and pass raw [Float32] + sample rate to
             // the classifier.  [Float32] is a value type (Sendable) so it crosses
             // thread boundaries safely without any special wrapper.
+            // Weak capture avoids a data race: stop() on @MainActor may nil _classifierBox
+            // concurrently; weak var access is ARC-atomic and nonisolated analyze() is safe
+            // to call from any thread.
             if let samples = monitor.drainClassificationSamples() {
                 let sr = Double(monitor.tapSampleRate)
-                self.classifier?.analyze(samples: samples, sampleRate: sr)
+                classif?.analyze(samples: samples, sampleRate: sr)
             }
             Task { @MainActor [weak self] in
                 self?.handleAGC(rms: rms, dt: dt)

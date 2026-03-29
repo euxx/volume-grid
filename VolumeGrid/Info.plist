@@ -31,6 +31,6 @@
   <key>LSBackgroundOnly</key>
   <true/>
   <key>NSAudioCaptureUsageDescription</key>
-  <string>Volume Grid uses audio capture to monitor output loudness and automatically normalize the volume level.</string>
+  <string>Volume Grid captures the mixed system audio output (all apps combined) to measure loudness and automatically normalize the volume level. Audio is not recorded or stored.</string>
 </dict>
 </plist>

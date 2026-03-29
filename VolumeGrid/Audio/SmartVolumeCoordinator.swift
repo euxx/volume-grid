@@ -424,16 +424,33 @@ final class SmartVolumeCoordinator: ObservableObject {
         if let newMax = effect.newMax {
             settings.maxVolume = newMax
             normalizer.maxVolumeScalar = newMax
-            log.info(
-                "volumeKey \(up ? "up" : "down") at ceiling: vol=\(current) newMax=\(newMax)"
-            )
+            // Recalibrate the dead zone so the AGC adapts to the new loudness intent
+            // rather than fighting the ceiling change. Without this, the AGC sees
+            // perceivedRMS < targetRMSLow and immediately pushes volume back to the
+            // new ceiling, making ceiling adjustments feel purposeless.
+            if smoothedRMS > 1e-5 {
+                let newCenter = smoothedRMS * newMax
+                let newLow = newCenter * 0.5
+                let newHigh = min(0.30, newCenter * 2.0)
+                settings.targetRMSLow = newLow
+                settings.targetRMSHigh = newHigh
+                normalizer.targetRMSLow = newLow
+                normalizer.targetRMSHigh = newHigh
+                log.info(
+                    "volumeKey \(up ? "up" : "down") at ceiling: vol=\(current) newMax=\(newMax) smoothedRMS=\(self.smoothedRMS) → zone=[\(newLow), \(newHigh)]"
+                )
+            } else {
+                log.info(
+                    "volumeKey \(up ? "up" : "down") at ceiling: vol=\(current) newMax=\(newMax) (no RMS — zone unchanged)"
+                )
+            }
         } else {
             log.info(
                 "volumeKey \(up ? "up" : "down") mid-range: vol=\(current) activeMax=\(activeMax) smoothedRMS=\(self.smoothedRMS) seed=\(effect.seedVolume)"
             )
             if smoothedRMS > 1e-5 {
                 let newCenter = smoothedRMS * effect.seedVolume
-                let newLow = max(0.01, newCenter * 0.5)
+                let newLow = newCenter * 0.5
                 let newHigh = min(0.30, newCenter * 2.0)
                 settings.targetRMSLow = newLow
                 settings.targetRMSHigh = newHigh

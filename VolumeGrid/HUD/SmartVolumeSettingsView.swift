@@ -56,16 +56,16 @@ struct SmartVolumeSettingsView: View {
                     sliderRow(
                         label: "Too loud",
                         valueText: String(
-                            format: "%.0f%% · %@", settings.targetRMSHigh * 100,
+                            format: "%.1f%% · %@", settings.targetRMSHigh * 100,
                             loudnessLabel(settings.targetRMSHigh)),
-                        slider: Slider(value: $settings.targetRMSHigh, in: 0.01...0.30)
+                        slider: Slider(value: $settings.targetRMSHigh, in: 0.001...0.30)
                     )
                     sliderRow(
                         label: "Too quiet",
                         valueText: String(
-                            format: "%.0f%% · %@", settings.targetRMSLow * 100,
+                            format: "%.1f%% · %@", settings.targetRMSLow * 100,
                             loudnessLabel(settings.targetRMSLow)),
-                        slider: Slider(value: $settings.targetRMSLow, in: 0.01...0.30)
+                        slider: Slider(value: $settings.targetRMSLow, in: 0.001...0.30)
                     )
                     Text(
                         "AGC only acts outside this range. Set ‘Too loud’ to your preferred maximum "

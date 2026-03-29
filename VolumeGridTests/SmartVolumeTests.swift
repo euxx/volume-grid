@@ -881,4 +881,44 @@ final class VolumeKeyEffectTests: XCTestCase {
         XCTAssertNil(effect.newMax, "ceiling must not change")
         XCTAssertEqual(effect.seedVolume, 0.1, accuracy: 1e-5, "desiredVolume clamped to minVolume")
     }
+
+    // MARK: - Dead zone recalibration prevents AGC fighting ceiling change
+
+    /// After a ceiling key-down press, the dead zone must be recalibrated so the AGC
+    /// sees the new perceived RMS as "in zone" and does NOT push volume back to the
+    /// new ceiling.  This is the regression guard for the `max(0.01, …)` floor removal.
+    func testCeilingKeyDownRecalibratesZoneSoAGCStaysNeutral() {
+        // Quiet content: smoothedRMS well below the default targetRMSLow (0.020).
+        // This replicates the common case where current ≈ maximum because the AGC
+        // is always "below floor" and keeps pushing to the ceiling.
+        let smoothedRMS: Float = 0.009
+        let activeMax: Float = 1.0
+        let minVol: Float = 0.0625  // 1/16 — typical 16-step grid
+
+        let effect = VolumeKeyEffect.compute(
+            up: false, currentVolume: activeMax, activeMax: activeMax, minVolume: minVol)
+        guard let newMax = effect.newMax else {
+            XCTFail("Expected ceiling branch to produce newMax")
+            return
+        }
+
+        // Recalibrate dead zone (same formula as adjustVolume()).
+        let newCenter = smoothedRMS * newMax
+        let newLow = newCenter * 0.5
+        let newHigh = min(0.30, newCenter * 2.0)
+
+        var normalizer = LoudnessNormalizer()
+        normalizer.targetRMSLow = newLow
+        normalizer.targetRMSHigh = newHigh
+        normalizer.resetWith(currentVolume: effect.seedVolume)
+
+        // One AGC tick: system volume = newMax, content level = smoothedRMS.
+        // perceivedRMS = smoothedRMS * newMax = newCenter → inside [newLow, newHigh].
+        // Normalizer must return nil (in zone) — AGC must NOT raise volume back.
+        let agcOutput = normalizer.update(measuredRMS: smoothedRMS, currentVolume: newMax, dt: 0.2)
+        XCTAssertNil(
+            agcOutput,
+            "AGC must be in zone after ceiling key recalibration — "
+                + "perceivedRMS=\(smoothedRMS * newMax) zone=[\(newLow), \(newHigh)]")
+    }
 }

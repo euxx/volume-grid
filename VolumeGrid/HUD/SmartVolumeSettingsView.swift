@@ -78,7 +78,7 @@ struct SmartVolumeSettingsView: View {
                     .lineLimit(nil)
                     if let coordinator {
                         if #available(macOS 14.2, *) {
-                            ClassificationsView(coordinator: coordinator)
+                            SilenceIndicator(coordinator: coordinator)
                         }
                         CalibrateButton(coordinator: coordinator)
                     }
@@ -203,56 +203,41 @@ private struct CalibrateButton: View {
     }
 }
 
-/// Displays the top sound categories currently detected by SoundAnalysis.
+/// Shows whether SoundAnalysis currently classifies the signal as silence.
+/// This is the only scene-detection state that affects AGC behaviour.
 @available(macOS 14.2, *)
 @MainActor
-private struct ClassificationsView: View {
+private struct SilenceIndicator: View {
     @ObservedObject var coordinator: SmartVolumeCoordinator
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if !coordinator.isRunning {
-                Text("Start Smart Volume to enable detection")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else if coordinator.topClassifications.isEmpty {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color.secondary)
-                        .frame(width: 8, height: 8)
-                    Text("Detecting…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                ForEach(coordinator.topClassifications.prefix(5)) { item in
-                    HStack(spacing: 6) {
-                        Text(
-                            item.identifier
-                                .replacingOccurrences(of: "_", with: " ")
-                                .capitalized
-                        )
-                        .font(.caption)
-                        .frame(minWidth: 90, alignment: .leading)
-                        GeometryReader { geo in
-                            Capsule()
-                                .fill(barColor(item.confidence))
-                                .frame(width: max(4, geo.size.width * CGFloat(item.confidence)))
-                        }
-                        .frame(height: 6)
-                        .background(.secondary.opacity(0.15))
-                        .clipShape(Capsule())
-                        Text(String(format: "%d%%", Int(item.confidence * 100)))
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .frame(width: 28, alignment: .trailing)
-                    }
-                }
-            }
+        HStack(spacing: 6) {
+            Circle()
+                .fill(dotColor)
+                .frame(width: 8, height: 8)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
-    private func barColor(_ confidence: Double) -> Color {
-        confidence > 0.6 ? .blue : .secondary
+    private var isSilent: Bool { coordinator.silenceConfidence > 0.5 }
+
+    private var label: String {
+        guard coordinator.isRunning else { return "Start Smart Volume to enable detection" }
+        if coordinator.topClassifications.isEmpty { return "Detecting…" }
+        if isSilent {
+            return String(
+                format: "Silence detected (%.0f%%) — AGC raise paused",
+                coordinator.silenceConfidence * 100)
+        }
+        return "Audio active — AGC running"
+    }
+
+    private var dotColor: Color {
+        guard coordinator.isRunning, !coordinator.topClassifications.isEmpty else {
+            return .secondary
+        }
+        return isSilent ? .orange : .green
     }
 }

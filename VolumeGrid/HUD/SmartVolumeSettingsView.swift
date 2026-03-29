@@ -203,8 +203,8 @@ private struct CalibrateButton: View {
     }
 }
 
-/// Shows whether SoundAnalysis currently classifies the signal as silence.
-/// This is the only scene-detection state that affects AGC behaviour.
+/// Shows whether audio is currently present and, if so, whether SoundAnalysis
+/// classifies the signal as silence (the only state that alters AGC behaviour).
 @available(macOS 14.2, *)
 @MainActor
 private struct SilenceIndicator: View {
@@ -221,12 +221,18 @@ private struct SilenceIndicator: View {
         }
     }
 
-    private var isSilent: Bool { coordinator.silenceConfidence > 0.5 }
+    /// True when no audio signal is present (noise gate expired) or when
+    /// SoundAnalysis itself classifies the audio content as silence.
+    private var isSilent: Bool {
+        coordinator.lastMeasuredRMS == nil || coordinator.silenceConfidence > 0.5
+    }
 
     private var label: String {
         guard coordinator.isRunning else { return "Start Smart Volume to enable detection" }
-        if coordinator.topClassifications.isEmpty { return "Detecting…" }
         if isSilent {
+            if coordinator.lastMeasuredRMS == nil {
+                return "No audio signal — AGC raise paused"
+            }
             return String(
                 format: "Silence detected (%.0f%%) — AGC raise paused",
                 coordinator.silenceConfidence * 100)
@@ -235,9 +241,7 @@ private struct SilenceIndicator: View {
     }
 
     private var dotColor: Color {
-        guard coordinator.isRunning, !coordinator.topClassifications.isEmpty else {
-            return .secondary
-        }
+        guard coordinator.isRunning else { return .secondary }
         return isSilent ? .orange : .green
     }
 }

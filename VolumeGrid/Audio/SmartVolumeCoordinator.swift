@@ -228,6 +228,11 @@ final class SmartVolumeCoordinator: ObservableObject {
             errorMessage = "Could not read the current output device."
             return
         }
+        guard volumeMonitor.isCurrentDeviceVolumeSupported else {
+            log.error("start: device \(uid) does not support software volume control")
+            errorMessage = "This output device does not support software volume control."
+            return
+        }
 
         normalizer.maxVolumeScalar = settings.maxVolume
         normalizer.minVolumeScalar = settings.minVolume
@@ -376,8 +381,9 @@ final class SmartVolumeCoordinator: ObservableObject {
     /// `newLow = max(0.01, centre × 0.5)`, `newHigh = min(0.30, max(0.02, centre × 2.0))`.
     /// Explicit floors prevent near-zero calibrations from being saved or sent to the normalizer.
     private func applyComfortZone(perceivedCenter: Float, saveDeviceCalibration: Bool = false) {
-        let newLow = max(0.01, perceivedCenter * 0.5)
+        let rawLow = max(0.01, perceivedCenter * 0.5)
         let newHigh = min(0.30, max(0.02, perceivedCenter * 2.0))
+        let newLow = min(rawLow, newHigh)  // guarantee low ≤ high
         settings.targetRMSLow = newLow
         settings.targetRMSHigh = newHigh
         normalizer.targetRMSLow = newLow

@@ -66,6 +66,12 @@ final class SmartVolumeCoordinator: ObservableObject {
     // don't immediately register as "content went quiet" and trigger a gain increase.
     // Rising (louder): fast — catch loud content quickly.
     // Falling (quieter): moderately slow — cushion brief pauses without delaying recovery.
+    //
+    // This is a **measurement** filter, separate from the normalizer's IIR which is a
+    // **control** filter.  Pre-smoothing stabilises the RMS input so the normalizer sees
+    // a steady signal rather than per-tick noise.  The normalizer's attack/release then
+    // controls the actual volume ramp speed.  Removing either layer would cause different
+    // artefacts: no pre-smooth → jittery RMS → AGC oscillation; no IIR → stepwise volume.
     private let rmsRisingSeconds: Float = 0.3
     private let rmsFallingSeconds: Float = 1.5
     private var smoothedRMS: Float = 0.0
@@ -109,10 +115,14 @@ final class SmartVolumeCoordinator: ObservableObject {
     /// Stored so `calibrateTargetRMS()` can save the calibration to the right device entry.
     private var currentDeviceUID: String?
     /// Anticipated system volume after pending key presses, while CoreAudio has not yet
-    /// updated `volumeMonitor.volumeScalar` (~50 ms lag).  Cleared 200 ms after the last
+    /// updated `volumeMonitor.volumeScalar` (~50 ms lag).  Cleared 300 ms after the last
     /// key press so rapid successive presses accumulate correctly.
     private var pendingVolumeBase: Float?
     private var pendingVolumeTask: Task<Void, Never>?
+    /// Last volume scalar applied by the AGC.  Used as `currentVolume` on the next tick
+    /// so the feedback loop closes on the intended value rather than the (potentially
+    /// stale) CoreAudio readback which lags ~50 ms behind `setVolume`.
+    private var lastAppliedVolume: Float?
 
     private let log = Logger(subsystem: "one.eux.volumegrid", category: "SmartVolume")
 
@@ -336,6 +346,7 @@ final class SmartVolumeCoordinator: ObservableObject {
         pendingVolumeTask?.cancel()
         pendingVolumeTask = nil
         pendingVolumeBase = nil
+        lastAppliedVolume = nil
         isRunning = false
         lastMeasuredRMS = nil
         currentScene = nil
@@ -354,20 +365,29 @@ final class SmartVolumeCoordinator: ObservableObject {
     func calibrateTargetRMS() {
         guard isRunning, smoothedRMS > 1e-5 else { return }
         let perceived = smoothedRMS * Float(volumeMonitor.volumeScalar)
-        let newLow = max(0.01, perceived * 0.5)
-        let newHigh = min(0.30, perceived * 2.0)
+        applyComfortZone(perceivedCenter: perceived, saveDeviceCalibration: true)
+        log.info(
+            "calibrateTargetRMS: perceived=\(perceived) → zone=[\(self.normalizer.targetRMSLow), \(self.normalizer.targetRMSHigh)]"
+        )
+    }
+
+    /// Shared helper: recentre the comfort zone around a perceived-loudness centre point.
+    ///
+    /// `newLow = max(0.01, centre × 0.5)`, `newHigh = min(0.30, max(0.02, centre × 2.0))`.
+    /// Explicit floors prevent near-zero calibrations from being saved or sent to the normalizer.
+    private func applyComfortZone(perceivedCenter: Float, saveDeviceCalibration: Bool = false) {
+        let newLow = max(0.01, perceivedCenter * 0.5)
+        let newHigh = min(0.30, max(0.02, perceivedCenter * 2.0))
         settings.targetRMSLow = newLow
         settings.targetRMSHigh = newHigh
         normalizer.targetRMSLow = newLow
         normalizer.targetRMSHigh = newHigh
-        if let uid = currentDeviceUID {
+        if saveDeviceCalibration, let uid = currentDeviceUID {
             settings.saveCalibration(
                 SmartVolumeSettings.DeviceCalibration(targetRMSLow: newLow, targetRMSHigh: newHigh),
                 forDeviceUID: uid
             )
         }
-        log.info(
-            "calibrateTargetRMS: perceived=\(perceived) → zone=[\(newLow), \(newHigh)]")
     }
 
     // MARK: - Volume key handling
@@ -410,13 +430,13 @@ final class SmartVolumeCoordinator: ObservableObject {
             up: up, currentVolume: current, activeMax: activeMax,
             minVolume: settings.minVolume)
 
-        // Remember where the user is heading; cleared once CoreAudio settles (~200 ms).
+        // Remember where the user is heading; cleared once CoreAudio settles (~300 ms).
         pendingVolumeBase = effect.seedVolume
         pendingVolumeTask?.cancel()
         // `try?` discards the CancellationError from Task.sleep; `guard !isCancelled`
         // then exits early so a cancelled (superseded) task never clears pendingVolumeBase.
         pendingVolumeTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }
             self?.pendingVolumeBase = nil
         }
@@ -430,14 +450,9 @@ final class SmartVolumeCoordinator: ObservableObject {
             // new ceiling, making ceiling adjustments feel purposeless.
             if smoothedRMS > 1e-5 {
                 let newCenter = smoothedRMS * newMax
-                let newLow = newCenter * 0.5
-                let newHigh = min(0.30, newCenter * 2.0)
-                settings.targetRMSLow = newLow
-                settings.targetRMSHigh = newHigh
-                normalizer.targetRMSLow = newLow
-                normalizer.targetRMSHigh = newHigh
+                applyComfortZone(perceivedCenter: newCenter)
                 log.info(
-                    "volumeKey \(up ? "up" : "down") at ceiling: vol=\(current) newMax=\(newMax) smoothedRMS=\(self.smoothedRMS) → zone=[\(newLow), \(newHigh)]"
+                    "volumeKey \(up ? "up" : "down") at ceiling: vol=\(current) newMax=\(newMax) smoothedRMS=\(self.smoothedRMS) → zone=[\(self.normalizer.targetRMSLow), \(self.normalizer.targetRMSHigh)]"
                 )
             } else {
                 log.info(
@@ -450,16 +465,14 @@ final class SmartVolumeCoordinator: ObservableObject {
             )
             if smoothedRMS > 1e-5 {
                 let newCenter = smoothedRMS * effect.seedVolume
-                let newLow = newCenter * 0.5
-                let newHigh = min(0.30, newCenter * 2.0)
-                settings.targetRMSLow = newLow
-                settings.targetRMSHigh = newHigh
-                normalizer.targetRMSLow = newLow
-                normalizer.targetRMSHigh = newHigh
+                applyComfortZone(perceivedCenter: newCenter)
             }
         }
         // Reseed normalizer so the system volume settles at the intended level immediately.
         normalizer.resetWith(currentVolume: effect.seedVolume)
+        // Clear stale AGC feedback so the next handleAGC tick reads volumeMonitor
+        // (which will have settled well before the next 200 ms timer fire).
+        lastAppliedVolume = nil
     }
 
     func rebuildTapIfRunning() {
@@ -501,6 +514,7 @@ final class SmartVolumeCoordinator: ObservableObject {
         if wasMuted && !muted {
             normalizer.resetWith(currentVolume: Float(volumeMonitor.volumeScalar))
             smoothedRMS = 0.0  // discard stale smoothed level from before mute
+            lastAppliedVolume = nil  // use fresh volumeMonitor value after unmute
         }
         wasMuted = muted
         guard !muted else { return }
@@ -511,7 +525,7 @@ final class SmartVolumeCoordinator: ObservableObject {
             ? 1 - expf(-timerInterval / rmsRisingSeconds)  // fast: track rising loudness
             : 1 - expf(-timerInterval / rmsFallingSeconds)  // slow: hold during quiet spans
         smoothedRMS = rmsAlpha * rms + (1 - rmsAlpha) * smoothedRMS
-        let currentVol = Float(volumeMonitor.volumeScalar)
+        let currentVol = lastAppliedVolume ?? Float(volumeMonitor.volumeScalar)
         // Update diagnostics whenever audio is present, even when inside the comfort zone
         // (so the calibrate button stays active and the menu shows live RMS, not "no signal").
         // Gate check uses raw rms (current tick) so the hold counter resets only on actual
@@ -541,11 +555,16 @@ final class SmartVolumeCoordinator: ObservableObject {
         if let newVolume = normalizer.update(
             measuredRMS: smoothedRMS, currentVolume: currentVol, dt: dt)
         {
+            lastAppliedVolume = newVolume
             log.debug(
-                "AGC measuredRMS=\(rms) curVol=\(Float(self.volumeMonitor.volumeScalar)) → \(newVolume)"
+                "AGC measuredRMS=\(rms) curVol=\(currentVol) → \(newVolume)"
             )
             // Smart Volume writes volume exactly like a user action — HUD shows normally.
             volumeMonitor.setVolume(scalar: newVolume)
+        } else {
+            // In-zone or silent: clear so next tick uses the real CoreAudio readback
+            // (which has had time to settle since no AGC write happened this tick).
+            lastAppliedVolume = nil
         }
     }
 }

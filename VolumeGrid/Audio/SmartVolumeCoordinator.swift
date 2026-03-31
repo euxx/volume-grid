@@ -678,8 +678,8 @@ final class SmartVolumeCoordinator: ObservableObject {
             log.debug(
                 "AGC measuredRMS=\(rms) curVol=\(currentVol) → \(newVolume)"
             )
-            // Smart Volume writes volume exactly like a user action — HUD shows normally.
-            volumeMonitor.setVolume(scalar: newVolume)
+            // AGC writes suppress HUD so continuous adjustments don't flash the overlay.
+            volumeMonitor.setVolume(scalar: newVolume, showHUD: false)
         } else {
             // In-zone or silent: clear so next tick uses the real CoreAudio readback
             // (which has had time to settle since no AGC write happened this tick).

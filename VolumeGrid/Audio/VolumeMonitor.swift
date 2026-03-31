@@ -22,6 +22,9 @@ private struct VolumeState: Sendable {
     var registeredVolumeElements: [AudioObjectPropertyElement] = []
     var registeredMuteElements: [AudioObjectPropertyElement] = []
     var lastVolumeScalar: CGFloat?
+    /// Monotonic version stamped on every optimistic pre-update so that failed
+    /// AGC writes only revert *their own* pre-update, not a newer one.
+    var lastVolumeVersion: UInt64 = 0
     var isDeviceMuted = false
     var isListening = false
 }
@@ -107,7 +110,32 @@ private final class VolumeStateStore: @unchecked Sendable {
     }
 
     nonisolated func updateLastVolumeScalar(_ scalar: CGFloat?) {
-        withLock { $0.lastVolumeScalar = scalar }
+        withLock { state in
+            state.lastVolumeVersion &+= 1
+            state.lastVolumeScalar = scalar
+        }
+    }
+
+    /// Atomically read the current `lastVolumeScalar`, write `scalar` as the
+    /// new value, bump the version, and return `(previousScalar, token)`.
+    nonisolated func preUpdateLastVolumeScalar(_ scalar: CGFloat) -> (
+        previous: CGFloat?, token: UInt64
+    ) {
+        withLock { state in
+            let prev = state.lastVolumeScalar
+            state.lastVolumeVersion &+= 1
+            state.lastVolumeScalar = scalar
+            return (prev, state.lastVolumeVersion)
+        }
+    }
+
+    /// Revert `lastVolumeScalar` only if the version still matches `token`,
+    /// meaning no newer AGC write has pre-updated since.
+    nonisolated func revertLastVolumeScalar(version token: UInt64, to replacement: CGFloat?) {
+        withLock { state in
+            guard state.lastVolumeVersion == token else { return }
+            state.lastVolumeScalar = replacement
+        }
     }
 
     nonisolated func isListeningActive() -> Bool {
@@ -260,8 +288,24 @@ class VolumeMonitor: ObservableObject {
         setVolume(scalar: Float32(percentage.clamped(to: 0...100)) / 100.0)
     }
 
-    func setVolume(scalar: Float32) {
+    /// Set the system volume scalar.
+    ///
+    /// - Parameters:
+    ///   - scalar: Volume in [0, 1].
+    ///   - showHUD: When `false`, pre-update `lastVolumeScalar` so the CoreAudio
+    ///     `volumeChanged` callback sees no delta and skips HUD display.  Use this
+    ///     for AGC-driven writes that should not flash the overlay.  A version token
+    ///     ensures that only *this* pre-update is reverted on CoreAudio failure;
+    ///     a newer AGC write's pre-update is left intact.
+    func setVolume(scalar: Float32, showHUD: Bool = true) {
         let clampedScalar = scalar.clamped(to: 0...1)
+        let uiScalar = CGFloat(clampedScalar)
+
+        // When suppressing HUD, atomically snapshot + pre-update lastVolumeScalar
+        // so the asynchronous volumeChanged callback sees no delta.  A version
+        // token ensures only *this* pre-update is reverted on failure.
+        let preUpdate: (previous: CGFloat?, token: UInt64)? =
+            showHUD ? nil : state.preUpdateLastVolumeScalar(uiScalar)
 
         audioQueue.async { [weak self] in
             guard let self else { return }
@@ -269,12 +313,18 @@ class VolumeMonitor: ObservableObject {
             let deviceID = self.resolveDeviceID()
             guard deviceID != 0 else {
                 logger.debug("setVolume: Device ID is 0, cannot set volume")
+                if let pu = preUpdate {
+                    self.state.revertLastVolumeScalar(version: pu.token, to: pu.previous)
+                }
                 return
             }
 
             let elements = self.state.volumeElementsSnapshot()
             guard !elements.isEmpty else {
                 logger.debug("setVolume: No volume elements found for device")
+                if let pu = preUpdate {
+                    self.state.revertLastVolumeScalar(version: pu.token, to: pu.previous)
+                }
                 return
             }
 
@@ -284,25 +334,51 @@ class VolumeMonitor: ObservableObject {
                 logger.error(
                     "setVolume: CoreAudio rejected volume change to \(clampedScalar) on device \(deviceID)"
                 )
+                if let pu = preUpdate {
+                    self.state.revertLastVolumeScalar(version: pu.token, to: pu.previous)
+                }
                 return
             }
 
+            // Unmute: for user actions (showHUD) always clear mute unconditionally
+            // to avoid stale-state bugs; for AGC (showHUD=false) only clear when
+            // actually muted to avoid unnecessary muteChanged callbacks every tick.
             if clampedScalar > 0 {
-                let muteElements = self.state.muteElementsSnapshot()
-                if !muteElements.isEmpty {
-                    _ = self.deviceManager.setMuteState(
-                        false, for: deviceID, elements: muteElements)
+                let shouldUnmute = showHUD || self.state.deviceMuted()
+                if shouldUnmute {
+                    let muteElements = self.state.muteElementsSnapshot()
+                    if !muteElements.isEmpty {
+                        _ = self.deviceManager.setMuteState(
+                            false, for: deviceID, elements: muteElements)
+                    }
                 }
             }
 
-            let uiScalar = CGFloat(clampedScalar)
+            // For AGC writes, read back the device-reported volume so that
+            // lastVolumeScalar matches any hardware quantization.  Update
+            // immediately on audioQueue (before volumeChanged can fire on
+            // the same queue) so the callback sees no delta.
+            let finalScalar: CGFloat
+            if !showHUD {
+                let readBack = self.deviceManager.getCurrentVolume(
+                    for: deviceID, elements: elements)
+                finalScalar = readBack.map { CGFloat($0) } ?? uiScalar
+                self.state.updateLastVolumeScalar(finalScalar)
+            } else {
+                finalScalar = uiScalar
+            }
+
             DispatchQueue.main.async {
-                self.state.updateLastVolumeScalar(uiScalar)
-                self.volumeScalar = uiScalar
-                self.volumePercentage = Int(round(uiScalar * 100))
-                if clampedScalar > 0 {
+                // For user actions (showHUD=true), update lastVolumeScalar on
+                // main queue so volumeChanged (audioQueue) fires first with a
+                // real delta → HUD shows.  For AGC it was already updated above.
+                if showHUD {
+                    self.state.updateLastVolumeScalar(finalScalar)
+                }
+                self.volumeScalar = finalScalar
+                self.volumePercentage = Int(round(finalScalar * 100))
+                if clampedScalar > 0, self.state.deviceMuted() {
                     self.state.setDeviceMuted(false)
-                    // Sync @Published isMuted so Combine subscribers see the correct state
                     if self.isMuted { self.isMuted = false }
                 }
             }

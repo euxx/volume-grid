@@ -24,6 +24,6 @@ xcodebuild -project VolumeGrid.xcodeproj -scheme "Volume Grid" -configuration Re
 
 - When pressing volume keys or mute key
 - When switching output devices
-- When volume changes
+- When volume changes (except AGC-driven adjustments, which suppress HUD)
 
 See [RELEASE.md](RELEASE.md) for release instructions.

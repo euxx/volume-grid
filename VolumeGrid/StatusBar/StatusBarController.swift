@@ -356,12 +356,13 @@ final class StatusBarController {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 250),
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 250),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: true
         )
         window.title = "Smart Volume Settings"
+        window.level = .floating
         window.isReleasedWhenClosed = false
         window.isRestorable = false
         window.contentView = NSHostingView(

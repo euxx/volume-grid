@@ -53,18 +53,14 @@ struct SmartVolumeSettingsView: View {
 
             GroupBox("Comfort Zone") {
                 VStack(alignment: .leading, spacing: 8) {
-                    sliderRow(
+                    comfortZoneRow(
                         label: "Too loud",
-                        valueText: String(
-                            format: "%.1f%% · %@", settings.targetRMSHigh * 100,
-                            loudnessLabel(settings.targetRMSHigh)),
+                        rms: settings.targetRMSHigh,
                         slider: Slider(value: $settings.targetRMSHigh, in: 0.001...0.30)
                     )
-                    sliderRow(
+                    comfortZoneRow(
                         label: "Too quiet",
-                        valueText: String(
-                            format: "%.1f%% · %@", settings.targetRMSLow * 100,
-                            loudnessLabel(settings.targetRMSLow)),
+                        rms: settings.targetRMSLow,
                         slider: Slider(value: $settings.targetRMSLow, in: 0.001...0.30)
                     )
                     Text(
@@ -122,7 +118,7 @@ struct SmartVolumeSettingsView: View {
 
         }
         .padding()
-        .frame(width: 360)
+        .frame(width: 400)
     }
 
     // MARK: - Helpers
@@ -134,8 +130,24 @@ struct SmartVolumeSettingsView: View {
                 .frame(width: 60, alignment: .leading)
             slider
             Text(valueText)
-                .frame(width: 90, alignment: .trailing)
+                .frame(width: 120, alignment: .trailing)
                 .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func comfortZoneRow(label: String, rms: Float, slider: some View) -> some View {
+        HStack {
+            Text(label)
+                .frame(width: 60, alignment: .leading)
+            slider
+            Text(String(format: "%.1f%%", rms * 100))
+                .frame(width: 50, alignment: .trailing)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+            Text(loudnessLabel(rms))
+                .frame(width: 55, alignment: .leading)
                 .foregroundStyle(.secondary)
         }
     }

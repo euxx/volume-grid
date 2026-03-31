@@ -26,8 +26,16 @@ struct VolumeKeyEffect {
             return .init(newMax: newMax, seedVolume: newMax)
         } else {
             let desiredVolume =
-                up ? min(activeMax, currentVolume + step) : max(minVolume, currentVolume - step)
-            return .init(newMax: nil, seedVolume: desiredVolume)
+                up ? currentVolume + step : max(minVolume, currentVolume - step)
+            // Pressing up would reach the ceiling zone — raise the ceiling preemptively
+            // so macOS's unclamped volume step doesn't exceed our maxVolume.
+            if up, desiredVolume >= activeMax - step / 2 {
+                let newMax = min(1.0, activeMax + step)
+                return .init(newMax: newMax, seedVolume: min(newMax, desiredVolume))
+            }
+            return .init(
+                newMax: nil,
+                seedVolume: min(activeMax, max(minVolume, desiredVolume)))
         }
     }
 }
@@ -73,7 +81,7 @@ final class SmartVolumeCoordinator: ObservableObject {
     // controls the actual volume ramp speed.  Removing either layer would cause different
     // artefacts: no pre-smooth → jittery RMS → AGC oscillation; no IIR → stepwise volume.
     private let rmsRisingSeconds: Float = 0.3
-    private let rmsFallingSeconds: Float = 1.5
+    // rmsFallingSeconds is now adaptive: see adaptiveFallingSeconds
     private var smoothedRMS: Float = 0.0
 
     // _tapMonitorBox holds an AudioTapMonitor (macOS 14.2+) without requiring
@@ -124,6 +132,17 @@ final class SmartVolumeCoordinator: ObservableObject {
     /// stale) CoreAudio readback which lags ~50 ms behind `setVolume`.
     private var lastAppliedVolume: Float?
 
+    // --- Scene-adaptive AGC (Phase 1) ---
+    // Smoothed blend factor: 0 = pure music, 1 = pure speech.
+    private var sceneBlend: Float = 0.5
+
+    // --- Adaptive pre-smoothing (Phase 2) ---
+    private var rmsHistory: [Float] = []  // circular buffer, max 5
+    private var adaptiveFallingSeconds: Float = 1.5
+
+    // --- Adaptive noise gate (Phase 4) ---
+    private var adaptiveNoiseGate: Float = 0.004
+
     private let log = Logger(subsystem: "one.eux.volumegrid", category: "SmartVolume")
 
     init(volumeMonitor: VolumeMonitor) {
@@ -167,20 +186,18 @@ final class SmartVolumeCoordinator: ObservableObject {
             .store(in: &cancellables)
         settings.$smoothing
             .dropFirst()
-            .sink { [weak self] _ in
+            .sink { [weak self] smoothing in
                 guard let self else { return }
-                normalizer.attackSeconds = self.settings.attackSeconds
-                normalizer.releaseSeconds = self.settings.releaseSeconds
-                log.info(
-                    "Smoothing updated: attack=\(self.settings.attackSeconds)s release=\(self.settings.releaseSeconds)s"
-                )
+                // Attack/release are now managed by updateSceneBlend(); just log the change.
+                log.info("Smoothing updated: \(smoothing)")
             }
             .store(in: &cancellables)
         settings.$strength
             .dropFirst()
             .sink { [weak self] strength in
                 guard let self else { return }
-                normalizer.strength = strength
+                // Strength is now managed by updateSceneBlend(); just log the change.
+                log.info("Strength updated: \(strength)")
             }
             .store(in: &cancellables)
         // React to live isEnabled changes (e.g. via `defaults write`).
@@ -352,6 +369,10 @@ final class SmartVolumeCoordinator: ObservableObject {
         pendingVolumeTask = nil
         pendingVolumeBase = nil
         lastAppliedVolume = nil
+        sceneBlend = 0.5
+        rmsHistory = []
+        adaptiveFallingSeconds = 1.5
+        adaptiveNoiseGate = 0.004
         isRunning = false
         lastMeasuredRMS = nil
         currentScene = nil
@@ -498,9 +519,90 @@ final class SmartVolumeCoordinator: ObservableObject {
     @available(macOS 14.2, *)
     private func applySceneProfile(_ scene: SoundSceneClassifier.Scene) {
         currentScene = scene.description
-        // Dead-zone model uses the same [targetRMSLow, targetRMSHigh] for all scenes.
-        // Scene info is kept for display only.
-        log.info("Scene → \(scene): (informational only, no zone change)")
+        log.info("Scene → \(scene)")
+    }
+
+    /// Update AGC parameters by continuously blending between speech and music profiles.
+    ///
+    /// `blend = speech / (speech + music + 0.01)`: 0 = pure music, 1 = pure speech.
+    /// Scene blend applies *multipliers* around the user's settings so the UI slider
+    /// (settings.attackSeconds / releaseSeconds) remains a faithful approximation.
+    private func updateSceneBlend() {
+        let speech = Float(speechConfidence)
+        let music = Float(musicConfidence)
+        let total = speech + music
+
+        // When classifier has no meaningful output (both near 0), fall back to
+        // unmodified user settings so the absence of a classifier doesn't silently
+        // alter AGC behaviour.
+        guard total > 0.05 else {
+            normalizer.attackSeconds = settings.attackSeconds
+            normalizer.releaseSeconds = settings.releaseSeconds
+            normalizer.holdSeconds = 2.0
+            normalizer.strength = settings.strength
+            return
+        }
+
+        let rawBlend = speech / (total + 0.01)
+
+        // IIR smooth the blend factor itself to prevent rapid toggling.
+        let blendAlpha: Float = 0.03
+        sceneBlend += blendAlpha * (rawBlend - sceneBlend)
+
+        // Scene multipliers: speech → faster/stronger, music → slower/gentler.
+        let speedMul = lerp(1.3, 0.7, sceneBlend)  // music 1.3×, speech 0.7×
+        let holdMul = lerp(1.5, 0.5, sceneBlend)  // music 1.5×, speech 0.5×
+        let strengthMul = lerp(0.7, 1.0, sceneBlend)  // music 0.7×, speech 1.0×
+
+        normalizer.attackSeconds = settings.attackSeconds * speedMul
+        normalizer.releaseSeconds = settings.releaseSeconds * speedMul
+        normalizer.holdSeconds = 2.0 * holdMul  // base 2s × scene factor (1.0–3.0s)
+        normalizer.strength = settings.strength * strengthMul
+    }
+
+    private func lerp(_ a: Float, _ b: Float, _ t: Float) -> Float {
+        a + (b - a) * t
+    }
+
+    /// Update `adaptiveFallingSeconds` based on silence confidence and RMS variance.
+    private func updateAdaptiveSmoothing(rms: Float) {
+        // Maintain 5-tick circular buffer for variance calculation.
+        rmsHistory.append(rms)
+        if rmsHistory.count > 5 { rmsHistory.removeFirst() }
+
+        let silence = Float(silenceConfidence)
+        // Base: interpolate between fast (silence) and slow (active audio).
+        var falling = lerp(0.1, 1.5, 1 - silence)
+
+        // If signal is stable (low variance), speed up falling to detect transitions.
+        if rmsHistory.count >= 3 {
+            let mean = rmsHistory.reduce(0, +) / Float(rmsHistory.count)
+            let variance =
+                rmsHistory.reduce(0) { $0 + ($1 - mean) * ($1 - mean) }
+                / Float(rmsHistory.count)
+            if variance < 1e-4 {
+                falling = min(falling, 0.3)  // stable signal → faster catch
+            }
+        }
+        adaptiveFallingSeconds = falling
+    }
+
+    /// Update the adaptive noise gate using the classifier as ground truth.
+    ///
+    /// Instead of self-reinforcing rejection-rate counting, use silence confidence
+    /// to decide drift direction: rise during confirmed silence, fall when the
+    /// classifier says content is present but the signal is below the gate.
+    private func updateAdaptiveNoiseGate(rms: Float) {
+        let silence = Float(silenceConfidence)
+        if silence > 0.3 {
+            // Likely silence — nudge gate up toward the current ambient floor.
+            adaptiveNoiseGate += 0.01 * (rms - adaptiveNoiseGate)
+        } else if rms < adaptiveNoiseGate {
+            // Classifier says content is playing but signal is below gate — lower it.
+            adaptiveNoiseGate *= 0.97
+        }
+        let maxGate = normalizer.targetRMSLow * 0.3
+        adaptiveNoiseGate = max(1e-5, min(maxGate, adaptiveNoiseGate))
     }
 
     // MARK: - AGC (Main Actor)
@@ -522,14 +624,17 @@ final class SmartVolumeCoordinator: ObservableObject {
             smoothedRMS = 0.0  // discard stale smoothed level from before mute
             lastAppliedVolume = nil  // use fresh volumeMonitor value after unmute
         }
+        // Update scene-adaptive profile blend each tick (Phase 1).
+        updateSceneBlend()
         wasMuted = muted
         guard !muted else { return }
-        // Asymmetric RMS pre-smoothing: rising level is tracked quickly so loud content
-        // is caught fast; falling level is tracked slowly so pauses don't look like silence.
+        // Phase 2: adaptive pre-smoothing — falling time constant adjusts based on
+        // silence confidence and signal variance.
+        updateAdaptiveSmoothing(rms: rms)
         let rmsAlpha =
             rms > smoothedRMS
-            ? 1 - expf(-timerInterval / rmsRisingSeconds)  // fast: track rising loudness
-            : 1 - expf(-timerInterval / rmsFallingSeconds)  // slow: hold during quiet spans
+            ? 1 - expf(-timerInterval / rmsRisingSeconds)
+            : 1 - expf(-timerInterval / adaptiveFallingSeconds)
         smoothedRMS = rmsAlpha * rms + (1 - rmsAlpha) * smoothedRMS
         let currentVol = lastAppliedVolume ?? Float(volumeMonitor.volumeScalar)
         // Update diagnostics whenever audio is present, even when inside the comfort zone
@@ -537,8 +642,10 @@ final class SmartVolumeCoordinator: ObservableObject {
         // Gate check uses raw rms (current tick) so the hold counter resets only on actual
         // audio, not on the slow smoothedRMS tail. The hold absorbs brief speech pauses
         // (≤ 600 ms) without flickering the display to nil.
-        let noiseGate = max(1e-5, normalizer.targetRMSLow * 0.2)
-        if rms > noiseGate {
+        // Phase 4: adaptive noise gate — blocks AGC when signal is below gate.
+        let gateRejected = rms <= adaptiveNoiseGate
+        updateAdaptiveNoiseGate(rms: rms)
+        if !gateRejected {
             diagHoldTicks = diagHoldThreshold
             lastMeasuredRMS = smoothedRMS
         } else if diagHoldTicks > 0 {
@@ -546,6 +653,12 @@ final class SmartVolumeCoordinator: ObservableObject {
             lastMeasuredRMS = smoothedRMS  // hold window: keep display stable
         } else {
             lastMeasuredRMS = nil  // hold expired — genuine silence
+        }
+        // Gate rejected → treat as silence so low-level noise/bleed doesn't trigger
+        // gain raise. Without this, 1e-5 safety floor in normalizer lets anything through.
+        if gateRejected {
+            normalizer.silenceTick(currentVolume: currentVol, dt: dt)
+            return
         }
         // During detected silence, if the signal is below the comfort floor, call
         // silenceTick() instead of update().  This:

@@ -32,35 +32,35 @@ final class LoudnessNormalizerTests: XCTestCase {
     // MARK: - Silence guard
 
     func testSilentSignalReturnsNil() {
-        var normalizer = LoudnessNormalizer()  // default targetRMSLow = 0.020, gate = 0.004
+        var normalizer = LoudnessNormalizer()  // default targetRMSLow = 0.020
         normalizer.resetWith(currentVolume: 0.5)
         XCTAssertNil(normalizer.update(measuredRMS: 0, currentVolume: 1.0, dt: 0.2))
         XCTAssertNil(normalizer.update(measuredRMS: 1e-6, currentVolume: 1.0, dt: 0.2))
         XCTAssertNil(normalizer.update(measuredRMS: 1e-5, currentVolume: 1.0, dt: 0.2))
-        // below noise gate (0.004) even though above the bare epsilon
-        XCTAssertNil(normalizer.update(measuredRMS: 0.003, currentVolume: 1.0, dt: 0.2))
+        // Signals above 1e-5 now pass the normalizer's safety gate; content-level
+        // gating is handled by the coordinator's adaptive noise gate.
+        XCTAssertNotNil(normalizer.update(measuredRMS: 0.003, currentVolume: 1.0, dt: 0.2))
     }
 
     func testJustAboveSilenceThresholdIsNotNil() {
-        var normalizer = LoudnessNormalizer()  // default targetRMSLow = 0.020, gate = 0.004
+        var normalizer = LoudnessNormalizer()  // default targetRMSLow = 0.020
         normalizer.resetWith(currentVolume: 0.5)
-        // noise gate = targetRMSLow * 0.2 = 0.004; signal at 0.011 exceeds gate
-        // and perceivedRMS = 0.011 < targetRMSLow = 0.020 → outside zone → non-nil
+        // Any signal above 1e-5 passes the normalizer's safety gate.
+        // perceivedRMS = 0.011 < targetRMSLow = 0.020 → outside zone → non-nil
         XCTAssertNotNil(normalizer.update(measuredRMS: 0.011, currentVolume: 1.0, dt: 0.2))
     }
 
-    /// Regression guard: noise gate uses pre-volume measuredRMS, not perceivedRMS.
-    /// When currentVolume is very low, content that IS playing must still pass the gate
-    /// so the AGC can raise volume back to a listenable level.
+    /// Regression guard: normalizer safety gate uses only 1e-5 floor.
+    /// The coordinator handles content-level gating; the normalizer must not block
+    /// recovery when content IS playing but currentVolume is very low.
     func testNoisegateDoesNotBlockRecoveryAtLowVolume() {
         var normalizer = LoudnessNormalizer()
         normalizer.targetRMSLow = 0.040
         normalizer.minVolumeScalar = 0.05
         normalizer.maxVolumeScalar = 1.0
         normalizer.resetWith(currentVolume: 0.05)
-        // measuredRMS = 0.1 (content IS audible) but perceivedRMS = 0.1 × 0.05 = 0.005,
-        // which is below targetRMSLow (too quiet for perceived scale).
-        // Gate = targetRMSLow * 0.2 = 0.008; measuredRMS = 0.1 >> 0.008 → passes gate.
+        // measuredRMS = 0.1 >> 1e-5 → passes safety gate.
+        // perceivedRMS = 0.1 × 0.05 = 0.005, below targetRMSLow → AGC should raise.
         let result = normalizer.update(measuredRMS: 0.1, currentVolume: 0.05, dt: 0.2)
         XCTAssertNotNil(result, "AGC must not be gated by low volume when content is playing")
         XCTAssertGreaterThan(result!, 0.05, "AGC should raise volume toward target")
@@ -868,11 +868,15 @@ final class VolumeKeyEffectTests: XCTestCase {
 
     // MARK: - desiredVolume boundary clamping
 
-    func testMidRangeUp_desiredVolumeClampedToActiveMax() {
+    func testMidRangeUp_preemptiveCeilingRaise() {
+        // vol=0.44, step would reach 0.5025 — entering ceiling zone → raises max preemptively.
         let effect = VolumeKeyEffect.compute(
             up: true, currentVolume: 0.44, activeMax: 0.5, minVolume: 0.1)
-        XCTAssertNil(effect.newMax, "ceiling must not change")
-        XCTAssertEqual(effect.seedVolume, 0.5, accuracy: 1e-5, "desiredVolume clamped to activeMax")
+        XCTAssertNotNil(
+            effect.newMax, "ceiling should raise preemptively when step reaches ceiling zone")
+        XCTAssertEqual(effect.newMax ?? 0, 0.5 + step, accuracy: 1e-5)
+        XCTAssertEqual(
+            effect.seedVolume, 0.44 + step, accuracy: 1e-5, "seed = desiredVolume (below newMax)")
     }
 
     func testMidRangeDown_desiredVolumeClampedToMinVolume() {

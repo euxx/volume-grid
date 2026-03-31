@@ -57,8 +57,9 @@ struct LoudnessNormalizer {
         // Uses the pre-volume signal (measuredRMS) rather than perceived RMS so that a
         // very low system volume does not prevent the AGC from detecting and raising volume.
         // Gate = 20% of targetRMSLow on the raw signal scale.
-        let noiseGate = max(1e-5, targetRMSLow * 0.2)
-        guard measuredRMS > noiseGate else { return nil }
+        // Noise gate is handled by the coordinator (adaptive gate); skip here if signal
+        // is truly inaudible (safety floor only).
+        guard measuredRMS > 1e-5 else { return nil }
         guard initialized else { return nil }
         // Advance the hold timer on every valid-audio tick, not just in the release branch.
         // This ensures time spent inside the comfort zone counts toward hold expiry; without
@@ -92,8 +93,10 @@ struct LoudnessNormalizer {
         // alpha = 1 − exp(−dt/τ) converts a physical time constant τ (seconds) to a
         // per-step coefficient, making the AGC speed independent of the timer frequency.
         if desiredVolume < smoothedTargetVolume {
-            // Attack: perceived signal is louder than target → reduce volume quickly.
-            holdCountdown = holdSeconds
+            // Attack: proportional hold — scale duration by overshoot magnitude.
+            // Mild overshoot (1.1×) → short hold; heavy overshoot (2×+) → full hold.
+            let overshoot = perceivedRMS / targetRMSHigh
+            holdCountdown = holdSeconds * min(1.0, max(0, overshoot - 1.0))
             let alpha = 1 - expf(-dt / attackSeconds)
             smoothedTargetVolume += alpha * (desiredVolume - smoothedTargetVolume)
         } else {

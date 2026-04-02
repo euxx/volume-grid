@@ -1,5 +1,8 @@
 import Combine
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "one.eux.volumegrid", category: "SmartVolumeSettings")
 
 /// Persistent settings for Smart Volume, backed by UserDefaults.
 final class SmartVolumeSettings: ObservableObject {
@@ -15,7 +18,7 @@ final class SmartVolumeSettings: ObservableObject {
     /// Lower bound of the AGC comfort zone (perceived RMS; too quiet below this → AGC raises volume).
     @Published var targetRMSLow: Float {
         didSet {
-            let clamped = max(1e-5, min(targetRMSLow, 0.30))
+            let clamped = Self.clampRMS(targetRMSLow)
             if targetRMSLow != clamped { targetRMSLow = clamped }
             // Enforce ordering: low must not exceed high.
             if targetRMSLow > targetRMSHigh { targetRMSHigh = targetRMSLow }
@@ -26,7 +29,7 @@ final class SmartVolumeSettings: ObservableObject {
     /// Upper bound of the AGC comfort zone (perceived RMS; too loud above this → AGC lowers volume).
     @Published var targetRMSHigh: Float {
         didSet {
-            let clamped = max(1e-5, min(targetRMSHigh, 0.30))
+            let clamped = Self.clampRMS(targetRMSHigh)
             if targetRMSHigh != clamped { targetRMSHigh = clamped }
             // Enforce ordering: high must not fall below low.
             if targetRMSHigh < targetRMSLow { targetRMSLow = targetRMSHigh }
@@ -36,7 +39,7 @@ final class SmartVolumeSettings: ObservableObject {
 
     @Published var minVolume: Float {
         didSet {
-            let clamped = max(0, min(minVolume, 1))
+            let clamped = Self.clampUnit(minVolume)
             if minVolume != clamped { minVolume = clamped }
             // Enforce minVolume <= maxVolume on every mutation path.
             if maxVolume < minVolume { maxVolume = minVolume }
@@ -46,7 +49,7 @@ final class SmartVolumeSettings: ObservableObject {
 
     @Published var maxVolume: Float {
         didSet {
-            let clamped = max(0, min(maxVolume, 1))
+            let clamped = Self.clampUnit(maxVolume)
             if maxVolume != clamped { maxVolume = clamped }
             // Enforce minVolume <= maxVolume on every mutation path.
             if minVolume > maxVolume { minVolume = maxVolume }
@@ -57,7 +60,7 @@ final class SmartVolumeSettings: ObservableObject {
     /// 0 = responsive (fast AGC), 1 = smooth (slow AGC). Default 0.3.
     @Published var smoothing: Float {
         didSet {
-            let clamped = max(0, min(smoothing, 1))
+            let clamped = Self.clampUnit(smoothing)
             if smoothing != clamped { smoothing = clamped }
             writeIfNeeded(smoothing, forKey: Keys.smoothing)
         }
@@ -66,7 +69,7 @@ final class SmartVolumeSettings: ObservableObject {
     /// AGC correction strength. 1.0 = full normalisation; lower = gentler compression.
     @Published var strength: Float {
         didSet {
-            let clamped = max(0, min(strength, 1))
+            let clamped = Self.clampUnit(strength)
             if strength != clamped { strength = clamped }
             writeIfNeeded(strength, forKey: Keys.strength)
         }
@@ -96,8 +99,12 @@ final class SmartVolumeSettings: ObservableObject {
     /// Save a calibration entry for the given device UID and persist to UserDefaults.
     func saveCalibration(_ cal: DeviceCalibration, forDeviceUID uid: String) {
         deviceCalibrations[uid] = cal
-        guard let data = try? JSONEncoder().encode(deviceCalibrations) else { return }
-        defaults.set(data, forKey: Keys.deviceCalibrations)
+        do {
+            let data = try JSONEncoder().encode(deviceCalibrations)
+            defaults.set(data, forKey: Keys.deviceCalibrations)
+        } catch {
+            logger.error("saveCalibration: failed to encode calibrations — \(error)")
+        }
     }
 
     /// Return the stored calibration for a device UID, or `nil` if none exists.
@@ -183,6 +190,18 @@ final class SmartVolumeSettings: ObservableObject {
         }
     }
 
+    // MARK: - Clamping helpers
+
+    /// Clamp to [1e-5, 0.30] for RMS bounds.
+    private static func clampRMS(_ value: Float) -> Float {
+        max(1e-5, min(value, 0.30))
+    }
+
+    /// Clamp to [0, 1] for unit-range values.
+    private static func clampUnit(_ value: Float) -> Float {
+        max(0, min(value, 1))
+    }
+
     // MARK: - Private helpers
 
     private func writeIfNeeded<T>(_ value: T, forKey key: String) {
@@ -232,13 +251,15 @@ final class SmartVolumeSettings: ObservableObject {
         let newStrength = max(0, min(rawStrength, 1))
         if strength != newStrength { strength = newStrength }
 
-        if let data = defaults.data(forKey: Keys.deviceCalibrations),
-            let decoded = try? JSONDecoder().decode(
-                [String: DeviceCalibration].self, from: data)
-        {
-            deviceCalibrations = decoded
+        if let data = defaults.data(forKey: Keys.deviceCalibrations) {
+            do {
+                deviceCalibrations = try JSONDecoder().decode(
+                    [String: DeviceCalibration].self, from: data)
+            } catch {
+                logger.error("reloadFromDefaults: failed to decode calibrations — \(error)")
+                deviceCalibrations = [:]
+            }
         } else {
-            // Key was removed or corrupted externally — clear stale in-memory entries.
             deviceCalibrations = [:]
         }
 

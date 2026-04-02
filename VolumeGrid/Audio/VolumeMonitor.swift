@@ -12,20 +12,27 @@ struct HUDEvent: Sendable {
     nonisolated let isUnsupported: Bool
 }
 
-/// Internal state for VolumeMonitor
-/// Contains mutable state that must be accessed safely from multiple threads
+/// Internal storage for VolumeMonitor.
+/// Never accessed directly — all reads/writes go through VolumeStateStore's lock.
 private struct VolumeState: Sendable {
+    // MARK: Device
     var defaultOutputDeviceID: AudioDeviceID = 0
     var listeningDeviceID: AudioDeviceID?
+    var isDeviceMuted = false
+
+    // MARK: Elements (discovered vs registered may differ if registration partially fails)
     var volumeElements: [AudioObjectPropertyElement] = []
     var muteElements: [AudioObjectPropertyElement] = []
     var registeredVolumeElements: [AudioObjectPropertyElement] = []
     var registeredMuteElements: [AudioObjectPropertyElement] = []
+
+    // MARK: Volume tracking
     var lastVolumeScalar: CGFloat?
     /// Monotonic version stamped on every optimistic pre-update so that failed
     /// AGC writes only revert *their own* pre-update, not a newer one.
     var lastVolumeVersion: UInt64 = 0
-    var isDeviceMuted = false
+
+    // MARK: Listener lifecycle
     var isListening = false
 }
 

@@ -6,7 +6,10 @@ enum VolumeKey {
 
 @MainActor
 final class SystemEventMonitor {
-    // Only mutated on MainActor (start/stop); read in deinit after last reference released
+    // nonisolated(unsafe): mutated on MainActor (start/stop); read in deinit which may
+    // run on an arbitrary thread.  This is safe because deinit only executes after the
+    // last strong reference is released, so no concurrent start()/stop() call can be
+    // writing these at the same time.
     private nonisolated(unsafe) var globalMonitor: Any?
     private nonisolated(unsafe) var localMonitor: Any?
     // Deduplicates the global + local NSEvent callbacks that both fire for the same

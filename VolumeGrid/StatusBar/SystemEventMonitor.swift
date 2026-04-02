@@ -72,10 +72,7 @@ final class SystemEventMonitor {
 
     private func process(event: NSEvent, handler: @escaping @MainActor (VolumeKey) -> Void) {
         guard event.subtype.rawValue == 8 else { return }
-        let keyCode = (event.data1 & 0xFFFF_0000) >> 16
-        let keyFlags = event.data1 & 0x0000_FFFF
-        let keyState = (keyFlags & 0xFF00) >> 8
-        guard keyState == 0xA else { return }
+        guard let key = Self.parseVolumeKey(data1: event.data1) else { return }
 
         // Deduplicate the global + local callbacks for the same physical event: they share
         // an identical event.timestamp.  Key-repeat events arrive ~33 ms apart and therefore
@@ -86,11 +83,21 @@ final class SystemEventMonitor {
         lastEventData = event.data1
         lastEventTimestamp = event.timestamp
 
+        handler(key)
+    }
+
+    /// Parse a raw NX key event data1 field into a VolumeKey, or nil if not a volume key.
+    /// Extracted for testability.
+    nonisolated static func parseVolumeKey(data1: Int) -> VolumeKey? {
+        let keyCode = (data1 & 0xFFFF_0000) >> 16
+        let keyFlags = data1 & 0x0000_FFFF
+        let keyState = (keyFlags & 0xFF00) >> 8
+        guard keyState == 0xA else { return nil }
         switch keyCode & 0xFF {
-        case 0: handler(.up)  // NX_KEYTYPE_SOUND_UP
-        case 1: handler(.down)  // NX_KEYTYPE_SOUND_DOWN
-        case 7: handler(.mute)  // NX_KEYTYPE_MUTE
-        default: break
+        case 0: return .up
+        case 1: return .down
+        case 7: return .mute
+        default: return nil
         }
     }
 }

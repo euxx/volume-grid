@@ -13,8 +13,8 @@ struct HUDEvent: Sendable {
 }
 
 /// Internal storage for VolumeMonitor.
-/// Never accessed directly — all reads/writes go through VolumeStateStore's lock.
-private struct VolumeState: Sendable {
+/// Should only be modified via VolumeStateStore methods to maintain thread safety.
+struct VolumeState: Sendable {
     // MARK: Device
     var defaultOutputDeviceID: AudioDeviceID = 0
     var listeningDeviceID: AudioDeviceID?
@@ -41,7 +41,7 @@ private struct VolumeState: Sendable {
 /// - VolumeMonitor is @MainActor but needs background thread access
 /// - CoreAudio callbacks occur on arbitrary threads
 /// - Actor would require await at too many call sites
-private final class VolumeStateStore: @unchecked Sendable {
+final class VolumeStateStore: @unchecked Sendable {
     private let stateLock = OSAllocatedUnfairLock(initialState: VolumeState())
     private let listenerLock = OSAllocatedUnfairLock()
     // Protected by listenerLock; non-Sendable AudioObjectPropertyListenerBlock

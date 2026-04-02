@@ -84,7 +84,8 @@ final class SoundSceneClassifier {
                 try analyzer.add(request, withObserver: observer)
                 self.streamAnalyzer = analyzer
                 self.observedRequest = request
-                self.resultObserver = observer  // must be retained; SNAudioStreamAnalyzer does not retain it
+                // Must be retained; SNAudioStreamAnalyzer does not retain it.
+                self.resultObserver = observer
                 self.framePosition = 0
             } catch {
                 setupError = error
@@ -149,8 +150,41 @@ final class SoundSceneClassifier {
     // Hysteresis thresholds: higher confidence required to enter a scene than to stay in it.
     // This prevents rapid scene flipping near the boundary (e.g. speech+background music),
     // which would cause audible targetRMS toggling at ~0.5 Hz.
-    private static let sceneEnterThreshold = 0.6
-    private static let sceneExitThreshold = 0.4
+    nonisolated static let sceneEnterThreshold = 0.6
+    nonisolated static let sceneExitThreshold = 0.4
+
+    /// Pure hysteresis logic: given the current scene and new confidences, compute the next scene.
+    /// Extracted as a static method to enable unit testing without SoundAnalysis.
+    nonisolated static func nextScene(
+        current: Scene, speech: Double, music: Double
+    ) -> Scene {
+        switch current {
+        case .speech:
+            if speech >= sceneExitThreshold {
+                return .speech
+            } else if music >= sceneEnterThreshold {
+                return .music
+            } else {
+                return .ambient
+            }
+        case .music:
+            if music >= sceneExitThreshold {
+                return .music
+            } else if speech >= sceneEnterThreshold {
+                return .speech
+            } else {
+                return .ambient
+            }
+        case .ambient:
+            if speech >= sceneEnterThreshold {
+                return .speech
+            } else if music >= sceneEnterThreshold {
+                return .music
+            } else {
+                return .ambient
+            }
+        }
+    }
 
     private func applyConfidences(
         speech: Double, music: Double, silence: Double, top: [TopClassification]
@@ -162,34 +196,7 @@ final class SoundSceneClassifier {
         log.debug(
             "confidences: speech=\(String(format: "%.2f", speech)) music=\(String(format: "%.2f", music))"
         )
-        // Apply hysteresis: use different thresholds for entering vs staying in a scene.
-        let newScene: Scene
-        switch currentScene {
-        case .speech:
-            if speech >= Self.sceneExitThreshold {
-                newScene = .speech
-            } else if music >= Self.sceneEnterThreshold {
-                newScene = .music
-            } else {
-                newScene = .ambient
-            }
-        case .music:
-            if music >= Self.sceneExitThreshold {
-                newScene = .music
-            } else if speech >= Self.sceneEnterThreshold {
-                newScene = .speech
-            } else {
-                newScene = .ambient
-            }
-        case .ambient:
-            if speech >= Self.sceneEnterThreshold {
-                newScene = .speech
-            } else if music >= Self.sceneEnterThreshold {
-                newScene = .music
-            } else {
-                newScene = .ambient
-            }
-        }
+        let newScene = Self.nextScene(current: currentScene, speech: speech, music: music)
         guard newScene != currentScene else { return }
         currentScene = newScene
         log.info(

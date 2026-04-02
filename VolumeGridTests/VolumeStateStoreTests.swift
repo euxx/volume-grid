@@ -148,4 +148,30 @@ final class VolumeStateStoreTests: XCTestCase {
         let finalSnapshot = store.lastVolumeScalarSnapshot()
         XCTAssertNotNil(finalSnapshot)
     }
+
+    func testConcurrentVersionMonotonicity() {
+        let store = VolumeStateStore()
+        let group = DispatchGroup()
+        let iterations = 200
+        // Collect all tokens in a lock-protected container (Sendable-safe)
+        let collectedTokens = OSAllocatedUnfairLock(initialState: [UInt64]())
+
+        for i in 0..<iterations {
+            group.enter()
+            DispatchQueue.global().async {
+                let (_, token) = store.preUpdateLastVolumeScalar(CGFloat(i))
+                collectedTokens.withLock { $0.append(token) }
+                group.leave()
+            }
+        }
+
+        group.wait()
+
+        // Every token must be unique (version increments atomically under the lock)
+        let tokens = collectedTokens.withLock { $0 }
+        let uniqueTokens = Set(tokens)
+        XCTAssertEqual(
+            uniqueTokens.count, iterations,
+            "Expected \(iterations) unique tokens, got \(uniqueTokens.count)")
+    }
 }

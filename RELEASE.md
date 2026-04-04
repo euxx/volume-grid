@@ -34,3 +34,24 @@ Edit [build-dmg.sh](build-dmg.sh) to set `VERSION` and `TIMESTAMP`, then run:
 chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
+
+7. Update the release notes on GitHub to match `CHANGELOG.md`:
+
+   Write the notes in Markdown format to a temp file, then pass it via `--notes-file`:
+
+   ```sh
+   gh release edit vX.Y.Z --notes-file /path/to/notes.md
+   ```
+
+   Notes format:
+
+   ```markdown
+   ## What's Changed
+
+   ### Added/Changed/Fixed
+
+   - Change 1
+   - Change 2
+
+   **Full Changelog**: https://github.com/euxx/volume-grid/compare/vPREV...vX.Y.Z
+   ```

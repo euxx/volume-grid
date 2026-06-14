@@ -140,6 +140,50 @@ final class AudioDeviceManager: Sendable {
         !detectMuteElements(for: deviceID).isEmpty
     }
 
+    nonisolated func outputChannelCount(_ deviceID: AudioDeviceID) -> UInt32 {
+        var address = makePropertyAddress(selector: kAudioDevicePropertyStreamConfiguration)
+        var size: UInt32 = 0
+
+        guard
+            AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &size) == noErr,
+            size >= UInt32(MemoryLayout<AudioBufferList>.size)
+        else { return 0 }
+
+        let rawPointer = UnsafeMutableRawPointer.allocate(
+            byteCount: Int(size),
+            alignment: MemoryLayout<AudioBufferList>.alignment
+        )
+        defer { rawPointer.deallocate() }
+
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, rawPointer) == noErr
+        else { return 0 }
+
+        let bufferListPointer = rawPointer.bindMemory(to: AudioBufferList.self, capacity: 1)
+        let buffers = UnsafeMutableAudioBufferListPointer(bufferListPointer)
+        return buffers.reduce(UInt32(0)) { channelCount, buffer in
+            channelCount + buffer.mNumberChannels
+        }
+    }
+
+    nonisolated func isOutputDeviceEligible(
+        transportType: String,
+        outputChannels: UInt32,
+        supportsAudio: Bool,
+    ) -> Bool {
+        outputChannels >= 2
+            && supportsAudio
+            && transportType != "Virtual"
+    }
+
+    nonisolated func isSelectableOutputDevice(_ deviceID: AudioDeviceID) -> Bool {
+        let outputChannels = outputChannelCount(deviceID)
+        return isOutputDeviceEligible(
+            transportType: getDeviceTransportType(deviceID),
+            outputChannels: outputChannels,
+            supportsAudio: supportsVolumeControl(deviceID) || supportsMute(deviceID)
+        )
+    }
+
     nonisolated func getCurrentVolume(
         for deviceID: AudioDeviceID, elements: [AudioObjectPropertyElement]
     ) -> Float32? {
@@ -244,13 +288,18 @@ final class AudioDeviceManager: Sendable {
     nonisolated func getOutputDevices() -> [AudioDevice] {
         let allDevices = getAllDevices()
         return allDevices.filter { device in
+            let outputChannels = outputChannelCount(device.id)
             let supportsAudio = supportsVolumeControl(device.id) || supportsMute(device.id)
             let transportType = getDeviceTransportType(device.id)
-            let isNotVirtual = transportType != "Virtual"
-            logger.debug(
-                "'\(device.name)' (ID: \(device.id), Type: \(transportType), Audio: \(supportsAudio))"
+            let isEligible = isOutputDeviceEligible(
+                transportType: transportType,
+                outputChannels: outputChannels,
+                supportsAudio: supportsAudio,
             )
-            return supportsAudio && isNotVirtual
+            logger.debug(
+                "'\(device.name)' (ID: \(device.id), Type: \(transportType), OutputChannels: \(outputChannels), Audio: \(supportsAudio), Eligible: \(isEligible))"
+            )
+            return isEligible
         }
         // Sort by name length so built-in/short-named devices (e.g. "TV") appear before
         // longer peripheral names. This keeps the most common output near the top of the menu.

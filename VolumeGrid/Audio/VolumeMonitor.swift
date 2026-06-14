@@ -156,6 +156,10 @@ class VolumeMonitor: ObservableObject {
         return currentID != 0 ? currentID : updateDefaultOutputDevice()
     }
 
+    private nonisolated func isSelectableOutputDevice(_ deviceID: AudioDeviceID) -> Bool {
+        deviceID != 0 && deviceManager.isSelectableOutputDevice(deviceID)
+    }
+
     private nonisolated let deviceManager = AudioDeviceManager()
     private nonisolated let state = VolumeStateStore()
     private let systemEventMonitor = SystemEventMonitor()
@@ -239,12 +243,14 @@ class VolumeMonitor: ObservableObject {
         self.audioDevices = devices
         if resolvedID != 0, let currentDevice = devices.first(where: { $0.id == resolvedID }) {
             self.currentDevice = currentDevice
+        } else {
+            self.currentDevice = nil
         }
     }
 
     nonisolated func fetchCurrentVolume() -> Float32? {
         let deviceID = resolveDeviceID()
-        guard deviceID != 0 else { return nil }
+        guard isSelectableOutputDevice(deviceID) else { return nil }
 
         let elements = deviceManager.detectVolumeElements(for: deviceID)
         guard !elements.isEmpty else { return nil }
@@ -264,8 +270,8 @@ class VolumeMonitor: ObservableObject {
             guard let self else { return }
 
             let deviceID = self.resolveDeviceID()
-            guard deviceID != 0 else {
-                logger.debug("setVolume: Device ID is 0, cannot set volume")
+            guard self.isSelectableOutputDevice(deviceID) else {
+                logger.debug("setVolume: Device is not a selectable output device")
                 return
             }
 
@@ -401,19 +407,18 @@ class VolumeMonitor: ObservableObject {
             self.startListening()
 
             let currentOutputID = self.state.defaultOutputDeviceIDValue()
-            if currentOutputID != 0 {
-                if let current = self.audioDevices.first(where: { $0.id == currentOutputID }) {
-                    self.currentDevice = current
-                } else if let name = self.deviceManager.getDeviceName(currentOutputID) {
-                    self.currentDevice = AudioDevice(id: currentOutputID, name: name)
-                } else {
-                    self.currentDevice = nil
-                }
+            let currentOutputIsSelectable = self.isSelectableOutputDevice(currentOutputID)
+            if currentOutputIsSelectable,
+                let current = self.audioDevices.first(where: { $0.id == currentOutputID })
+            {
+                self.currentDevice = current
             } else {
                 self.currentDevice = nil
             }
             self.updateVolumeSupportState(
-                currentOutputID != 0 && self.deviceManager.supportsVolumeControl(currentOutputID))
+                currentOutputIsSelectable
+                    && self.deviceManager.supportsVolumeControl(currentOutputID)
+            )
             let deviceName = self.currentDevice?.name ?? "Unknown"
             logger.debug(
                 "deviceChanged: New device - id=\(currentOutputID, privacy: .public), name=\(deviceName, privacy: .public), supportsVolume=\(self.isCurrentDeviceVolumeSupported, privacy: .public)"
@@ -464,7 +469,7 @@ class VolumeMonitor: ObservableObject {
 
     func startListening() {
         let deviceID = resolveDeviceID()
-        guard deviceID != 0 else {
+        guard isSelectableOutputDevice(deviceID) else {
             updateVolumeSupportState(false)
             return
         }

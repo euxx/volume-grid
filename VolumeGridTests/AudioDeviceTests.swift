@@ -209,6 +209,36 @@ final class AudioDeviceManagerTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(elements.count, 0)
     }
 
+    func testDeviceWithOneOutputChannelIsNotEligible() {
+        XCTAssertFalse(
+            manager.isOutputDeviceEligible(
+                transportType: "Bluetooth",
+                outputChannels: 1,
+                supportsAudio: true
+            )
+        )
+    }
+
+    func testDeviceWithTwoOutputChannelsIsEligible() {
+        XCTAssertTrue(
+            manager.isOutputDeviceEligible(
+                transportType: "Bluetooth",
+                outputChannels: 2,
+                supportsAudio: true
+            )
+        )
+    }
+
+    func testVirtualOutputDeviceIsNotEligible() {
+        XCTAssertFalse(
+            manager.isOutputDeviceEligible(
+                transportType: "Virtual",
+                outputChannels: 2,
+                supportsAudio: true
+            )
+        )
+    }
+
     // MARK: - Device State Transitions
 
     func testGetDeviceNameByID() throws {
@@ -301,6 +331,12 @@ final class AudioDeviceManagerTests: XCTestCase {
 
         let elements = manager.detectVolumeElements(for: invalidID)
         XCTAssertEqual(elements.count, 0)
+    }
+
+    func testOutputChannelDetectionInvalidDevice() {
+        let invalidID: AudioDeviceID = 0xFFFF_FFFF
+
+        XCTAssertEqual(manager.outputChannelCount(invalidID), 0)
     }
 
     func testGetDeviceNameInvalidID() {

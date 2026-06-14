@@ -168,10 +168,8 @@ final class AudioDeviceManager: Sendable {
     nonisolated func isOutputDeviceEligible(
         transportType: String,
         outputChannels: UInt32,
-        supportsAudio: Bool,
     ) -> Bool {
         outputChannels >= 2
-            && supportsAudio
             && transportType != "Virtual"
     }
 
@@ -179,8 +177,7 @@ final class AudioDeviceManager: Sendable {
         let outputChannels = outputChannelCount(deviceID)
         return isOutputDeviceEligible(
             transportType: getDeviceTransportType(deviceID),
-            outputChannels: outputChannels,
-            supportsAudio: supportsVolumeControl(deviceID) || supportsMute(deviceID)
+            outputChannels: outputChannels
         )
     }
 
@@ -289,15 +286,13 @@ final class AudioDeviceManager: Sendable {
         let allDevices = getAllDevices()
         return allDevices.filter { device in
             let outputChannels = outputChannelCount(device.id)
-            let supportsAudio = supportsVolumeControl(device.id) || supportsMute(device.id)
             let transportType = getDeviceTransportType(device.id)
             let isEligible = isOutputDeviceEligible(
                 transportType: transportType,
                 outputChannels: outputChannels,
-                supportsAudio: supportsAudio,
             )
             logger.debug(
-                "'\(device.name)' (ID: \(device.id), Type: \(transportType), OutputChannels: \(outputChannels), Audio: \(supportsAudio), Eligible: \(isEligible))"
+                "'\(device.name)' (ID: \(device.id), Type: \(transportType), OutputChannels: \(outputChannels), Eligible: \(isEligible))"
             )
             return isEligible
         }

@@ -99,9 +99,7 @@ final class StatusBarController {
         }
         deviceMenuItems.removeAll()
 
-        guard !volumeMonitor.audioDevices.isEmpty,
-            let currentDevice = volumeMonitor.currentDevice
-        else {
+        guard !volumeMonitor.audioDevices.isEmpty else {
             return
         }
 
@@ -120,7 +118,7 @@ final class StatusBarController {
             )
             deviceItem.target = self
             deviceItem.representedObject = NSNumber(value: device.id)
-            if device.id == currentDevice.id {
+            if device.id == volumeMonitor.currentDevice?.id {
                 deviceItem.state = .on
             }
             menu.insertItem(deviceItem, at: insertionIndex)

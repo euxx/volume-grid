@@ -175,7 +175,7 @@ class VolumeMonitor: ObservableObject {
     init() {
         let deviceID = updateDefaultOutputDevice()
         isCurrentDeviceVolumeSupported =
-            deviceID != 0 && deviceManager.supportsVolumeControl(deviceID)
+            isSelectableOutputDevice(deviceID) && deviceManager.supportsVolumeControl(deviceID)
         logger.debug(
             "VolumeMonitor initialized: deviceID=\(deviceID, privacy: .public), supportsVolume=\(self.isCurrentDeviceVolumeSupported, privacy: .public)"
         )
@@ -245,6 +245,41 @@ class VolumeMonitor: ObservableObject {
             self.currentDevice = currentDevice
         } else {
             self.currentDevice = nil
+        }
+    }
+
+    private func refreshCurrentDeviceState(showHUD: Bool) {
+        updateDefaultOutputDevice()
+        getAudioDevices()
+
+        let currentOutputID = state.defaultOutputDeviceIDValue()
+        let currentOutputIsSelectable = isSelectableOutputDevice(currentOutputID)
+        updateVolumeSupportState(
+            currentOutputIsSelectable
+                && deviceManager.supportsVolumeControl(currentOutputID)
+        )
+        let deviceName = currentDevice?.name ?? "Unknown"
+        logger.debug(
+            "refreshCurrentDeviceState: id=\(currentOutputID, privacy: .public), name=\(deviceName, privacy: .public), supportsVolume=\(self.isCurrentDeviceVolumeSupported, privacy: .public)"
+        )
+
+        if let volume = fetchCurrentVolume() {
+            let clamped = volume.clamped(to: 0...1)
+            state.updateLastVolumeScalar(CGFloat(clamped))
+            refreshMuteState(for: currentOutputID)
+            let displayScalar = state.deviceMuted() ? 0 : CGFloat(clamped)
+            volumeScalar = displayScalar
+            volumePercentage = Int(round(displayScalar * 100))
+            if showHUD {
+                showVolumeHUD(volumeScalar: displayScalar)
+            }
+        } else {
+            volumeScalar = 0
+            volumePercentage = 0
+            state.updateLastVolumeScalar(0)
+            if showHUD {
+                showVolumeHUD(volumeScalar: 0, isUnsupported: true)
+            }
         }
     }
 
@@ -394,6 +429,7 @@ class VolumeMonitor: ObservableObject {
     }
 
     private func deviceChanged() {
+        let previousDeviceID = currentDevice?.id
         deviceChangeDebounceTask?.cancel()
         let task = Task {
             try? await Task.sleep(
@@ -402,41 +438,23 @@ class VolumeMonitor: ObservableObject {
             guard !Task.isCancelled else { return }
 
             self.stopListening()
-            self.updateDefaultOutputDevice()
-            self.getAudioDevices()
-            self.startListening()
-
-            let currentOutputID = self.state.defaultOutputDeviceIDValue()
-            let currentOutputIsSelectable = self.isSelectableOutputDevice(currentOutputID)
-            if currentOutputIsSelectable,
-                let current = self.audioDevices.first(where: { $0.id == currentOutputID })
+            let currentOutputID = self.updateDefaultOutputDevice()
+            if !self.isSelectableOutputDevice(currentOutputID),
+                let previousDeviceID,
+                previousDeviceID != currentOutputID,
+                self.isSelectableOutputDevice(previousDeviceID)
             {
-                self.currentDevice = current
-            } else {
-                self.currentDevice = nil
+                logger.debug(
+                    "deviceChanged: restoring previous selectable output device \(previousDeviceID, privacy: .public)"
+                )
+                if !self.deviceManager.setDefaultOutputDevice(previousDeviceID) {
+                    logger.debug(
+                        "deviceChanged: failed to restore previous selectable output device \(previousDeviceID, privacy: .public)"
+                    )
+                }
             }
-            self.updateVolumeSupportState(
-                currentOutputIsSelectable
-                    && self.deviceManager.supportsVolumeControl(currentOutputID)
-            )
-            let deviceName = self.currentDevice?.name ?? "Unknown"
-            logger.debug(
-                "deviceChanged: New device - id=\(currentOutputID, privacy: .public), name=\(deviceName, privacy: .public), supportsVolume=\(self.isCurrentDeviceVolumeSupported, privacy: .public)"
-            )
-
-            if let volume = self.fetchCurrentVolume() {
-                let clamped = volume.clamped(to: 0...1)
-                let percentage = Int(round(clamped * 100))
-                self.volumeScalar = CGFloat(clamped)
-                self.volumePercentage = percentage
-                self.state.updateLastVolumeScalar(CGFloat(clamped))
-                self.showVolumeHUD(volumeScalar: CGFloat(clamped))
-            } else {
-                self.volumeScalar = 0
-                self.volumePercentage = 0
-                self.state.updateLastVolumeScalar(0)
-                self.showVolumeHUD(volumeScalar: 0, isUnsupported: true)
-            }
+            self.refreshCurrentDeviceState(showHUD: true)
+            self.startListening()
         }
         deviceChangeDebounceTask = task
     }
@@ -469,10 +487,6 @@ class VolumeMonitor: ObservableObject {
 
     func startListening() {
         let deviceID = resolveDeviceID()
-        guard isSelectableOutputDevice(deviceID) else {
-            updateVolumeSupportState(false)
-            return
-        }
 
         if state.isListeningActive() {
             if state.listeningDeviceIDValue() == deviceID {
@@ -483,6 +497,66 @@ class VolumeMonitor: ObservableObject {
 
         state.updateRegisteredVolumeElements([])
         state.updateRegisteredMuteElements([])
+
+        var deviceAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: 0
+        )
+
+        state.updateDeviceListener({
+            [weak self] (_: UInt32, _: UnsafePointer<AudioObjectPropertyAddress>) in
+            guard let self = self, self.state.isListeningActive() else { return }
+            DispatchQueue.main.async {
+                self.deviceChanged()
+            }
+        })
+
+        guard let deviceListener = state.deviceListenerValue() else { return }
+
+        let deviceStatus = AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
+        guard deviceStatus == noErr else {
+            state.updateDeviceListener(nil)
+            updateVolumeSupportState(false)
+            return
+        }
+
+        state.updateListeningDeviceID(deviceID)
+        state.setListeningActive(true)
+
+        // Key press handler: always show HUD when user presses volume/mute keys
+        systemEventMonitor.start { [weak self] in
+            guard let self else { return }
+
+            // Stage 2 debounce: the key press and CoreAudio volumeChanged callback
+            // arrive nearly simultaneously. This 50 ms delay lets CoreAudio finish
+            // processing so the HUD shows the final volume, not the pre-change value.
+            // Stage 1 (100 ms in SystemEventMonitor) has already deduplicated the
+            // global/local event pair before this point.
+            self.keyPressDebounceTask?.cancel()
+            let task = Task {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(
+                        VolumeGridConstants.Audio.volumeChangeDebounceDelay * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+
+                if self.isCurrentDeviceVolumeSupported {
+                    self.showHUDForCurrentVolume()
+                } else {
+                    let fallbackScalar = self.state.lastVolumeScalarSnapshot() ?? 0
+                    self.showVolumeHUD(volumeScalar: fallbackScalar, isUnsupported: true)
+                }
+            }
+            self.keyPressDebounceTask = task
+        }
+
+        guard isSelectableOutputDevice(deviceID) else {
+            state.updateVolumeElements([])
+            state.updateMuteElements([])
+            updateVolumeSupportState(false)
+            return
+        }
 
         let volumeElements = deviceManager.detectVolumeElements(for: deviceID)
         let supportsVolume = !volumeElements.isEmpty
@@ -522,6 +596,7 @@ class VolumeMonitor: ObservableObject {
 
             guard !validVolumeElements.isEmpty else {
                 logger.debug("startListening: No volume listeners were registered")
+                updateVolumeSupportState(false)
                 return
             }
             state.updateRegisteredVolumeElements(validVolumeElements)
@@ -560,57 +635,6 @@ class VolumeMonitor: ObservableObject {
                 }
             }
         }
-
-        // Key press handler: always show HUD when user presses volume/mute keys
-        systemEventMonitor.start { [weak self] in
-            guard let self else { return }
-
-            // Stage 2 debounce: the key press and CoreAudio volumeChanged callback
-            // arrive nearly simultaneously. This 50 ms delay lets CoreAudio finish
-            // processing so the HUD shows the final volume, not the pre-change value.
-            // Stage 1 (100 ms in SystemEventMonitor) has already deduplicated the
-            // global/local event pair before this point.
-            self.keyPressDebounceTask?.cancel()
-            let task = Task {
-                try? await Task.sleep(
-                    nanoseconds: UInt64(
-                        VolumeGridConstants.Audio.volumeChangeDebounceDelay * 1_000_000_000))
-                guard !Task.isCancelled else { return }
-
-                if self.isCurrentDeviceVolumeSupported {
-                    self.showHUDForCurrentVolume()
-                } else {
-                    let fallbackScalar = self.state.lastVolumeScalarSnapshot() ?? 0
-                    self.showVolumeHUD(volumeScalar: fallbackScalar, isUnsupported: true)
-                }
-            }
-            self.keyPressDebounceTask = task
-        }
-
-        var deviceAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: 0
-        )
-
-        state.updateDeviceListener({
-            [weak self] (_: UInt32, _: UnsafePointer<AudioObjectPropertyAddress>) in
-            guard let self = self, self.state.isListeningActive() else { return }
-            DispatchQueue.main.async {
-                self.deviceChanged()
-            }
-        })
-
-        guard let deviceListener = state.deviceListenerValue() else { return }
-
-        let deviceStatus = AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject), &deviceAddress, audioQueue, deviceListener)
-        if deviceStatus != noErr {
-            return
-        }
-
-        state.updateListeningDeviceID(deviceID)
-        state.setListeningActive(true)
     }
 
     @MainActor
@@ -677,13 +701,10 @@ class VolumeMonitor: ObservableObject {
         deviceChangeDebounceTask?.cancel()
         keyPressDebounceTask?.cancel()
 
-        // Disable listening flag immediately to prevent race conditions
-        // This ensures startListening() called right after will be blocked by the guard check
+        // Disable listening flag immediately so callbacks from removed listeners are ignored.
         state.setListeningActive(false)
 
-        // Synchronously capture and clear all state before dispatching async cleanup.
-        // Clearing here (not in the async block) ensures that startListening()'s subsequent
-        // writes are never overwritten by a delayed cleanup dispatch.
+        // Synchronously capture and clear listener state before cleanup.
         let capturedDeviceID = state.listeningDeviceIDValue()
         let capturedVolumeElements = state.registeredVolumeElementsSnapshot()
         let capturedMuteElements = state.registeredMuteElementsSnapshot()
@@ -698,25 +719,22 @@ class VolumeMonitor: ObservableObject {
         state.updateMuteListener(nil)
         state.updateDeviceListener(nil)
 
-        // Capture strong dependencies for async cleanup
+        // Capture strong dependencies for cleanup
         let deviceManager = self.deviceManager
         let audioQueue = self.audioQueue
         let systemEventMonitor = self.systemEventMonitor
 
-        // Dispatch cleanup to main thread with strong references
-        DispatchQueue.main.async {
-            Self.performCleanup(
-                capturedDeviceID: capturedDeviceID,
-                capturedVolumeElements: capturedVolumeElements,
-                capturedMuteElements: capturedMuteElements,
-                deviceManager: deviceManager,
-                audioQueue: audioQueue,
-                systemEventMonitor: systemEventMonitor,
-                volumeListener: capturedVolumeListener,
-                muteListener: capturedMuteListener,
-                deviceListener: capturedDeviceListener
-            )
-        }
+        Self.performCleanup(
+            capturedDeviceID: capturedDeviceID,
+            capturedVolumeElements: capturedVolumeElements,
+            capturedMuteElements: capturedMuteElements,
+            deviceManager: deviceManager,
+            audioQueue: audioQueue,
+            systemEventMonitor: systemEventMonitor,
+            volumeListener: capturedVolumeListener,
+            muteListener: capturedMuteListener,
+            deviceListener: capturedDeviceListener
+        )
     }
 
     private func emitHUDEvent(volumeScalar: CGFloat, isUnsupported: Bool) {
@@ -729,8 +747,14 @@ class VolumeMonitor: ObservableObject {
         hudEventSubject.send(event)
     }
 
-    nonisolated func setDefaultOutputDevice(_ deviceID: AudioDeviceID) -> Bool {
-        deviceManager.setDefaultOutputDevice(deviceID)
+    func setDefaultOutputDevice(_ deviceID: AudioDeviceID) -> Bool {
+        let success = deviceManager.setDefaultOutputDevice(deviceID)
+        guard success else { return false }
+
+        stopListening()
+        refreshCurrentDeviceState(showHUD: false)
+        startListening()
+        return true
     }
 
     private func updateVolumeSupportState(_ isSupported: Bool) {

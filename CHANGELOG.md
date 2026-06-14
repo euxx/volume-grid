@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.2.2] - 2026-06-14
+
+### Fixes
+
+- Prevent ineligible remote-control audio endpoints from taking over the default output.
+- Keep the output device menu available when the current default output is filtered.
+- Refresh device, volume, mute, and HUD state after output device changes.
+
 ## [1.2.1] - 2026-06-14
 
 ### Fixes

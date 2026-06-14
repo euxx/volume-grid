@@ -20,7 +20,7 @@ git commit -m "chore: update version to vX.Y.Z"
 git push origin main
 ```
 
-5. Create a GitHub release:
+5. Create and push the Git tag:
 ```sh
 git tag -a vX.Y.Z -m "Release vX.Y.Z"
 git push origin vX.Y.Z
@@ -35,9 +35,15 @@ chmod +x build-dmg.sh
 ./build-dmg.sh
 ```
 
-7. Update the release notes on GitHub to match `CHANGELOG.md`:
+7. Create the GitHub release with notes matching `CHANGELOG.md`:
 
    Write the notes in Markdown format to a temp file, then pass it via `--notes-file`:
+
+   ```sh
+   gh release create vX.Y.Z --verify-tag --title "vX.Y.Z" --notes-file /path/to/notes.md
+   ```
+
+   If the release already exists, update it instead:
 
    ```sh
    gh release edit vX.Y.Z --notes-file /path/to/notes.md
@@ -54,4 +60,39 @@ chmod +x build-dmg.sh
    - Change 2
 
    **Full Changelog**: https://github.com/euxx/volume-grid/compare/vPREV...vX.Y.Z
+   ```
+
+8. Upload the DMG to the GitHub release:
+
+```sh
+gh release upload vX.Y.Z VolumeGrid-vX.Y.Z.dmg --clobber
+```
+
+9. Update the Homebrew cask:
+
+   Calculate the DMG checksum:
+
+   ```sh
+   shasum -a 256 VolumeGrid-vX.Y.Z.dmg
+   ```
+
+   Update `version` and `sha256` in the cask:
+
+   ```sh
+   cd /Users/l/projects/homebrew-casks
+   $EDITOR Casks/volume-grid.rb
+   brew style --changed
+   git diff --check
+   git add Casks/volume-grid.rb
+   git commit -m "volume-grid: update to vX.Y.Z"
+   git push
+   ```
+
+   Verify Homebrew can fetch and install the new release:
+
+   ```sh
+   brew update
+   brew fetch --cask euxx/casks/volume-grid --force
+   brew upgrade --cask volume-grid
+   brew list --cask --versions volume-grid
    ```

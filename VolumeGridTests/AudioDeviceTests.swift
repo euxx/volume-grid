@@ -213,7 +213,8 @@ final class AudioDeviceManagerTests: XCTestCase {
         XCTAssertFalse(
             manager.isOutputDeviceEligible(
                 transportType: "Bluetooth",
-                outputChannels: 1
+                outputChannels: 1,
+                supportsVolumeControl: true
             )
         )
     }
@@ -222,16 +223,18 @@ final class AudioDeviceManagerTests: XCTestCase {
         XCTAssertTrue(
             manager.isOutputDeviceEligible(
                 transportType: "Bluetooth",
-                outputChannels: 2
+                outputChannels: 2,
+                supportsVolumeControl: true
             )
         )
     }
 
-    func testTwoChannelOutputDeviceDoesNotRequireVolumeControl() {
-        XCTAssertTrue(
+    func testTwoChannelOutputDeviceRequiresVolumeControl() {
+        XCTAssertFalse(
             manager.isOutputDeviceEligible(
                 transportType: "BuiltIn",
-                outputChannels: 2
+                outputChannels: 2,
+                supportsVolumeControl: false
             )
         )
     }
@@ -240,7 +243,8 @@ final class AudioDeviceManagerTests: XCTestCase {
         XCTAssertFalse(
             manager.isOutputDeviceEligible(
                 transportType: "Virtual",
-                outputChannels: 2
+                outputChannels: 2,
+                supportsVolumeControl: true
             )
         )
     }
